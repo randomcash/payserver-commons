@@ -12,7 +12,7 @@ use crate::types::InvoiceId;
 #[derive(Debug, Clone, Default)]
 pub struct PaymentQueryParams {
     pub invoice_id: Option<InvoiceId>,
-    pub min_confirmations: Option<u32>,
+    pub confirmed: Option<bool>,
     pub limit: i64,
     pub offset: i64,
 }
@@ -26,8 +26,8 @@ pub trait PaymentReader: Send + Sync {
     /// Get all payments for an invoice.
     async fn get_for_invoice(&self, invoice_id: &InvoiceId) -> RepositoryResult<Vec<PaymentData>>;
 
-    /// Get payments with fewer than N confirmations (for monitoring).
-    async fn get_unconfirmed(&self, min_confirmations: u32) -> RepositoryResult<Vec<PaymentData>>;
+    /// Get payments awaiting confirmation (confirmed_at is NULL, not reorged).
+    async fn get_awaiting_confirmation(&self) -> RepositoryResult<Vec<PaymentData>>;
 
     /// Get valid (non-reorged) payments for an invoice.
     async fn get_valid_for_invoice(&self, invoice_id: &InvoiceId) -> RepositoryResult<Vec<PaymentData>>;
@@ -42,13 +42,8 @@ pub trait PaymentWriter: Send + Sync {
     /// Insert or update a payment.
     async fn upsert(&self, payment: &PaymentData) -> RepositoryResult<()>;
 
-    /// Update payment confirmations.
-    async fn update_confirmations(
-        &self,
-        id: Uuid,
-        confirmations: u32,
-        confirmed_at: Option<DateTime<Utc>>,
-    ) -> RepositoryResult<()>;
+    /// Mark a payment as confirmed by setting the confirmed_at timestamp.
+    async fn mark_confirmed(&self, id: Uuid, confirmed_at: DateTime<Utc>) -> RepositoryResult<()>;
 
     /// Mark payments as reorged for a specific invoice, network, and fork block.
     ///

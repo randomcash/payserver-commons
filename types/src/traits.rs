@@ -122,6 +122,11 @@ pub struct InvoiceData {
 }
 
 /// Generic payment data returned by PayServers.
+///
+/// Note: Confirmations are computed dynamically as `current_block - block_number + 1`.
+/// The `confirmed_at` timestamp indicates when the payment reached the required
+/// confirmation threshold. If `confirmed_at` is None, the payment is still awaiting
+/// confirmation.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PaymentData {
     pub id: uuid::Uuid,
@@ -138,13 +143,12 @@ pub struct PaymentData {
     pub token_address: Option<String>,
     /// Transaction hash.
     pub tx_hash: String,
-    /// Block number (if confirmed).
+    /// Block number where the payment was included.
+    /// Confirmations can be computed as: current_block - block_number + 1
     pub block_number: Option<u64>,
-    /// Number of confirmations.
-    pub confirmations: u32,
     /// When the payment was detected.
     pub detected_at: chrono::DateTime<chrono::Utc>,
-    /// When the payment was confirmed.
+    /// When the payment reached required confirmations (None = awaiting confirmation).
     pub confirmed_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Sender address (if known).
     pub from_address: Option<String>,
