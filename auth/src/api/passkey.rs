@@ -5,7 +5,7 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
-    AuthRepository, CompleteNewUserPasskeyRegistrationRequest, CompletePasskeyLoginRequest,
+    AuthenticationService, CompleteNewUserPasskeyRegistrationRequest, CompletePasskeyLoginRequest,
     CompletePasskeyRegistrationRequest, LoginResponse, PasskeyInfo, SessionId,
     StartNewUserPasskeyRegistrationResponse, StartPasskeyLoginResponse,
     StartPasskeyRegistrationRequest, StartPasskeyRegistrationResponse,
@@ -29,8 +29,8 @@ pub struct StartNewUserRequest {
         (status = 400, description = "Invalid email or user exists"),
     )
 )]
-pub async fn start_new_user_registration<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn start_new_user_registration<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<StartNewUserRequest>,
 ) -> Result<Json<StartNewUserPasskeyRegistrationResponse>, (StatusCode, String)> {
     state
@@ -51,8 +51,8 @@ pub async fn start_new_user_registration<R: AuthRepository>(
         (status = 400, description = "Invalid credential"),
     )
 )]
-pub async fn complete_new_user_registration<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn complete_new_user_registration<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<CompleteNewUserPasskeyRegistrationRequest>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     state
@@ -80,8 +80,8 @@ pub struct StartRegistrationRequest {
         (status = 400, description = "Invalid session"),
     )
 )]
-pub async fn start_registration<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn start_registration<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<StartRegistrationRequest>,
 ) -> Result<Json<StartPasskeyRegistrationResponse>, (StatusCode, String)> {
     state
@@ -109,8 +109,8 @@ pub struct CompleteRegistrationRequest {
         (status = 400, description = "Invalid credential"),
     )
 )]
-pub async fn complete_registration<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn complete_registration<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<CompleteRegistrationRequest>,
 ) -> Result<Json<PasskeyInfo>, (StatusCode, String)> {
     state
@@ -137,8 +137,8 @@ pub struct StartLoginRequest {
         (status = 400, description = "User not found"),
     )
 )]
-pub async fn start_login<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn start_login<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<StartLoginRequest>,
 ) -> Result<Json<StartPasskeyLoginResponse>, (StatusCode, String)> {
     state
@@ -159,8 +159,8 @@ pub async fn start_login<R: AuthRepository>(
         (status = 400, description = "Invalid credential"),
     )
 )]
-pub async fn complete_login<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn complete_login<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<CompletePasskeyLoginRequest>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     state

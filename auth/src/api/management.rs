@@ -9,8 +9,8 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
-    AuthRepository, DeviceId, DeviceInfo, PasskeyId, PasskeyInfo, SessionId, WalletCredentialId,
-    WalletInfo,
+    AuthenticationService, DeviceId, DeviceInfo, PasskeyId, PasskeyInfo, SessionId,
+    WalletCredentialId, WalletInfo,
 };
 
 use super::AuthState;
@@ -30,8 +30,8 @@ pub struct AuthenticatedRequest {
         (status = 401, description = "Invalid session"),
     )
 )]
-pub async fn list_devices<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn list_devices<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<AuthenticatedRequest>,
 ) -> Result<Json<Vec<DeviceInfo>>, (StatusCode, String)> {
     state
@@ -53,8 +53,8 @@ pub async fn list_devices<R: AuthRepository>(
         (status = 400, description = "Cannot revoke current device"),
     )
 )]
-pub async fn revoke_device<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn revoke_device<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Path(device_id): Path<DeviceId>,
     Json(req): Json<AuthenticatedRequest>,
 ) -> Result<Json<()>, (StatusCode, String)> {
@@ -76,8 +76,8 @@ pub async fn revoke_device<R: AuthRepository>(
         (status = 401, description = "Invalid session"),
     )
 )]
-pub async fn list_passkeys<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn list_passkeys<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<AuthenticatedRequest>,
 ) -> Result<Json<Vec<PasskeyInfo>>, (StatusCode, String)> {
     state
@@ -99,8 +99,8 @@ pub async fn list_passkeys<R: AuthRepository>(
         (status = 400, description = "Cannot revoke last passkey"),
     )
 )]
-pub async fn revoke_passkey<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn revoke_passkey<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Path(passkey_id): Path<PasskeyId>,
     Json(req): Json<AuthenticatedRequest>,
 ) -> Result<Json<()>, (StatusCode, String)> {
@@ -122,8 +122,8 @@ pub async fn revoke_passkey<R: AuthRepository>(
         (status = 401, description = "Invalid session"),
     )
 )]
-pub async fn list_wallets<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn list_wallets<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<AuthenticatedRequest>,
 ) -> Result<Json<Vec<WalletInfo>>, (StatusCode, String)> {
     state
@@ -145,8 +145,8 @@ pub async fn list_wallets<R: AuthRepository>(
         (status = 400, description = "Cannot revoke last wallet"),
     )
 )]
-pub async fn revoke_wallet<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn revoke_wallet<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Path(wallet_id): Path<WalletCredentialId>,
     Json(req): Json<AuthenticatedRequest>,
 ) -> Result<Json<()>, (StatusCode, String)> {
@@ -165,8 +165,8 @@ pub async fn revoke_wallet<R: AuthRepository>(
     request_body = AuthenticatedRequest,
     responses((status = 200, description = "Logged out"))
 )]
-pub async fn logout<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn logout<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<AuthenticatedRequest>,
 ) -> Result<Json<()>, (StatusCode, String)> {
     state
@@ -184,8 +184,8 @@ pub async fn logout<R: AuthRepository>(
     request_body = AuthenticatedRequest,
     responses((status = 200, description = "Logged out from all sessions"))
 )]
-pub async fn logout_all<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn logout_all<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<AuthenticatedRequest>,
 ) -> Result<Json<()>, (StatusCode, String)> {
     state

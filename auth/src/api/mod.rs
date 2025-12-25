@@ -21,7 +21,7 @@ use axum::{
 };
 use utoipa::OpenApi;
 
-use crate::{AuthRepository, AuthService};
+use crate::AuthenticationService;
 
 pub mod management;
 pub mod passkey;
@@ -29,18 +29,21 @@ pub mod recovery;
 pub mod wallet;
 
 /// Shared state for auth handlers.
-pub struct AuthState<R: AuthRepository> {
-    pub service: Arc<AuthService<R>>,
+///
+/// Generic over the authentication service type `A`, which must implement
+/// `AuthenticationService` (the combined trait).
+pub struct AuthState<A> {
+    pub service: Arc<A>,
 }
 
-impl<R: AuthRepository> Clone for AuthState<R> {
+impl<A> Clone for AuthState<A> {
     fn clone(&self) -> Self {
         Self { service: Arc::clone(&self.service) }
     }
 }
 
-impl<R: AuthRepository> AuthState<R> {
-    pub fn new(service: Arc<AuthService<R>>) -> Self {
+impl<A> AuthState<A> {
+    pub fn new(service: Arc<A>) -> Self {
         Self { service }
     }
 }
@@ -103,7 +106,7 @@ impl<R: AuthRepository> AuthState<R> {
 pub struct AuthApiDoc;
 
 /// Create the auth router. Mount at `/auth`.
-pub fn router<R: AuthRepository + 'static>(state: AuthState<R>) -> Router {
+pub fn router<A: AuthenticationService + 'static>(state: AuthState<A>) -> Router {
     Router::new()
         .route("/passkey/new-user/start", post(passkey::start_new_user_registration))
         .route("/passkey/new-user/complete", post(passkey::complete_new_user_registration))

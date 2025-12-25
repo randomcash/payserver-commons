@@ -80,6 +80,7 @@ pub mod permissions;
 pub mod repository;
 pub mod service;
 pub mod store;
+pub mod traits;
 
 // Re-export OpenAPI doc
 pub use api::AuthApiDoc;
@@ -111,7 +112,11 @@ pub use repository::{
     AuthRepository, ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository,
     StoreRepository, StoreRoleRepository, UserRepository, UserStoreRepository, WalletRepository,
 };
-pub use service::{AuthConfig, AuthService};
+pub use service::{AuthConfig, AuthService, WebAuthnAuthService};
+pub use traits::{
+    AuthenticationService, DeviceService, PasskeyAuthService, RecoveryService, SessionService,
+    WalletAuthService,
+};
 pub use permissions::{Permission, Policies, Role};
 pub use store::{
     Store, StoreId, StoreInfo, StoreRole, StoreRoleId, StoreRoleInfo, UserStore, UserStoreInfo,

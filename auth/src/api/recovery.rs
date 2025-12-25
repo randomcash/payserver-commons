@@ -5,7 +5,7 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
-    AuthRepository, CompleteRecoveryRequest, LoginResponse, StartPasskeyRegistrationResponse,
+    AuthenticationService, CompleteRecoveryRequest, LoginResponse, StartPasskeyRegistrationResponse,
     StartRecoveryRequest,
 };
 
@@ -21,8 +21,8 @@ use super::AuthState;
         (status = 400, description = "Invalid identifier or recovery hash"),
     )
 )]
-pub async fn start_recovery<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn start_recovery<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<StartRecoveryRequest>,
 ) -> Result<Json<StartPasskeyRegistrationResponse>, (StatusCode, String)> {
     state
@@ -51,8 +51,8 @@ pub struct CompleteRecoveryRequestBody {
         (status = 400, description = "Invalid credential"),
     )
 )]
-pub async fn complete_recovery<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn complete_recovery<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<CompleteRecoveryRequestBody>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     state

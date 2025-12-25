@@ -5,7 +5,7 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
-    AuthRepository, CompleteNewUserWalletRegistrationRequest, CompleteWalletLoginRequest,
+    AuthenticationService, CompleteNewUserWalletRegistrationRequest, CompleteWalletLoginRequest,
     CompleteWalletRegistrationRequest, LoginResponse, SessionId,
     StartNewUserWalletRegistrationRequest, StartNewUserWalletRegistrationResponse,
     StartWalletLoginRequest, StartWalletLoginResponse, StartWalletRegistrationRequest,
@@ -24,8 +24,8 @@ use super::AuthState;
         (status = 400, description = "Invalid address or user exists"),
     )
 )]
-pub async fn start_new_user_registration<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn start_new_user_registration<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<StartNewUserWalletRegistrationRequest>,
 ) -> Result<Json<StartNewUserWalletRegistrationResponse>, (StatusCode, String)> {
     state
@@ -46,8 +46,8 @@ pub async fn start_new_user_registration<R: AuthRepository>(
         (status = 400, description = "Invalid signature"),
     )
 )]
-pub async fn complete_new_user_registration<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn complete_new_user_registration<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<CompleteNewUserWalletRegistrationRequest>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     state
@@ -75,8 +75,8 @@ pub struct StartRegistrationRequest {
         (status = 400, description = "Invalid session"),
     )
 )]
-pub async fn start_registration<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn start_registration<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<StartRegistrationRequest>,
 ) -> Result<Json<StartWalletRegistrationResponse>, (StatusCode, String)> {
     state
@@ -104,8 +104,8 @@ pub struct CompleteRegistrationRequest {
         (status = 400, description = "Invalid signature"),
     )
 )]
-pub async fn complete_registration<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn complete_registration<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<CompleteRegistrationRequest>,
 ) -> Result<Json<WalletInfo>, (StatusCode, String)> {
     state
@@ -126,8 +126,8 @@ pub async fn complete_registration<R: AuthRepository>(
         (status = 400, description = "Wallet not registered"),
     )
 )]
-pub async fn start_login<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn start_login<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<StartWalletLoginRequest>,
 ) -> Result<Json<StartWalletLoginResponse>, (StatusCode, String)> {
     state
@@ -148,8 +148,8 @@ pub async fn start_login<R: AuthRepository>(
         (status = 400, description = "Invalid signature"),
     )
 )]
-pub async fn complete_login<R: AuthRepository>(
-    State(state): State<AuthState<R>>,
+pub async fn complete_login<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
     Json(req): Json<CompleteWalletLoginRequest>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     state
