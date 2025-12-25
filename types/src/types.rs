@@ -227,6 +227,8 @@ pub enum InvoiceStatus {
     Cancelled,
     /// Payment refunded.
     Refunded,
+    /// Payment received after invoice expired.
+    LatePaid,
 }
 
 impl InvoiceStatus {
@@ -238,6 +240,7 @@ impl InvoiceStatus {
                 | InvoiceStatus::Expired
                 | InvoiceStatus::Cancelled
                 | InvoiceStatus::Refunded
+                | InvoiceStatus::LatePaid
         )
     }
 
@@ -260,6 +263,7 @@ impl std::fmt::Display for InvoiceStatus {
             InvoiceStatus::Expired => "expired",
             InvoiceStatus::Cancelled => "cancelled",
             InvoiceStatus::Refunded => "refunded",
+            InvoiceStatus::LatePaid => "late_paid",
         };
         write!(f, "{}", s)
     }
@@ -277,6 +281,7 @@ impl std::str::FromStr for InvoiceStatus {
             "expired" => Ok(InvoiceStatus::Expired),
             "cancelled" | "canceled" => Ok(InvoiceStatus::Cancelled),
             "refunded" => Ok(InvoiceStatus::Refunded),
+            "late_paid" => Ok(InvoiceStatus::LatePaid),
             _ => Err(format!("unknown invoice status: {}", s)),
         }
     }
@@ -432,7 +437,10 @@ mod tests {
     fn test_network_display() {
         assert_eq!(Network::Ethereum.to_string(), "ethereum");
         assert_eq!(Network::BitcoinLightning.to_string(), "bitcoin_lightning");
-        assert_eq!(Network::BinanceSmartChain.to_string(), "binance_smart_chain");
+        assert_eq!(
+            Network::BinanceSmartChain.to_string(),
+            "binance_smart_chain"
+        );
     }
 
     #[test]
@@ -440,7 +448,10 @@ mod tests {
         assert_eq!("ethereum".parse::<Network>().unwrap(), Network::Ethereum);
         assert_eq!("eth".parse::<Network>().unwrap(), Network::Ethereum);
         assert_eq!("polygon".parse::<Network>().unwrap(), Network::Polygon);
-        assert_eq!("bsc".parse::<Network>().unwrap(), Network::BinanceSmartChain);
+        assert_eq!(
+            "bsc".parse::<Network>().unwrap(),
+            Network::BinanceSmartChain
+        );
         assert!("invalid".parse::<Network>().is_err());
     }
 }
