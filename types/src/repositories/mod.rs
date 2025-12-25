@@ -42,7 +42,10 @@ pub use payment_event::PaymentEventWriter;
 pub use store_wallet::{StoreWallet, StoreWalletReader, StoreWalletRepository, StoreWalletWriter};
 pub use store_webhook::{StoreWebhook, StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter};
 pub use token::{TokenData, TokenQueryParams, TokenReader, TokenRepository, TokenWriter};
-pub use watched_address::{PendingWatchInfo, WatchedAddressReader, WatchedAddressRepository, WatchedAddressWriter};
+pub use watched_address::{
+    CleanupAddressInfo, PendingWatchInfo, WatchedAddressCleanup, WatchedAddressReader,
+    WatchedAddressRepository, WatchedAddressWriter,
+};
 
 /// Combined data service trait with full read/write access to all repositories.
 ///
