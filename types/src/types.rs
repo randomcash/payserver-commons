@@ -282,6 +282,50 @@ impl std::str::FromStr for InvoiceStatus {
     }
 }
 
+/// Asset type for payments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssetType {
+    /// Native network currency (ETH, BTC, POL, etc.)
+    Native,
+    /// ERC20 token (for EVM networks)
+    ERC20,
+}
+
+impl AssetType {
+    /// Returns the database representation of this asset type.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AssetType::Native => "native",
+            AssetType::ERC20 => "erc20",
+        }
+    }
+}
+
+impl Default for AssetType {
+    fn default() -> Self {
+        AssetType::Native
+    }
+}
+
+impl std::fmt::Display for AssetType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for AssetType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "native" => Ok(AssetType::Native),
+            "erc20" => Ok(AssetType::ERC20),
+            _ => Err(format!("unknown asset type: {}", s)),
+        }
+    }
+}
+
 /// Health status of a PayServer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthStatus {

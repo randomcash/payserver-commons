@@ -9,7 +9,7 @@ use std::pin::Pin;
 
 use crate::error::PayServerResult;
 use crate::store::StoreId;
-use crate::types::{HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent};
+use crate::types::{AssetType, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent};
 
 /// Configuration for creating an invoice.
 ///
@@ -127,10 +127,15 @@ pub struct PaymentData {
     pub id: uuid::Uuid,
     pub invoice_id: InvoiceId,
     pub network: Network,
+    /// Asset type (native or ERC20).
+    #[serde(default)]
+    pub asset_type: AssetType,
     /// Amount received (smallest unit as string).
     pub amount: String,
     /// Asset symbol.
     pub asset_symbol: String,
+    /// Token contract address (for ERC20 tokens).
+    pub token_address: Option<String>,
     /// Transaction hash.
     pub tx_hash: String,
     /// Block number (if confirmed).
@@ -143,6 +148,9 @@ pub struct PaymentData {
     pub confirmed_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Sender address (if known).
     pub from_address: Option<String>,
+    /// Whether this payment was invalidated by a chain reorganization.
+    #[serde(default)]
+    pub reorged: bool,
     /// Network-specific extra data.
     pub extra: Option<serde_json::Value>,
 }

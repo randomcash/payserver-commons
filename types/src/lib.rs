@@ -39,5 +39,5 @@ pub use traits::{
     CreateInvoiceRequest, InvoiceData, InvoiceQuery, PayServer, PaymentData, PaymentEventPublisher,
     PaymentEventSubscriber, PaymentMonitor,
 };
-pub use types::{HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent, UserId};
+pub use types::{AssetType, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent, UserId};
 pub use store::{Store, StoreId, StoreInfo};
