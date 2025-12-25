@@ -24,14 +24,22 @@ pub use error::{PayServerError, PayServerResult};
 pub use repositories::{
     // Combined traits
     DataService, DataServiceReader, DataServiceWriter,
+    // Expired Invoice Streaming
+    ExpiredInvoiceStreamer,
     // Invoice
     InvoiceQueryParams, InvoiceReader, InvoiceRepository, InvoiceWriter,
     // Payment
     PaymentQueryParams, PaymentReader, PaymentRepository, PaymentWriter,
+    // Payment Event
+    PaymentEventWriter,
+    // Store Wallet
+    StoreWallet, StoreWalletReader, StoreWalletRepository, StoreWalletWriter,
+    // Store Webhook
+    StoreWebhook, StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter,
     // Token
     TokenData, TokenQueryParams, TokenReader, TokenRepository, TokenWriter,
     // Watched Address
-    WatchedAddressReader, WatchedAddressRepository, WatchedAddressWriter,
+    PendingWatchInfo, WatchedAddressReader, WatchedAddressRepository, WatchedAddressWriter,
     // Errors
     RepositoryError, RepositoryResult,
 };

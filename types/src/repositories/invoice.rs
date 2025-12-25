@@ -84,6 +84,12 @@ pub trait InvoiceWriter: Send + Sync {
 
     /// Update the amount received for an invoice.
     async fn update_amount_received(&self, id: &InvoiceId, amount: &str) -> RepositoryResult<()>;
+
+    /// Expire a single pending invoice.
+    ///
+    /// Updates status to 'expired'. Returns true if the invoice was expired,
+    /// false if it was already in a different status.
+    async fn expire(&self, id: &InvoiceId) -> RepositoryResult<bool>;
 }
 
 /// Combined invoice repository with full read/write access.
