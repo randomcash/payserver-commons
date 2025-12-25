@@ -1,21 +1,10 @@
 //! Store wallet repository traits.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::RepositoryResult;
-
-/// Store wallet configuration for payment address derivation.
-#[derive(Debug, Clone)]
-pub struct StoreWallet {
-    pub id: Uuid,
-    pub store_id: Uuid,
-    pub xpub: String,
-    pub derivation_index: i32,
-    pub name: Option<String>,
-    pub created_at: DateTime<Utc>,
-}
+use crate::types::StoreWallet;
 
 /// Read operations for store wallets.
 #[async_trait]

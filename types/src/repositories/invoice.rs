@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use futures::stream::BoxStream;
 
 use super::RepositoryResult;
 use crate::store::StoreId;
@@ -71,6 +72,28 @@ pub trait InvoiceReader: Send + Sync {
 
     /// Get all pending invoices that have expired.
     async fn get_expired(&self) -> RepositoryResult<Vec<InvoiceData>>;
+
+    /// Stream expired pending invoice IDs for a specific network.
+    ///
+    /// Only returns invoices where:
+    /// - status = 'pending' (no payments detected)
+    /// - network matches
+    /// - expires_at < NOW()
+    ///
+    /// Returns a stream of invoice IDs for minimal memory usage.
+    fn stream_expired_pending_for_network(
+        &self,
+        network: Network,
+    ) -> BoxStream<'_, RepositoryResult<InvoiceId>>;
+
+    /// Stream all expired pending invoice IDs across all networks.
+    ///
+    /// Only returns invoices where:
+    /// - status = 'pending' (no payments detected)
+    /// - expires_at < NOW()
+    ///
+    /// Returns a stream of (network, invoice_id) for minimal memory usage.
+    fn stream_all_expired_pending(&self) -> BoxStream<'_, RepositoryResult<(Network, InvoiceId)>>;
 }
 
 /// Write operations for invoices.

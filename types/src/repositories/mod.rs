@@ -25,7 +25,6 @@
 //! For convenience, [`DataService`] combines all repository traits.
 
 mod error;
-mod expired_invoice;
 mod invoice;
 mod payment;
 mod payment_event;
@@ -35,17 +34,13 @@ mod token;
 mod watched_address;
 
 pub use error::{RepositoryError, RepositoryResult};
-pub use expired_invoice::ExpiredInvoiceStreamer;
 pub use invoice::{InvoiceQueryParams, InvoiceReader, InvoiceRepository, InvoiceWriter};
 pub use payment::{PaymentQueryParams, PaymentReader, PaymentRepository, PaymentWriter};
 pub use payment_event::PaymentEventWriter;
-pub use store_wallet::{StoreWallet, StoreWalletReader, StoreWalletRepository, StoreWalletWriter};
-pub use store_webhook::{StoreWebhook, StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter};
-pub use token::{TokenData, TokenQueryParams, TokenReader, TokenRepository, TokenWriter};
-pub use watched_address::{
-    CleanupAddressInfo, PendingWatchInfo, WatchedAddressCleanup, WatchedAddressReader,
-    WatchedAddressRepository, WatchedAddressWriter,
-};
+pub use store_wallet::{StoreWalletReader, StoreWalletRepository, StoreWalletWriter};
+pub use store_webhook::{StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter};
+pub use token::{TokenQueryParams, TokenReader, TokenRepository, TokenWriter};
+pub use watched_address::{WatchedAddressReader, WatchedAddressRepository, WatchedAddressWriter};
 
 /// Combined data service trait with full read/write access to all repositories.
 ///

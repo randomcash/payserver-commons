@@ -23,30 +23,48 @@ pub mod types;
 pub use error::{PayServerError, PayServerResult};
 pub use repositories::{
     // Combined traits
-    DataService, DataServiceReader, DataServiceWriter,
-    // Expired Invoice Streaming
-    ExpiredInvoiceStreamer,
+    DataService,
+    DataServiceReader,
+    DataServiceWriter,
     // Invoice
-    InvoiceQueryParams, InvoiceReader, InvoiceRepository, InvoiceWriter,
-    // Payment
-    PaymentQueryParams, PaymentReader, PaymentRepository, PaymentWriter,
+    InvoiceQueryParams,
+    InvoiceReader,
+    InvoiceRepository,
+    InvoiceWriter,
     // Payment Event
     PaymentEventWriter,
-    // Store Wallet
-    StoreWallet, StoreWalletReader, StoreWalletRepository, StoreWalletWriter,
-    // Store Webhook
-    StoreWebhook, StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter,
-    // Token
-    TokenData, TokenQueryParams, TokenReader, TokenRepository, TokenWriter,
-    // Watched Address
-    CleanupAddressInfo, PendingWatchInfo, WatchedAddressCleanup, WatchedAddressReader,
-    WatchedAddressRepository, WatchedAddressWriter,
+    // Payment
+    PaymentQueryParams,
+    PaymentReader,
+    PaymentRepository,
+    PaymentWriter,
     // Errors
-    RepositoryError, RepositoryResult,
+    RepositoryError,
+    RepositoryResult,
+    // Store Wallet
+    StoreWalletReader,
+    StoreWalletRepository,
+    StoreWalletWriter,
+    // Store Webhook
+    StoreWebhookReader,
+    StoreWebhookRepository,
+    StoreWebhookWriter,
+    // Token
+    TokenQueryParams,
+    TokenReader,
+    TokenRepository,
+    TokenWriter,
+    // Watched Address
+    WatchedAddressReader,
+    WatchedAddressRepository,
+    WatchedAddressWriter,
 };
+pub use store::{Store, StoreId, StoreInfo};
 pub use traits::{
     CreateInvoiceRequest, InvoiceData, InvoiceQuery, PayServer, PaymentData, PaymentEventPublisher,
     PaymentEventSubscriber, PaymentMonitor,
 };
-pub use types::{AssetType, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent, UserId};
-pub use store::{Store, StoreId, StoreInfo};
+pub use types::{
+    AssetType, CleanupAddressInfo, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent,
+    PendingWatchInfo, StoreWallet, StoreWebhook, TokenData, UserId,
+};

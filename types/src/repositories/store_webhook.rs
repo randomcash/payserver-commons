@@ -1,22 +1,10 @@
 //! Store webhook repository traits.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::RepositoryResult;
-
-/// Store webhook configuration for invoice notifications.
-#[derive(Debug, Clone)]
-pub struct StoreWebhook {
-    pub id: Uuid,
-    pub store_id: Uuid,
-    pub webhook_url: String,
-    pub webhook_secret: String,
-    pub enabled: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
+use crate::types::StoreWebhook;
 
 /// Read operations for store webhooks.
 #[async_trait]
