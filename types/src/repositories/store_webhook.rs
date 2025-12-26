@@ -9,6 +9,10 @@ use crate::types::StoreWebhook;
 /// Read operations for store webhooks.
 #[async_trait]
 pub trait StoreWebhookReader: Send + Sync {
+    /// Get webhook configuration for a store (regardless of enabled status).
+    /// Returns None if webhook is not configured.
+    async fn get_webhook(&self, store_id: Uuid) -> RepositoryResult<Option<StoreWebhook>>;
+
     /// Get enabled webhook configuration for a store.
     /// Returns None if webhook is not configured or is disabled.
     async fn get_enabled_webhook(&self, store_id: Uuid) -> RepositoryResult<Option<StoreWebhook>>;
