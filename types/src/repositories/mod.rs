@@ -26,6 +26,7 @@
 
 mod error;
 mod invoice;
+mod live_watched_address;
 mod payment;
 mod payment_event;
 mod store_wallet;
@@ -35,6 +36,9 @@ mod watched_address;
 
 pub use error::{RepositoryError, RepositoryResult};
 pub use invoice::{InvoiceQueryParams, InvoiceReader, InvoiceRepository, InvoiceWriter};
+pub use live_watched_address::{
+    LiveWatchedAddressReader, LiveWatchedAddressRepository, LiveWatchedAddressWriter,
+};
 pub use payment::{PaymentQueryParams, PaymentReader, PaymentRepository, PaymentWriter};
 pub use payment_event::PaymentEventWriter;
 pub use store_wallet::{StoreWalletReader, StoreWalletRepository, StoreWalletWriter};

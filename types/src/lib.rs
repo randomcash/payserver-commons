@@ -31,6 +31,10 @@ pub use repositories::{
     InvoiceReader,
     InvoiceRepository,
     InvoiceWriter,
+    // Live Watched Address (for evmmonitor/Redis)
+    LiveWatchedAddressReader,
+    LiveWatchedAddressRepository,
+    LiveWatchedAddressWriter,
     // Payment Event
     PaymentEventWriter,
     // Payment
@@ -54,7 +58,7 @@ pub use repositories::{
     TokenReader,
     TokenRepository,
     TokenWriter,
-    // Watched Address
+    // Watched Address (for PostgreSQL persistence)
     WatchedAddressReader,
     WatchedAddressRepository,
     WatchedAddressWriter,
