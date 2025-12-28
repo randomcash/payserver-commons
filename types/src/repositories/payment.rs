@@ -45,11 +45,11 @@ pub trait PaymentWriter: Send + Sync {
     /// Mark a payment as confirmed by setting the confirmed_at timestamp.
     async fn mark_confirmed(&self, id: Uuid, confirmed_at: DateTime<Utc>) -> RepositoryResult<()>;
 
-    /// Mark payments as reorged for a specific invoice, network, and fork block.
+    /// Mark payments as reorged for a specific invoice, chain, and fork block.
     ///
     /// Only marks payments where:
     /// - invoice_id matches
-    /// - network matches
+    /// - chain_id matches
     /// - block_number >= fork_block (affected by the reorg)
     /// - not already reorged
     ///
@@ -57,7 +57,7 @@ pub trait PaymentWriter: Send + Sync {
     async fn mark_reorged(
         &self,
         invoice_id: &InvoiceId,
-        network: crate::Network,
+        chain_id: u64,
         fork_block: u64,
     ) -> RepositoryResult<u64>;
 }

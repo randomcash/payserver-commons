@@ -7,14 +7,14 @@ use futures::stream::BoxStream;
 use super::RepositoryResult;
 use crate::store::StoreId;
 use crate::traits::InvoiceData;
-use crate::types::{InvoiceId, InvoiceStatus, Network};
+use crate::types::{InvoiceId, InvoiceStatus};
 
 /// Query parameters for listing invoices.
 #[derive(Debug, Clone, Default)]
 pub struct InvoiceQueryParams {
     pub store_id: Option<StoreId>,
     pub status: Option<InvoiceStatus>,
-    pub network: Option<Network>,
+    pub currency: Option<String>,
     pub created_after: Option<DateTime<Utc>>,
     pub created_before: Option<DateTime<Utc>>,
     pub limit: i64,
@@ -26,7 +26,7 @@ impl InvoiceQueryParams {
         Self {
             store_id: None,
             status: None,
-            network: None,
+            currency: None,
             created_after: None,
             created_before: None,
             limit: 50,
@@ -44,8 +44,8 @@ impl InvoiceQueryParams {
         self
     }
 
-    pub fn with_network(mut self, network: Network) -> Self {
-        self.network = Some(network);
+    pub fn with_currency(mut self, currency: impl Into<String>) -> Self {
+        self.currency = Some(currency.into());
         self
     }
 
@@ -73,27 +73,16 @@ pub trait InvoiceReader: Send + Sync {
     /// Get all pending invoices that have expired.
     async fn get_expired(&self) -> RepositoryResult<Vec<InvoiceData>>;
 
-    /// Stream expired pending invoice IDs for a specific network.
+    /// Stream expired pending invoice IDs.
     ///
     /// Only returns invoices where:
     /// - status = 'pending' (no payments detected)
-    /// - network matches
     /// - expires_at < NOW()
     ///
     /// Returns a stream of invoice IDs for minimal memory usage.
-    fn stream_expired_pending_for_network(
-        &self,
-        network: Network,
-    ) -> BoxStream<'_, RepositoryResult<InvoiceId>>;
-
-    /// Stream all expired pending invoice IDs across all networks.
-    ///
-    /// Only returns invoices where:
-    /// - status = 'pending' (no payments detected)
-    /// - expires_at < NOW()
-    ///
-    /// Returns a stream of (network, invoice_id) for minimal memory usage.
-    fn stream_all_expired_pending(&self) -> BoxStream<'_, RepositoryResult<(Network, InvoiceId)>>;
+    /// Callers should look up payment options for each invoice to get
+    /// the addresses that need to be unwatched.
+    fn stream_expired_pending(&self) -> BoxStream<'_, RepositoryResult<InvoiceId>>;
 }
 
 /// Write operations for invoices.

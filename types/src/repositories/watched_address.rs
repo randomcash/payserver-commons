@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 
 use super::RepositoryResult;
-use crate::types::{CleanupAddressInfo, InvoiceId, Network, PendingWatchInfo};
+use crate::types::{CleanupAddressInfo, InvoiceId, PaymentOptionId, PendingWatchInfo};
 
 /// Read operations for watched addresses.
 #[async_trait]
@@ -12,12 +12,21 @@ pub trait WatchedAddressReader: Send + Sync {
     async fn get_invoice_id(
         &self,
         address: &str,
-        network: Network,
+        chain_id: u64,
+        token_address: Option<&str>,
     ) -> RepositoryResult<Option<InvoiceId>>;
 
+    /// Get the payment option ID associated with an address.
+    async fn get_payment_option_id(
+        &self,
+        address: &str,
+        chain_id: u64,
+        token_address: Option<&str>,
+    ) -> RepositoryResult<Option<PaymentOptionId>>;
+
     /// Get all active watched addresses.
-    /// Returns tuples of (address, invoice_id, network).
-    async fn get_active(&self) -> RepositoryResult<Vec<(String, InvoiceId, Network)>>;
+    /// Returns tuples of (address, payment_option_id, chain_id, token_address).
+    async fn get_active(&self) -> RepositoryResult<Vec<(String, PaymentOptionId, u64, Option<String>)>>;
 
     /// Get watched addresses pending notification to the monitor.
     async fn get_pending(&self) -> RepositoryResult<Vec<PendingWatchInfo>>;
@@ -43,35 +52,38 @@ pub trait WatchedAddressReader: Send + Sync {
 /// Write operations for watched addresses.
 #[async_trait]
 pub trait WatchedAddressWriter: Send + Sync {
-    /// Insert or update a watched address.
+    /// Insert or update a watched address for a payment option.
     async fn upsert(
         &self,
         address: &str,
-        invoice_id: &InvoiceId,
-        network: Network,
+        payment_option_id: &PaymentOptionId,
+        chain_id: u64,
+        token_address: Option<&str>,
     ) -> RepositoryResult<()>;
-
-    /// Insert or update a watched address with optional asset identifier.
-    ///
-    /// The `asset_id` is network-specific (e.g., token contract address for ERC20).
-    async fn upsert_with_asset(
-        &self,
-        address: &str,
-        invoice_id: &InvoiceId,
-        network: Network,
-        asset_id: Option<&str>,
-    ) -> RepositoryResult<()>;
-
-    /// Remove a watched address.
-    async fn remove(&self, address: &str, network: Network) -> RepositoryResult<()>;
 
     /// Mark a watched address as notified to the monitor.
-    async fn mark_notified(&self, address: &str, network: Network) -> RepositoryResult<()>;
+    async fn mark_notified(
+        &self,
+        address: &str,
+        chain_id: u64,
+        token_address: Option<&str>,
+    ) -> RepositoryResult<()>;
 
     /// Deactivate a watched address (set is_active = false).
     ///
     /// Returns true if an address was deactivated, false if not found or already inactive.
-    async fn deactivate(&self, address: &str, network: Network) -> RepositoryResult<bool>;
+    async fn deactivate(
+        &self,
+        address: &str,
+        chain_id: u64,
+        token_address: Option<&str>,
+    ) -> RepositoryResult<bool>;
+
+    /// Deactivate all watched addresses for a payment option.
+    async fn deactivate_for_payment_option(
+        &self,
+        payment_option_id: &PaymentOptionId,
+    ) -> RepositoryResult<u64>;
 }
 
 /// Combined watched address repository with full read/write access.

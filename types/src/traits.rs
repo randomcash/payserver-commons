@@ -13,19 +13,19 @@ use crate::types::{AssetType, HealthStatus, InvoiceId, InvoiceStatus, Network, P
 
 /// Configuration for creating an invoice.
 ///
-/// This is a generic request structure. Each PayServer interprets
-/// the `asset_details` field according to its supported networks.
+/// Invoices are network-agnostic. You specify the currency and amount,
+/// and the PayServer will create payment options based on the store's
+/// configured payment methods.
 #[derive(Debug, Clone)]
 pub struct CreateInvoiceRequest {
     /// The store this invoice belongs to.
     pub store_id: StoreId,
-    /// The blocknetwork to receive payment on.
-    pub network: Network,
-    /// Amount in the smallest unit (satoshis, wei, etc.) as a string to support large values.
+    /// Invoice currency (e.g., "USD", "EUR", "BTC", "ETH").
+    pub currency: String,
+    /// Amount in the invoice currency.
+    /// For fiat, this is a decimal string (e.g., "100.00").
+    /// For crypto, this can be in the smallest unit or human-readable.
     pub amount: String,
-    /// Asset-specific details (e.g., token contract address for ERC20).
-    /// For native assets, this can be None.
-    pub asset_details: Option<serde_json::Value>,
     /// Invoice expiration in seconds from now.
     pub expiration_seconds: Option<u64>,
     /// Optional metadata to attach to the invoice.
@@ -34,30 +34,28 @@ pub struct CreateInvoiceRequest {
     pub webhook_url: Option<String>,
     /// Optional redirect URL after successful payment.
     pub redirect_url: Option<String>,
+    /// Specific payment method IDs to enable (e.g., ["ETH-1", "USDC-137"]).
+    /// If None, all store payment methods are enabled.
+    pub payment_methods: Option<Vec<String>>,
 }
 
 impl CreateInvoiceRequest {
-    /// Create a new invoice request for native currency on a network.
-    pub fn native(store_id: StoreId, network: Network, amount: impl Into<String>) -> Self {
+    /// Create a new invoice request.
+    pub fn new(store_id: StoreId, currency: impl Into<String>, amount: impl Into<String>) -> Self {
         Self {
             store_id,
-            network,
+            currency: currency.into(),
             amount: amount.into(),
-            asset_details: None,
             expiration_seconds: None,
             metadata: None,
             webhook_url: None,
             redirect_url: None,
+            payment_methods: None,
         }
     }
 
     pub fn with_expiration(mut self, seconds: u64) -> Self {
         self.expiration_seconds = Some(seconds);
-        self
-    }
-
-    pub fn with_asset_details(mut self, details: serde_json::Value) -> Self {
-        self.asset_details = Some(details);
         self
     }
 
@@ -75,6 +73,11 @@ impl CreateInvoiceRequest {
         self.metadata = Some(metadata);
         self
     }
+
+    pub fn with_payment_methods(mut self, methods: Vec<String>) -> Self {
+        self.payment_methods = Some(methods);
+        self
+    }
 }
 
 /// Query parameters for listing invoices.
@@ -82,8 +85,8 @@ impl CreateInvoiceRequest {
 pub struct InvoiceQuery {
     /// Filter by status.
     pub status: Option<InvoiceStatus>,
-    /// Filter by network.
-    pub network: Option<Network>,
+    /// Filter by currency.
+    pub currency: Option<String>,
     /// Maximum number of results.
     pub limit: Option<u32>,
     /// Offset for pagination.
@@ -92,36 +95,40 @@ pub struct InvoiceQuery {
 
 /// Generic invoice data returned by PayServers.
 ///
-/// This contains the common fields. PayServers may include additional
-/// network-specific data in the `extra` field.
+/// An invoice is network-agnostic: it represents a payment request in a
+/// specific currency (which can be fiat like "USD" or crypto like "BTC").
+/// The actual payment options (which chains/assets can be used to pay)
+/// are stored separately in PaymentOptionData.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InvoiceData {
     pub id: InvoiceId,
     /// The store this invoice belongs to.
     pub store_id: StoreId,
-    pub network: Network,
+    /// Invoice currency (e.g., "USD", "EUR", "BTC", "ETH").
+    /// This is what the merchant prices in.
+    pub currency: String,
     pub status: InvoiceStatus,
-    /// Amount requested (smallest unit as string).
+    /// Amount requested in the invoice currency.
+    /// For fiat, this is a decimal string (e.g., "100.00").
+    /// For crypto, this is in the smallest unit (e.g., wei for ETH).
     pub amount: String,
-    /// Amount received so far (smallest unit as string).
+    /// Total amount received across all payment options, converted to invoice currency.
+    /// This is calculated from payments and their exchange rates.
     pub amount_received: String,
-    /// Asset symbol (e.g., "ETH", "BTC", "USDT").
-    pub asset_symbol: String,
-    /// Payment address.
-    pub payment_address: Option<String>,
-    /// Payment request string (e.g., Lightning invoice, EIP-681 URI).
-    pub payment_request: Option<String>,
     /// When the invoice was created.
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// When the invoice expires.
     pub expires_at: chrono::DateTime<chrono::Utc>,
     /// Optional metadata.
     pub metadata: Option<serde_json::Value>,
-    /// Network-specific extra data.
+    /// Optional extra data.
     pub extra: Option<serde_json::Value>,
 }
 
 /// Generic payment data returned by PayServers.
+///
+/// A payment is an actual received transaction. It belongs to an invoice
+/// and optionally references the payment option that was used.
 ///
 /// Note: Confirmations are computed dynamically as `current_block - block_number + 1`.
 /// The `confirmed_at` timestamp indicates when the payment reached the required
@@ -131,7 +138,10 @@ pub struct InvoiceData {
 pub struct PaymentData {
     pub id: uuid::Uuid,
     pub invoice_id: InvoiceId,
-    pub network: Network,
+    /// The payment option this payment was for (if known).
+    pub payment_option_id: Option<uuid::Uuid>,
+    /// EIP-155 chain ID where this payment was received.
+    pub chain_id: u64,
     /// Asset type (native or ERC20).
     #[serde(default)]
     pub asset_type: AssetType,
@@ -246,38 +256,34 @@ mod tests {
     #[test]
     fn test_create_invoice_request_builder() {
         let store_id = StoreId::new();
-        let request = CreateInvoiceRequest::native(store_id, Network::Ethereum, "1000000000000000000")
+        let request = CreateInvoiceRequest::new(store_id, "USD", "100.00")
             .with_expiration(3600)
             .with_webhook("https://example.com/webhook".to_string());
 
         assert_eq!(request.store_id, store_id);
-        assert_eq!(request.network, Network::Ethereum);
-        assert_eq!(request.amount, "1000000000000000000");
+        assert_eq!(request.currency, "USD");
+        assert_eq!(request.amount, "100.00");
         assert_eq!(request.expiration_seconds, Some(3600));
-        assert!(request.asset_details.is_none());
         assert!(request.webhook_url.is_some());
     }
 
     #[test]
-    fn test_create_invoice_request_with_token() {
+    fn test_create_invoice_request_with_payment_methods() {
         let store_id = StoreId::new();
-        let token_details = serde_json::json!({
-            "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-            "symbol": "USDT",
-            "decimals": 6
-        });
+        let request = CreateInvoiceRequest::new(store_id, "USD", "50.00")
+            .with_payment_methods(vec!["ETH-1".to_string(), "USDC-137".to_string()]);
 
-        let request = CreateInvoiceRequest::native(store_id, Network::Ethereum, "1000000")
-            .with_asset_details(token_details);
-
-        assert!(request.asset_details.is_some());
+        assert_eq!(
+            request.payment_methods,
+            Some(vec!["ETH-1".to_string(), "USDC-137".to_string()])
+        );
     }
 
     #[test]
     fn test_invoice_query_default() {
         let query = InvoiceQuery::default();
         assert!(query.status.is_none());
-        assert!(query.network.is_none());
+        assert!(query.currency.is_none());
         assert!(query.limit.is_none());
         assert!(query.offset.is_none());
     }

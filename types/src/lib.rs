@@ -37,6 +37,10 @@ pub use repositories::{
     LiveWatchedAddressWriter,
     // Payment Event
     PaymentEventWriter,
+    // Payment Option
+    PaymentOptionReader,
+    PaymentOptionRepository,
+    PaymentOptionWriter,
     // Payment
     PaymentQueryParams,
     PaymentReader,
@@ -45,7 +49,11 @@ pub use repositories::{
     // Errors
     RepositoryError,
     RepositoryResult,
-    // Store Wallet
+    // Store Payment Method
+    StorePaymentMethodReader,
+    StorePaymentMethodRepository,
+    StorePaymentMethodWriter,
+    // Store Wallet (deprecated)
     StoreWalletReader,
     StoreWalletRepository,
     StoreWalletWriter,
@@ -70,5 +78,6 @@ pub use traits::{
 };
 pub use types::{
     AssetType, CleanupAddressInfo, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent,
-    PendingWatchInfo, StoreWallet, StoreWebhook, TokenData, UserId,
+    PaymentMethodId, PaymentOptionData, PaymentOptionId, PendingWatchInfo, StorePaymentMethod,
+    StoreWallet, StoreWebhook, TokenData, UserId,
 };

@@ -29,6 +29,8 @@ mod invoice;
 mod live_watched_address;
 mod payment;
 mod payment_event;
+mod payment_option;
+mod store_payment_method;
 mod store_wallet;
 mod store_webhook;
 mod token;
@@ -41,6 +43,10 @@ pub use live_watched_address::{
 };
 pub use payment::{PaymentQueryParams, PaymentReader, PaymentRepository, PaymentWriter};
 pub use payment_event::PaymentEventWriter;
+pub use payment_option::{PaymentOptionReader, PaymentOptionRepository, PaymentOptionWriter};
+pub use store_payment_method::{
+    StorePaymentMethodReader, StorePaymentMethodRepository, StorePaymentMethodWriter,
+};
 pub use store_wallet::{StoreWalletReader, StoreWalletRepository, StoreWalletWriter};
 pub use store_webhook::{StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter};
 pub use token::{TokenQueryParams, TokenReader, TokenRepository, TokenWriter};
@@ -52,13 +58,21 @@ pub use watched_address::{WatchedAddressReader, WatchedAddressRepository, Watche
 /// access to all data operations. For more focused dependencies, use the
 /// individual Reader/Writer traits.
 pub trait DataService:
-    InvoiceRepository + PaymentRepository + WatchedAddressRepository + TokenRepository
+    InvoiceRepository
+    + PaymentRepository
+    + PaymentOptionRepository
+    + WatchedAddressRepository
+    + TokenRepository
 {
 }
 
 /// Blanket implementation: any type implementing all repository traits is a DataService.
 impl<T> DataService for T where
-    T: InvoiceRepository + PaymentRepository + WatchedAddressRepository + TokenRepository
+    T: InvoiceRepository
+        + PaymentRepository
+        + PaymentOptionRepository
+        + WatchedAddressRepository
+        + TokenRepository
 {
 }
 
@@ -66,13 +80,13 @@ impl<T> DataService for T where
 ///
 /// Use this when you only need read access to all repositories.
 pub trait DataServiceReader:
-    InvoiceReader + PaymentReader + WatchedAddressReader + TokenReader
+    InvoiceReader + PaymentReader + PaymentOptionReader + WatchedAddressReader + TokenReader
 {
 }
 
 /// Blanket implementation for read-only access.
 impl<T> DataServiceReader for T where
-    T: InvoiceReader + PaymentReader + WatchedAddressReader + TokenReader
+    T: InvoiceReader + PaymentReader + PaymentOptionReader + WatchedAddressReader + TokenReader
 {
 }
 
@@ -80,12 +94,12 @@ impl<T> DataServiceReader for T where
 ///
 /// Use this when you only need write access to all repositories.
 pub trait DataServiceWriter:
-    InvoiceWriter + PaymentWriter + WatchedAddressWriter + TokenWriter
+    InvoiceWriter + PaymentWriter + PaymentOptionWriter + WatchedAddressWriter + TokenWriter
 {
 }
 
 /// Blanket implementation for write-only access.
 impl<T> DataServiceWriter for T where
-    T: InvoiceWriter + PaymentWriter + WatchedAddressWriter + TokenWriter
+    T: InvoiceWriter + PaymentWriter + PaymentOptionWriter + WatchedAddressWriter + TokenWriter
 {
 }
