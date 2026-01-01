@@ -167,6 +167,78 @@ pub struct PaymentData {
     pub reorged: bool,
     /// Network-specific extra data.
     pub extra: Option<serde_json::Value>,
+
+    // =========================================================================
+    // Payment Aggregation Fields
+    //
+    // These fields enable aggregating payments across different assets/chains
+    // into a single invoice total. Without these, we couldn't compare a payment
+    // of 0.05 ETH against a $100 USD invoice.
+    // =========================================================================
+
+    /// The payment's value credited toward the invoice total, expressed in the
+    /// invoice's currency.
+    ///
+    /// # Purpose
+    ///
+    /// Invoices can be denominated in any currency (USD, EUR, BTC, ETH, etc.),
+    /// but payments arrive in specific assets (ETH on Ethereum, USDC on Polygon,
+    /// etc.). This field converts each payment to the invoice's currency so they
+    /// can be summed and compared against the invoice amount.
+    ///
+    /// # Calculation
+    ///
+    /// **Cross-currency payments** (e.g., USD invoice paid with ETH):
+    /// ```text
+    /// credited_amount = (raw_amount / 10^decimals) / rate
+    ///
+    /// Example: 50000000000000000 wei at rate 0.0005 ETH/USD
+    ///   = (50000000000000000 / 10^18) / 0.0005
+    ///   = 0.05 / 0.0005
+    ///   = 100 USD
+    /// ```
+    ///
+    /// **Same-asset payments** (e.g., ETH invoice paid with ETH):
+    /// ```text
+    /// credited_amount = raw_amount / 10^decimals
+    ///
+    /// Example: 1500000000000000000 wei
+    ///   = 1500000000000000000 / 10^18
+    ///   = 1.5 ETH
+    /// ```
+    ///
+    /// # Important Behavior
+    ///
+    /// - **None means not counted**: Payments where conversion failed or the
+    ///   payment option wasn't found are recorded for audit purposes but do NOT
+    ///   count toward the invoice's `amount_received`.
+    ///
+    /// - **Rate is locked at invoice creation**: The exchange rate used comes
+    ///   from `rate_used`, which was captured when the invoice was created.
+    ///   Market fluctuations after invoice creation don't affect this value.
+    ///
+    /// - **Aggregation happens in the database**: A trigger sums all non-null
+    ///   `credited_amount` values to update `invoice.amount_received`.
+    pub credited_amount: Option<String>,
+
+    /// Exchange rate used to calculate `credited_amount`.
+    ///
+    /// Format: `1 invoice_currency = rate asset_units`
+    ///
+    /// For example, if the invoice is in USD and payment is in ETH:
+    /// - rate = "0.0005" means 1 USD = 0.0005 ETH
+    ///
+    /// This rate is captured at invoice creation time and locked in. It's stored
+    /// here for auditability - you can verify how `credited_amount` was calculated.
+    ///
+    /// **None** for same-asset payments (no conversion needed).
+    pub rate_used: Option<String>,
+
+    /// When the rate was applied to calculate `credited_amount`.
+    ///
+    /// This is the timestamp when the payment was detected and converted,
+    /// not when the rate was originally fetched (that's stored in the payment option).
+    pub rate_applied_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Core trait that all payment servers must implement.
