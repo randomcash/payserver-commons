@@ -1,5 +1,5 @@
 [workspace]
-members = ["auth", "crypto", "rates", "types"]
+members = ["auth", "crypto", "rates", "types", "ui-kit"]
 resolver = "3"
 
 [workspace.package]
