@@ -5,6 +5,8 @@ use uuid::Uuid;
 use webauthn_rs::prelude::Passkey;
 
 use crate::error::{AuthError, Result};
+#[cfg(feature = "metrics")]
+use crate::metrics;
 use crate::models::{
     CompleteNewUserPasskeyRegistrationRequest, CompletePasskeyLoginRequest,
     CompletePasskeyRegistrationRequest, Device, LoginResponse, PasskeyCredential, PasskeyId,
@@ -159,6 +161,9 @@ where
         let session_id = session.id;
         self.repo.create_session(&session).await?;
 
+        #[cfg(feature = "metrics")]
+        metrics::record_user_registration();
+
         Ok(LoginResponse {
             session_id,
             device_id,
@@ -240,6 +245,8 @@ where
 
         // Check if account is locked
         if user.is_locked() {
+            #[cfg(feature = "metrics")]
+            metrics::record_login_failure();
             return Err(AuthError::AccountLocked);
         }
 
@@ -261,6 +268,8 @@ where
             .map_err(|_| {
                 // WebAuthn verification failed - could be a technical issue or attack
                 // Don't increment failed logins (passkey failures can't be brute-forced)
+                #[cfg(feature = "metrics")]
+                metrics::record_login_failure();
                 AuthError::PasskeyVerificationFailed
             })?;
 
@@ -330,6 +339,9 @@ where
         let session = Session::with_expiration(user.id, device_id, expires_at);
         let session_id = session.id;
         self.repo.create_session(&session).await?;
+
+        #[cfg(feature = "metrics")]
+        metrics::record_user_login();
 
         Ok(LoginResponse {
             session_id,

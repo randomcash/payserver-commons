@@ -7,6 +7,8 @@ use sha3::Keccak256;
 use sha3::Digest;
 
 use crate::error::{AuthError, Result};
+#[cfg(feature = "metrics")]
+use crate::metrics;
 use crate::models::{
     CompleteNewUserWalletRegistrationRequest, CompleteWalletLoginRequest,
     CompleteWalletRegistrationRequest, Device, LoginResponse, Session, SessionId,
@@ -205,6 +207,8 @@ where
 
         // Check if account is locked
         if user.is_locked() {
+            #[cfg(feature = "metrics")]
+            metrics::record_login_failure();
             return Err(AuthError::AccountLocked);
         }
 
@@ -238,6 +242,8 @@ where
             .ok_or(AuthError::InvalidCredentials)?;
 
         if user.is_locked() {
+            #[cfg(feature = "metrics")]
+            metrics::record_login_failure();
             return Err(AuthError::AccountLocked);
         }
 
@@ -247,6 +253,8 @@ where
             .await
         {
             if matches!(e, AuthError::WalletSignatureVerificationFailed) {
+                #[cfg(feature = "metrics")]
+                metrics::record_login_failure();
                 let attempts = self.repo.increment_failed_logins(user.id).await?;
                 if attempts >= self.config.max_failed_attempts {
                     let lock_until = Utc::now() + self.config.lockout_duration;
@@ -315,6 +323,9 @@ where
         let session = Session::with_expiration(user.id, device_id, expires_at);
         let session_id = session.id;
         self.repo.create_session(&session).await?;
+
+        #[cfg(feature = "metrics")]
+        metrics::record_user_login();
 
         Ok(LoginResponse {
             session_id,
@@ -433,6 +444,9 @@ where
         let session = Session::with_expiration(user.id, device_id, expires_at);
         let session_id = session.id;
         self.repo.create_session(&session).await?;
+
+        #[cfg(feature = "metrics")]
+        metrics::record_user_registration();
 
         Ok(LoginResponse {
             session_id,

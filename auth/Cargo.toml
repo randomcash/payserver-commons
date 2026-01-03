@@ -30,6 +30,9 @@ webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"]
 url = "2.5"
 base64 = "0.22"
 
+# Metrics (optional)
+metrics = { version = "0.24", optional = true }
+
 # Utilities
 thiserror = "2.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
@@ -46,6 +49,10 @@ alloy-primitives = "0.8"  # Address type, checksumming (EIP-55)
 k256 = { version = "0.13", features = ["ecdsa"] }  # secp256k1 signature recovery
 sha3 = "0.10"  # Keccak256 for EIP-191 message hashing
 hex = "0.4"  # Hex encoding/decoding for signatures
+
+[features]
+default = []
+metrics = ["dep:metrics"]
 
 [dev-dependencies]
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros"] }

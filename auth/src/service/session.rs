@@ -3,6 +3,8 @@
 use chrono::Utc;
 
 use crate::error::{AuthError, Result};
+#[cfg(feature = "metrics")]
+use crate::metrics;
 use crate::models::{Session, SessionId, UserInfo};
 use crate::repository::{
     ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository, UserRepository,
@@ -62,7 +64,10 @@ where
 
     /// Logout - invalidate a session.
     pub async fn logout(&self, session_id: SessionId) -> Result<()> {
-        self.repo.delete_session(session_id).await
+        self.repo.delete_session(session_id).await?;
+        #[cfg(feature = "metrics")]
+        metrics::record_user_logout();
+        Ok(())
     }
 
     /// Logout from all devices.
@@ -93,7 +98,10 @@ where
         }
 
         // Delete all sessions for this user (including the current one)
-        self.repo.delete_all_sessions_for_user(session.user_id).await
+        self.repo.delete_all_sessions_for_user(session.user_id).await?;
+        #[cfg(feature = "metrics")]
+        metrics::record_user_logout();
+        Ok(())
     }
 
     /// Clean up stale sessions (call periodically).

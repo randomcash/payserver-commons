@@ -75,6 +75,8 @@
 
 pub mod api;
 pub mod error;
+#[cfg(feature = "metrics")]
+pub mod metrics;
 pub mod models;
 pub mod permissions;
 pub mod repository;
