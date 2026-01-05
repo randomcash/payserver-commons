@@ -130,6 +130,8 @@ extern "C" {
 }
 
 /// Initialize the module system.
+/// Only enabled when `module-init` feature is active (for standalone builds).
+#[cfg(feature = "module-init")]
 #[wasm_bindgen(start)]
 pub fn init_module_system() {
     console_error_panic_hook::set_once();

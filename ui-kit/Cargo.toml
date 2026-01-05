@@ -55,8 +55,8 @@ console_error_panic_hook = "0.1"
 
 [features]
 default = []
-# Enable when integrating with a component library
-# leptonic = ["dep:leptonic"]
+# Enable wasm_bindgen(start) for standalone use - disable when used as a library
+module-init = []
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

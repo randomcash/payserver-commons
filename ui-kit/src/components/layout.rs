@@ -66,7 +66,7 @@ pub fn Grid(
 pub fn PageHeader(
     title: &'static str,
     #[prop(optional)] description: Option<&'static str>,
-    #[prop(optional)] actions: Option<Children>,
+    #[prop(optional)] actions: Option<AnyView>,
 ) -> impl IntoView {
     view! {
         <div class="ps-page-header">
@@ -74,7 +74,7 @@ pub fn PageHeader(
                 <h1 class="ps-page-title">{title}</h1>
                 {description.map(|d| view! { <p class="ps-page-description">{d}</p> })}
             </div>
-            {actions.map(|a| view! { <div class="ps-page-actions">{a()}</div> })}
+            {actions.map(|a| view! { <div class="ps-page-actions">{a}</div> })}
         </div>
     }
 }
