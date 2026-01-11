@@ -50,7 +50,7 @@ impl Default for AuthConfig {
             max_devices_per_user: 10,
             max_passkeys_per_user: 10,
             max_wallets_per_user: 10,
-            wallet_challenge_duration: Duration::minutes(5),
+            wallet_challenge_duration: Duration::minutes(10),
             rp_id: "localhost".to_string(),
             rp_name: "PayServer".to_string(),
             rp_origin: "http://localhost:8080".to_string(),

@@ -885,11 +885,20 @@ pub struct WalletChallenge {
 
 impl WalletChallenge {
     /// Create a new wallet challenge.
+    ///
+    /// The timestamp is truncated to microsecond precision to match Postgres storage,
+    /// ensuring the challenge message is identical when regenerated for verification.
     pub fn new(challenge: String, address: String) -> Self {
+        // Truncate to microseconds to match Postgres precision
+        let now = Utc::now();
+        let micros = now.timestamp_micros();
+        let created_at = DateTime::from_timestamp_micros(micros)
+            .unwrap_or(now);
+
         Self {
             challenge,
             address,
-            created_at: Utc::now(),
+            created_at,
         }
     }
 }

@@ -3,6 +3,9 @@
 use crate::types::{AuthState, User};
 use leptos::prelude::*;
 
+#[cfg(feature = "auth")]
+use leptos_router::hooks::use_navigate;
+
 /// Authentication context provided by the dashboard aggregator.
 #[derive(Clone, Copy)]
 pub struct AuthContext {
@@ -47,6 +50,82 @@ impl AuthContext {
     pub fn logout(&self) {
         self.set_state.set(AuthState::Anonymous);
         self.set_token.set(None);
+
+        // Clear session from localStorage when auth feature is enabled
+        #[cfg(feature = "auth")]
+        crate::auth::session::clear_session();
+    }
+
+    /// Save login response to context.
+    /// This is called after successful login to update the auth state.
+    #[cfg(feature = "auth")]
+    pub fn save_login(&self, response: &crate::auth::types::LoginResponse) {
+        // Convert auth types to ui-kit User type
+        // Use email if available, otherwise fall back to wallet address
+        let user = User {
+            id: response.session_id.to_string(),
+            email: response.email.clone(),
+            display_name: response.email.clone().or(response.primary_wallet_address.clone()),
+        };
+
+        // Update state
+        self.set_state.set(AuthState::Authenticated(user));
+        self.set_token.set(Some(response.session_id.to_string()));
+
+        // Save to localStorage
+        if let Err(e) = crate::auth::session::save_session(response) {
+            web_sys::console::error_1(&format!("Failed to save session: {}", e).into());
+        }
+    }
+
+    /// Load session from localStorage and update state.
+    /// Returns true if a valid session was found.
+    /// Note: This only checks localStorage, not the server. Use `validate_session`
+    /// for server-side validation.
+    #[cfg(feature = "auth")]
+    pub fn load_session(&self) -> bool {
+        if let Some(session) = crate::auth::session::load_session() {
+            // Create user from stored session
+            let user = User {
+                id: session.session_id.to_string(),
+                email: session.email.clone(),
+                display_name: session.email.or(session.wallet_address),
+            };
+
+            self.set_state.set(AuthState::Authenticated(user));
+            self.set_token.set(Some(session.session_id.to_string()));
+            true
+        } else {
+            self.set_state.set(AuthState::Anonymous);
+            false
+        }
+    }
+
+    /// Validate the current session with the server.
+    /// If the session is invalid or expired on the server, clears the local session.
+    /// This should be called after `load_session` to ensure the session is still valid.
+    #[cfg(feature = "auth")]
+    pub async fn validate_session(&self, api: &crate::hooks::use_api::ApiClient) {
+        // Only validate if we think we're authenticated
+        if !matches!(self.state.get_untracked(), AuthState::Authenticated(_)) {
+            return;
+        }
+
+        match api.get_current_user().await {
+            Ok(user_info) => {
+                // Update user info from server (may have changed)
+                let user = User {
+                    id: user_info.id.to_string(),
+                    email: user_info.email.clone(),
+                    display_name: user_info.email.or(user_info.primary_wallet_address),
+                };
+                self.set_state.set(AuthState::Authenticated(user));
+            }
+            Err(_) => {
+                // Session is invalid on server, clear local session
+                self.logout();
+            }
+        }
     }
 }
 
@@ -57,10 +136,47 @@ impl Default for AuthContext {
 }
 
 /// Provide auth context to children.
+///
+/// When the `auth` feature is enabled, this will automatically load
+/// the session from localStorage on mount and validate it with the server.
 #[component]
-pub fn AuthProvider(children: Children) -> impl IntoView {
+pub fn AuthProvider(
+    children: Children,
+    /// API base URL for session validation (default: "/api").
+    #[prop(optional)]
+    api_url: Option<String>,
+) -> impl IntoView {
     let auth = AuthContext::new();
     provide_context(auth);
+
+    // Load session from localStorage on mount and validate with server (when auth feature is enabled)
+    #[cfg(feature = "auth")]
+    {
+        let api_url = api_url.unwrap_or_else(|| "/api".to_string());
+        Effect::new(move || {
+            // First, load from localStorage for instant UI
+            let has_session = auth.load_session();
+
+            // Then validate with server in background
+            if has_session {
+                let api = crate::hooks::use_api::ApiClient::new(api_url.clone());
+                leptos::task::spawn_local(async move {
+                    auth.validate_session(&api).await;
+                });
+            }
+        });
+    }
+
+    // Suppress unused variable warning when auth feature is not enabled
+    #[cfg(not(feature = "auth"))]
+    let _ = api_url;
+
+    // When auth feature is not enabled, just set state to Anonymous
+    #[cfg(not(feature = "auth"))]
+    {
+        auth.set_state.set(AuthState::Anonymous);
+    }
+
     children()
 }
 
@@ -70,17 +186,103 @@ pub fn use_auth() -> AuthContext {
 }
 
 /// Guard component that only renders children if authenticated.
+///
+/// When the `auth` feature is enabled, this will redirect to the login page
+/// if the user is not authenticated.
 #[component]
 pub fn AuthGuard(
     children: ChildrenFn,
+    /// URL to redirect to if not authenticated (default: "/login").
+    /// Only used when `auth` feature is enabled.
+    #[prop(optional)]
+    redirect_to: Option<String>,
 ) -> impl IntoView {
     let auth = use_auth();
+
+    #[cfg(feature = "auth")]
+    let redirect_url = redirect_to.unwrap_or_else(|| "/login".to_string());
 
     view! {
         {move || match auth.state.get() {
             AuthState::Authenticated(_) => children().into_any(),
-            AuthState::Loading => view! { <div class="ps-auth-loading">"Loading..."</div> }.into_any(),
-            AuthState::Anonymous => view! { <div class="ps-auth-required">"Authentication required"</div> }.into_any(),
+            AuthState::Loading => view! {
+                <div class="ps-auth-loading">
+                    <div class="ps-spinner"></div>
+                    <p>"Loading..."</p>
+                </div>
+            }.into_any(),
+            AuthState::Anonymous => {
+                // When auth feature is enabled, redirect to login
+                #[cfg(feature = "auth")]
+                {
+                    let navigate = use_navigate();
+                    let url = redirect_url.clone();
+                    // Use spawn_local to avoid calling navigate during render
+                    leptos::task::spawn_local(async move {
+                        navigate(&url, Default::default());
+                    });
+                }
+
+                view! {
+                    <div class="ps-auth-required">
+                        <p>"Redirecting to login..."</p>
+                    </div>
+                }.into_any()
+            }
+        }}
+    }
+}
+
+/// Admin guard component that only renders children if user is an admin.
+///
+/// This is similar to AuthGuard but also checks for admin role.
+#[component]
+pub fn AdminGuard(
+    children: ChildrenFn,
+    /// URL to redirect to if not authenticated (default: "/login").
+    #[prop(optional)]
+    redirect_to: Option<String>,
+    /// URL to redirect to if authenticated but not admin (default: "/").
+    #[prop(optional)]
+    forbidden_redirect: Option<String>,
+) -> impl IntoView {
+    let auth = use_auth();
+
+    #[cfg(feature = "auth")]
+    let login_url = redirect_to.unwrap_or_else(|| "/login".to_string());
+    // Note: forbidden_url would be used for admin role checking (TODO)
+    #[cfg(feature = "auth")]
+    let _forbidden_url = forbidden_redirect.unwrap_or_else(|| "/".to_string());
+
+    view! {
+        {move || match auth.state.get() {
+            AuthState::Authenticated(ref _user) => {
+                // TODO: Check if user has admin role
+                // For now, just render children
+                children().into_any()
+            }
+            AuthState::Loading => view! {
+                <div class="ps-auth-loading">
+                    <div class="ps-spinner"></div>
+                    <p>"Loading..."</p>
+                </div>
+            }.into_any(),
+            AuthState::Anonymous => {
+                #[cfg(feature = "auth")]
+                {
+                    let navigate = use_navigate();
+                    let url = login_url.clone();
+                    leptos::task::spawn_local(async move {
+                        navigate(&url, Default::default());
+                    });
+                }
+
+                view! {
+                    <div class="ps-auth-required">
+                        <p>"Redirecting to login..."</p>
+                    </div>
+                }.into_any()
+            }
         }}
     }
 }

@@ -9,7 +9,7 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
-    AuthenticationService, DeviceId, DeviceInfo, PasskeyId, PasskeyInfo, SessionId,
+    AuthenticationService, DeviceId, DeviceInfo, PasskeyId, PasskeyInfo, SessionId, UserInfo,
     WalletCredentialId, WalletInfo,
 };
 
@@ -18,6 +18,29 @@ use super::AuthState;
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AuthenticatedRequest {
     pub session_id: SessionId,
+}
+
+#[utoipa::path(
+    get,
+    path = "/auth/me",
+    tag = "management",
+    request_body = AuthenticatedRequest,
+    responses(
+        (status = 200, description = "Current user info", body = UserInfo),
+        (status = 401, description = "Invalid session"),
+    )
+)]
+pub async fn get_me<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
+    Json(req): Json<AuthenticatedRequest>,
+) -> Result<Json<UserInfo>, (StatusCode, String)> {
+    let (user_info, _session) = state
+        .service
+        .validate_session(req.session_id)
+        .await
+        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
+
+    Ok(Json(user_info))
 }
 
 #[utoipa::path(

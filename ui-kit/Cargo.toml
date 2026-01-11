@@ -46,17 +46,23 @@ serde_json = "1.0"
 
 # HTTP client for API calls
 gloo-net = "0.6"
-gloo-timers = "0.3"
+gloo-timers = { version = "0.3", features = ["futures"] }
 gloo-storage = "0.3"
 
 # Utilities
 thiserror = "2.0"
 console_error_panic_hook = "0.1"
 
+# Auth dependencies (optional, enabled with "auth" feature)
+uuid = { version = "1.11", features = ["v4", "serde"], optional = true }
+base64 = { version = "0.22", optional = true }
+
 [features]
 default = []
 # Enable wasm_bindgen(start) for standalone use - disable when used as a library
 module-init = []
+# Enable authentication components (login, register, wallet connect, passkey)
+auth = ["dep:uuid", "dep:base64"]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

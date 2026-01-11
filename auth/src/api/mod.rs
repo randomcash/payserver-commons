@@ -67,6 +67,7 @@ impl<A> AuthState<A> {
         wallet::complete_login,
         recovery::start_recovery,
         recovery::complete_recovery,
+        management::get_me,
         management::list_devices,
         management::revoke_device,
         management::list_passkeys,
@@ -95,6 +96,7 @@ impl<A> AuthState<A> {
         crate::WalletCredentialId,
         crate::WalletInfo,
         crate::LoginResponse,
+        crate::UserInfo,
     )),
     tags(
         (name = "passkey", description = "WebAuthn authentication"),
@@ -122,6 +124,7 @@ pub fn router<A: AuthenticationService + 'static>(state: AuthState<A>) -> Router
         .route("/wallet/login/complete", post(wallet::complete_login))
         .route("/recovery/start", post(recovery::start_recovery))
         .route("/recovery/complete", post(recovery::complete_recovery))
+        .route("/me", get(management::get_me))
         .route("/devices", get(management::list_devices))
         .route("/devices/{id}", delete(management::revoke_device))
         .route("/passkeys", get(management::list_passkeys))
