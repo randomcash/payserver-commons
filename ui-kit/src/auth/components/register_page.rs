@@ -66,6 +66,18 @@ pub fn RegisterPage(
     let navigate = use_navigate();
     let redirect = StoredValue::new(redirect_to.clone());
 
+    // Redirect to dashboard if already authenticated
+    {
+        let navigate = navigate.clone();
+        let redirect = redirect.clone();
+        Effect::new(move || {
+            if auth.is_authenticated() {
+                let url = redirect.get_value();
+                navigate(&url, Default::default());
+            }
+        });
+    }
+
     // Wallet connect handler
     let on_wallet_connect = Callback::new(move |address: String| {
         let api = api.get_value();

@@ -3,6 +3,9 @@
 use chrono::Utc;
 use uuid::Uuid;
 use webauthn_rs::prelude::DiscoverableKey;
+use webauthn_rs_proto::{
+    AuthenticatorSelectionCriteria, ResidentKeyRequirement, UserVerificationPolicy,
+};
 
 use crate::error::{AuthError, Result};
 #[cfg(feature = "metrics")]
@@ -55,8 +58,8 @@ where
         // Use user_id as the WebAuthn user identifier
         let user_identifier = format!("passkey:{}", user_id);
 
-        // Generate WebAuthn registration challenge with discoverable credential
-        let (ccr, passkey_registration) = self
+        // Generate WebAuthn registration challenge
+        let (mut ccr, passkey_registration) = self
             .webauthn
             .start_passkey_registration(
                 Uuid::from(user_id.0),
@@ -65,6 +68,15 @@ where
                 None, // No excluded credentials for new user
             )
             .map_err(|e| AuthError::WebAuthn(e.to_string()))?;
+
+        // Modify the challenge to require resident key (discoverable credential)
+        // This ensures the passkey can be used for usernameless login
+        ccr.public_key.authenticator_selection = Some(AuthenticatorSelectionCriteria {
+            authenticator_attachment: None,
+            resident_key: Some(ResidentKeyRequirement::Required),
+            require_resident_key: true,
+            user_verification: UserVerificationPolicy::Required,
+        });
 
         // Store the challenge state with user_identifier for consistency verification
         self.repo
@@ -207,7 +219,7 @@ where
             .ok_or(AuthError::PasskeyChallengeExpired)?;
 
         // Get the credential ID from the response to look up the passkey
-        let credential_id = request.credential.id.as_ref();
+        let credential_id = request.credential.get_credential_id();
 
         // Find the passkey by credential ID
         let passkey_cred = self

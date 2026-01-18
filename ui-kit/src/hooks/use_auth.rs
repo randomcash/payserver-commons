@@ -84,7 +84,9 @@ impl AuthContext {
     /// for server-side validation.
     #[cfg(feature = "auth")]
     pub fn load_session(&self) -> bool {
+        web_sys::console::log_1(&"[AuthContext] load_session called".into());
         if let Some(session) = crate::auth::session::load_session() {
+            web_sys::console::log_1(&format!("[AuthContext] Found session: {:?}", session.session_id).into());
             // Create user from stored session
             let user = User {
                 id: session.session_id.to_string(),
@@ -94,8 +96,10 @@ impl AuthContext {
 
             self.set_state.set(AuthState::Authenticated(user));
             self.set_token.set(Some(session.session_id.to_string()));
+            web_sys::console::log_1(&"[AuthContext] State set to Authenticated".into());
             true
         } else {
+            web_sys::console::log_1(&"[AuthContext] No session found, setting Anonymous".into());
             self.set_state.set(AuthState::Anonymous);
             false
         }
@@ -108,11 +112,14 @@ impl AuthContext {
     pub async fn validate_session(&self, api: &crate::hooks::use_api::ApiClient) {
         // Only validate if we think we're authenticated
         if !matches!(self.state.get_untracked(), AuthState::Authenticated(_)) {
+            web_sys::console::log_1(&"[AuthContext] validate_session: Not authenticated, skipping".into());
             return;
         }
 
+        web_sys::console::log_1(&"[AuthContext] validate_session: Calling get_current_user...".into());
         match api.get_current_user().await {
             Ok(user_info) => {
+                web_sys::console::log_1(&format!("[AuthContext] validate_session: Got user info: {:?}", user_info.id).into());
                 // Update user info from server (may have changed)
                 let user = User {
                     id: user_info.id.to_string(),
@@ -121,7 +128,8 @@ impl AuthContext {
                 };
                 self.set_state.set(AuthState::Authenticated(user));
             }
-            Err(_) => {
+            Err(e) => {
+                web_sys::console::log_1(&format!("[AuthContext] validate_session: Error - {}", e).into());
                 // Session is invalid on server, clear local session
                 self.logout();
             }
@@ -154,14 +162,22 @@ pub fn AuthProvider(
     {
         let api_url = api_url.unwrap_or_else(|| "/api".to_string());
         Effect::new(move || {
+            web_sys::console::log_1(&"[AuthProvider] Effect running, loading session...".into());
             // First, load from localStorage for instant UI
             let has_session = auth.load_session();
+            web_sys::console::log_1(&format!("[AuthProvider] Session loaded: {}, state: {:?}", has_session, auth.state.get_untracked()).into());
 
             // Then validate with server in background
             if has_session {
-                let api = crate::hooks::use_api::ApiClient::new(api_url.clone());
+                // Get the session token for the API client
+                let token = auth.token.get_untracked();
+                web_sys::console::log_1(&format!("[AuthProvider] Token: {:?}", token).into());
+                let api = crate::hooks::use_api::ApiClient::new(api_url.clone())
+                    .with_token(token);
                 leptos::task::spawn_local(async move {
+                    web_sys::console::log_1(&"[AuthProvider] Validating session with server...".into());
                     auth.validate_session(&api).await;
+                    web_sys::console::log_1(&format!("[AuthProvider] After validation, state: {:?}", auth.state.get_untracked()).into());
                 });
             }
         });

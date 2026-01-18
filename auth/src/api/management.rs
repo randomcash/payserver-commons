@@ -2,7 +2,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{header, HeaderMap, StatusCode},
     Json,
 };
 use serde::Deserialize;
@@ -20,11 +20,31 @@ pub struct AuthenticatedRequest {
     pub session_id: SessionId,
 }
 
+/// Extract session ID from Authorization header (Bearer token).
+fn extract_session_from_header(headers: &HeaderMap) -> Result<SessionId, (StatusCode, String)> {
+    let auth_header = headers
+        .get(header::AUTHORIZATION)
+        .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header".to_string()))?;
+
+    let auth_str = auth_header
+        .to_str()
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid Authorization header".to_string()))?;
+
+    let token = auth_str
+        .strip_prefix("Bearer ")
+        .ok_or((StatusCode::UNAUTHORIZED, "Invalid Bearer token format".to_string()))?;
+
+    let session_uuid = uuid::Uuid::parse_str(token)
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid session ID format".to_string()))?;
+
+    Ok(SessionId(session_uuid))
+}
+
 #[utoipa::path(
     get,
     path = "/auth/me",
     tag = "management",
-    request_body = AuthenticatedRequest,
+    security(("bearer_auth" = [])),
     responses(
         (status = 200, description = "Current user info", body = UserInfo),
         (status = 401, description = "Invalid session"),
@@ -32,11 +52,13 @@ pub struct AuthenticatedRequest {
 )]
 pub async fn get_me<A: AuthenticationService>(
     State(state): State<AuthState<A>>,
-    Json(req): Json<AuthenticatedRequest>,
+    headers: HeaderMap,
 ) -> Result<Json<UserInfo>, (StatusCode, String)> {
+    let session_id = extract_session_from_header(&headers)?;
+
     let (user_info, _session) = state
         .service
-        .validate_session(req.session_id)
+        .validate_session(session_id)
         .await
         .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
 

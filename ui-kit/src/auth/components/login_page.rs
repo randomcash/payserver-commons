@@ -45,6 +45,21 @@ pub fn LoginPage(
     let navigate = use_navigate();
     let redirect = StoredValue::new(redirect_to.clone());
 
+    // Redirect to dashboard if already authenticated
+    {
+        let navigate = navigate.clone();
+        let redirect = redirect.clone();
+        Effect::new(move || {
+            let state = auth.state.get();
+            web_sys::console::log_1(&format!("[LoginPage] Auth state: {:?}", state).into());
+            if matches!(state, crate::types::AuthState::Authenticated(_)) {
+                let url = redirect.get_value();
+                web_sys::console::log_1(&format!("[LoginPage] Redirecting to: {}", url).into());
+                navigate(&url, Default::default());
+            }
+        });
+    }
+
     // Wallet login flow
     let on_wallet_connect = {
         let navigate = navigate.clone();
