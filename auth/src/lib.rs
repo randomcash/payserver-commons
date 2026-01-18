@@ -107,8 +107,9 @@ pub use models::{
     // Recovery types
     CompleteRecoveryRequest, StartRecoveryRequest,
     // WebAuthn re-exports (for client use and repository implementations)
-    CreationChallengeResponse, Passkey, PasskeyAuthentication, PasskeyRegistration,
-    PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse,
+    CreationChallengeResponse, DiscoverableAuthentication, Passkey, PasskeyAuthentication,
+    PasskeyRegistration, PublicKeyCredential, RegisterPublicKeyCredential,
+    RequestChallengeResponse,
 };
 pub use repository::{
     AuthRepository, ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository,

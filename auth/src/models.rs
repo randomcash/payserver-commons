@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 pub use webauthn_rs::prelude::{
-    CreationChallengeResponse, Passkey, PasskeyAuthentication, PasskeyRegistration,
-    PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse,
+    CreationChallengeResponse, DiscoverableAuthentication, Passkey, PasskeyAuthentication,
+    PasskeyRegistration, PublicKeyCredential, RegisterPublicKeyCredential,
+    RequestChallengeResponse,
 };
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -167,17 +168,43 @@ impl User {
         }
     }
 
+    /// Create a new passkey-only user.
+    ///
+    /// The recovery_verification_hash is required as it's needed for account recovery.
+    /// The user_id is used as the salt component for key derivation.
+    pub fn new_passkey_only(
+        user_id: UserId,
+        kdf_params: KdfParams,
+        encrypted_symmetric_key: EncryptedBlob,
+        recovery_verification_hash: String,
+    ) -> Self {
+        Self {
+            id: user_id,
+            email: None,
+            primary_wallet_address: None,
+            kdf_params,
+            encrypted_symmetric_key,
+            recovery_verification_hash,
+            created_at: Utc::now(),
+            last_login_at: None,
+            failed_login_attempts: 0,
+            locked_until: None,
+            role: crate::permissions::Role::User,
+        }
+    }
+
     /// Get the identifier used for KDF salt derivation.
     ///
-    /// Returns the email if set, otherwise returns `wallet:{address}` format.
-    /// Returns an error if the user has neither email nor primary wallet address.
-    pub fn kdf_salt_identifier(&self) -> Result<String, &'static str> {
+    /// Returns the email if set, otherwise returns `wallet:{address}` format,
+    /// or `passkey:{user_id}` for passkey-only users.
+    pub fn kdf_salt_identifier(&self) -> String {
         if let Some(ref email) = self.email {
-            Ok(email.clone())
+            email.clone()
         } else if let Some(ref wallet) = self.primary_wallet_address {
-            Ok(format!("wallet:{}", wallet))
+            format!("wallet:{}", wallet)
         } else {
-            Err("User has neither email nor primary wallet address")
+            // Passkey-only user - use user_id as identifier
+            format!("passkey:{}", self.id)
         }
     }
 
@@ -650,10 +677,6 @@ pub struct StartNewUserPasskeyRegistrationResponse {
     /// Temporary user ID. Must be passed back to complete_new_user_passkey_registration.
     /// This is the user ID that will be assigned to the new user.
     pub user_id: UserId,
-
-    /// The email address (normalized to lowercase).
-    /// Must match the email in CompleteNewUserPasskeyRegistrationRequest.
-    pub email: String,
 }
 
 /// Request to complete NEW USER passkey registration.
@@ -669,9 +692,6 @@ pub struct CompleteNewUserPasskeyRegistrationRequest {
     #[schema(value_type = Object)]
     pub credential: RegisterPublicKeyCredential,
 
-    /// User's email address.
-    pub email: String,
-
     /// KDF parameters used to derive keys from mnemonic.
     #[schema(value_type = Object)]
     pub kdf_params: KdfParams,
@@ -682,7 +702,7 @@ pub struct CompleteNewUserPasskeyRegistrationRequest {
 
     /// Hash of the recovery verification key (derived from mnemonic).
     /// REQUIRED for account recovery.
-    /// Client derives: base64(SHA-256(Argon2id(mnemonic, email))).
+    /// Client derives: base64(SHA-256(Argon2id(mnemonic, user_id))).
     /// SENSITIVE: Zeroized on drop.
     pub recovery_verification_hash: String,
 
@@ -721,20 +741,27 @@ pub struct CompletePasskeyRegistrationRequest {
 
 /// Response for starting passkey authentication.
 /// Client uses this to prompt the user's authenticator.
+/// Uses discoverable credentials so no email is needed.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct StartPasskeyLoginResponse {
     /// WebAuthn request options for the client.
     #[schema(value_type = Object)]
     pub options: RequestChallengeResponse,
+
+    /// Challenge ID to send back when completing authentication.
+    /// Required because discoverable auth doesn't know the user upfront.
+    pub challenge_id: uuid::Uuid,
 }
 
 /// Request to complete passkey authentication.
+/// Uses discoverable credentials - no email needed.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CompletePasskeyLoginRequest {
-    /// User's email (to look up their passkeys).
-    pub email: String,
+    /// Challenge ID from StartPasskeyLoginResponse.
+    pub challenge_id: uuid::Uuid,
 
     /// The credential response from the authenticator.
+    /// Contains the credential ID which we use to look up the user.
     #[schema(value_type = Object)]
     pub credential: PublicKeyCredential,
 

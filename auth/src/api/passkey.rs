@@ -13,29 +13,21 @@ use crate::{
 
 use super::AuthState;
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct StartNewUserRequest {
-    #[schema(example = "user@example.com")]
-    pub email: String,
-}
-
 #[utoipa::path(
     post,
     path = "/auth/passkey/new-user/start",
     tag = "passkey",
-    request_body = StartNewUserRequest,
     responses(
         (status = 200, description = "Challenge created", body = StartNewUserPasskeyRegistrationResponse),
-        (status = 400, description = "Invalid email or user exists"),
+        (status = 400, description = "Error creating challenge"),
     )
 )]
 pub async fn start_new_user_registration<A: AuthenticationService>(
     State(state): State<AuthState<A>>,
-    Json(req): Json<StartNewUserRequest>,
 ) -> Result<Json<StartNewUserPasskeyRegistrationResponse>, (StatusCode, String)> {
     state
         .service
-        .start_new_user_passkey_registration(&req.email)
+        .start_new_user_passkey_registration()
         .await
         .map(Json)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
@@ -121,29 +113,21 @@ pub async fn complete_registration<A: AuthenticationService>(
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct StartLoginRequest {
-    #[schema(example = "user@example.com")]
-    pub email: String,
-}
-
 #[utoipa::path(
     post,
     path = "/auth/passkey/login/start",
     tag = "passkey",
-    request_body = StartLoginRequest,
     responses(
         (status = 200, description = "Challenge created", body = StartPasskeyLoginResponse),
-        (status = 400, description = "User not found"),
+        (status = 400, description = "Error creating challenge"),
     )
 )]
 pub async fn start_login<A: AuthenticationService>(
     State(state): State<AuthState<A>>,
-    Json(req): Json<StartLoginRequest>,
 ) -> Result<Json<StartPasskeyLoginResponse>, (StatusCode, String)> {
     state
         .service
-        .start_passkey_login(&req.email)
+        .start_passkey_login()
         .await
         .map(Json)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))

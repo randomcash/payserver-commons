@@ -40,7 +40,6 @@ pub enum RegisterStep {
 #[derive(Debug, Clone, Default)]
 struct RegistrationState {
     wallet_address: Option<String>,
-    email: Option<String>,
     user_id: Option<crate::auth::types::UserId>,
     signature: Option<String>,
     passkey_credential: Option<serde_json::Value>,
@@ -102,19 +101,18 @@ pub fn RegisterPage(
         });
     });
 
-    // Passkey submit handler
-    let on_passkey_submit = Callback::new(move |email: String| {
+    // Passkey submit handler - no email required
+    let on_passkey_submit = Callback::new(move |_: String| {
         let api = api.get_value();
         set_passkey_state.set(PasskeyState::Authenticating);
         set_error.set(None);
 
         leptos::task::spawn_local(async move {
-            match api.start_passkey_register(&email).await {
+            match api.start_passkey_register().await {
                 Ok(response) => {
                     match create_credential(&response.options).await {
                         Ok(credential) => {
                             set_reg_state.set(RegistrationState {
-                                email: Some(response.email),
                                 user_id: Some(response.user_id),
                                 passkey_credential: Some(credential),
                                 mnemonic_words: generate_placeholder_mnemonic(),
@@ -169,13 +167,13 @@ pub fn RegisterPage(
                         device_type: DeviceType::Browser,
                     };
                     api.complete_wallet_register(request).await
-                } else if let (Some(user_id), Some(email), Some(credential)) =
-                    (state.user_id, state.email.as_ref(), state.passkey_credential.as_ref())
+                } else if let (Some(user_id), Some(credential)) =
+                    (state.user_id, state.passkey_credential.as_ref())
                 {
+                    // Passkey registration - no email required
                     let request = CompleteNewUserPasskeyRegistrationRequest {
                         user_id,
                         credential: credential.clone(),
-                        email: email.clone(),
                         kdf_params,
                         encrypted_symmetric_key: encrypted_key,
                         recovery_verification_hash: recovery_hash,
@@ -196,11 +194,12 @@ pub fn RegisterPage(
                         auth.save_login(&response);
                         set_step.set(RegisterStep::Complete);
                         set_loading.set(false);
-                        // Redirect after delay
-                        leptos::task::spawn_local(async move {
-                            gloo_timers::future::TimeoutFuture::new(1500).await;
-                            navigate(&redirect, Default::default());
-                        });
+                        // Redirect after delay using callback-based timeout
+                        gloo_timers::callback::Timeout::new(1500, move || {
+                            if let Some(window) = web_sys::window() {
+                                let _ = window.location().set_href(&redirect);
+                            }
+                        }).forget();
                     }
                     Err(e) => {
                         set_error.set(Some(format!("Registration failed: {}", e)));

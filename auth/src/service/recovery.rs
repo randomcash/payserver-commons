@@ -103,9 +103,7 @@ where
         // We'll use the user's existing ID for the WebAuthn user handle
 
         // Use the identifier (email or wallet address) for WebAuthn registration
-        let user_identifier = user
-            .kdf_salt_identifier()
-            .map_err(|e| AuthError::Repository(e.to_string()))?;
+        let user_identifier = user.kdf_salt_identifier();
 
         // Generate WebAuthn registration challenge
         let (ccr, passkey_registration) = self
@@ -167,9 +165,7 @@ where
         let user = user.ok_or(AuthError::InvalidRecoveryMnemonic)?;
 
         // Get the user identifier for verification
-        let user_identifier = user
-            .kdf_salt_identifier()
-            .map_err(|e| AuthError::Repository(e.to_string()))?;
+        let user_identifier = user.kdf_salt_identifier();
 
         // Retrieve the stored challenge state and verify identifier consistency
         let (passkey_registration, stored_identifier) = self

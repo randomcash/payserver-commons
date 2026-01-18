@@ -143,35 +143,26 @@ pub struct CompleteNewUserWalletRegistrationRequest {
 // Passkey Authentication Types
 // ============================================================================
 
-/// Request to start passkey login.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StartPasskeyLoginRequest {
-    pub email: String,
-}
-
-/// Response for starting passkey login.
-/// Contains WebAuthn request options as JSON.
+/// Response for starting passkey login (discoverable credentials).
+/// Contains WebAuthn request options and challenge_id as JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartPasskeyLoginResponse {
     /// WebAuthn request options (JSON-serialized RequestChallengeResponse).
     pub options: serde_json::Value,
+    /// Challenge ID to send back when completing authentication.
+    pub challenge_id: uuid::Uuid,
 }
 
-/// Request to complete passkey login.
+/// Request to complete passkey login (discoverable credentials).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletePasskeyLoginRequest {
-    pub email: String,
+    /// Challenge ID from StartPasskeyLoginResponse.
+    pub challenge_id: uuid::Uuid,
     /// The credential response from the authenticator (JSON-serialized PublicKeyCredential).
     pub credential: serde_json::Value,
     pub device_id: Option<DeviceId>,
     pub device_name: String,
     pub device_type: DeviceType,
-}
-
-/// Request to start new user passkey registration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StartNewUserPasskeyRequest {
-    pub email: String,
 }
 
 /// Response for starting new user passkey registration.
@@ -180,7 +171,6 @@ pub struct StartNewUserPasskeyRegistrationResponse {
     /// WebAuthn creation options (JSON-serialized CreationChallengeResponse).
     pub options: serde_json::Value,
     pub user_id: UserId,
-    pub email: String,
 }
 
 /// Request to complete new user passkey registration.
@@ -189,7 +179,6 @@ pub struct CompleteNewUserPasskeyRegistrationRequest {
     pub user_id: UserId,
     /// The credential response from the authenticator (JSON-serialized RegisterPublicKeyCredential).
     pub credential: serde_json::Value,
-    pub email: String,
     pub kdf_params: KdfParams,
     pub encrypted_symmetric_key: EncryptedBlob,
     pub recovery_verification_hash: String,

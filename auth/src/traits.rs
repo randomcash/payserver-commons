@@ -56,9 +56,9 @@ pub trait PasskeyAuthService: Send + Sync {
     /// Start new user registration with passkey.
     ///
     /// Returns a WebAuthn challenge for the client to pass to the authenticator.
+    /// No email required - passkey-only registration.
     async fn start_new_user_passkey_registration(
         &self,
-        email: &str,
     ) -> Result<StartNewUserPasskeyRegistrationResponse>;
 
     /// Complete new user registration with passkey.
@@ -73,10 +73,11 @@ pub trait PasskeyAuthService: Send + Sync {
     // Login
     // =========================================================================
 
-    /// Start passkey login.
+    /// Start passkey login using discoverable credentials.
     ///
     /// Returns a WebAuthn challenge for authentication.
-    async fn start_passkey_login(&self, email: &str) -> Result<StartPasskeyLoginResponse>;
+    /// No email required - the authenticator returns the user identity.
+    async fn start_passkey_login(&self) -> Result<StartPasskeyLoginResponse>;
 
     /// Complete passkey login.
     ///

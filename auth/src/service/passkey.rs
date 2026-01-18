@@ -2,7 +2,7 @@
 
 use chrono::Utc;
 use uuid::Uuid;
-use webauthn_rs::prelude::Passkey;
+use webauthn_rs::prelude::DiscoverableKey;
 
 use crate::error::{AuthError, Result};
 #[cfg(feature = "metrics")]
@@ -19,7 +19,6 @@ use crate::repository::{
     WalletRepository,
 };
 
-use super::validation::validate_email;
 use super::WebAuthnAuthService;
 
 impl<R> WebAuthnAuthService<R>
@@ -41,47 +40,40 @@ where
     /// 1. Client calls start_new_user_passkey_registration to get challenge + user_id
     /// 2. Client calls complete_new_user_passkey_registration with credential + user_id
     ///
+    /// No email required - the user_id is used as the unique identifier.
     /// The client must generate the symmetric key and encrypt it appropriately.
     /// Since passkeys don't directly provide a decryption key, the client should:
     /// - Use the BIP39 mnemonic as the primary key source
-    /// - Derive: recovery_key = Argon2id(mnemonic, email)
+    /// - Derive: recovery_key = Argon2id(mnemonic, "passkey:{user_id}")
     /// - Use recovery_key to encrypt the symmetric key
     pub async fn start_new_user_passkey_registration(
         &self,
-        email: &str,
     ) -> Result<StartNewUserPasskeyRegistrationResponse> {
-        // Validate email
-        validate_email(email)?;
-        let email_lower = email.to_lowercase();
-
-        // Check if user already exists
-        if self.repo.get_user_by_email(&email_lower).await?.is_some() {
-            return Err(AuthError::UserExists(email_lower));
-        }
-
         // Generate a temporary user ID for the registration
         let user_id = UserId::new();
 
-        // Generate WebAuthn registration challenge
+        // Use user_id as the WebAuthn user identifier
+        let user_identifier = format!("passkey:{}", user_id);
+
+        // Generate WebAuthn registration challenge with discoverable credential
         let (ccr, passkey_registration) = self
             .webauthn
             .start_passkey_registration(
                 Uuid::from(user_id.0),
-                &email_lower,
-                &email_lower,
+                &user_identifier,
+                &user_identifier,
                 None, // No excluded credentials for new user
             )
             .map_err(|e| AuthError::WebAuthn(e.to_string()))?;
 
-        // Store the challenge state with email for consistency verification
+        // Store the challenge state with user_identifier for consistency verification
         self.repo
-            .store_registration_challenge(user_id, &email_lower, passkey_registration)
+            .store_registration_challenge(user_id, &user_identifier, passkey_registration)
             .await?;
 
         Ok(StartNewUserPasskeyRegistrationResponse {
             options: ccr,
             user_id,
-            email: email_lower,
         })
     }
 
@@ -100,25 +92,18 @@ where
     ) -> Result<LoginResponse> {
         use crate::models::User;
 
-        // Validate email
-        validate_email(&request.email)?;
-        let email_lower = request.email.to_lowercase();
+        // Expected user identifier format for passkey-only users
+        let user_identifier = format!("passkey:{}", request.user_id);
 
-        // Check if user already exists (race condition check)
-        if self.repo.get_user_by_email(&email_lower).await?.is_some() {
-            return Err(AuthError::UserExists(email_lower));
-        }
-
-        // Retrieve the stored challenge state and verify email matches
-        let (passkey_registration, stored_email) = self
+        // Retrieve the stored challenge state and verify identifier matches
+        let (passkey_registration, stored_identifier) = self
             .repo
             .take_registration_challenge(request.user_id)
             .await?
             .ok_or(AuthError::PasskeyChallengeExpired)?;
 
-        // Verify the email matches what was used in start_new_user_passkey_registration
-        // This prevents an attacker from starting with email_A and completing with email_B
-        if stored_email != email_lower {
+        // Verify the identifier matches what was used in start_new_user_passkey_registration
+        if stored_identifier != user_identifier {
             return Err(AuthError::PasskeyChallengeExpired);
         }
 
@@ -128,15 +113,13 @@ where
             .finish_passkey_registration(&request.credential, &passkey_registration)
             .map_err(|e| AuthError::WebAuthn(e.to_string()))?;
 
-        // Create user with required recovery verification hash
-        let mut user = User::new(
-            email_lower.clone(),
+        // Create passkey-only user with required recovery verification hash
+        let user = User::new_passkey_only(
+            request.user_id,
             request.kdf_params.clone(),
             request.encrypted_symmetric_key.clone(),
             request.recovery_verification_hash.clone(),
         );
-        // Use the user_id from the start request so it matches the passkey's user handle
-        user.id = request.user_id;
 
         self.repo.create_user(&user).await?;
 
@@ -169,77 +152,74 @@ where
             device_id,
             encrypted_symmetric_key: request.encrypted_symmetric_key.clone(),
             kdf_params: request.kdf_params.clone(),
-            email: Some(email_lower),
-            primary_wallet_address: None, // Email-based registration, no wallet
+            email: None, // Passkey-only registration, no email
+            primary_wallet_address: None, // No wallet either
             expires_at,
         })
     }
 
     // ========================================================================
-    // Passkey Login
+    // Passkey Login (Discoverable Credentials)
     // ========================================================================
 
-    /// Start passkey authentication.
+    /// Start passkey authentication using discoverable credentials.
     ///
-    /// Returns WebAuthn challenge options for the client to pass to the authenticator.
-    /// The user must provide their email to look up their registered passkeys.
-    pub async fn start_passkey_login(&self, email: &str) -> Result<StartPasskeyLoginResponse> {
-        validate_email(email)?;
-        let email_lower = email.to_lowercase();
+    /// No email or user identifier is needed - the authenticator will present
+    /// all available passkeys for this relying party and let the user choose.
+    /// Returns WebAuthn challenge options and a challenge_id that must be sent
+    /// back when completing authentication.
+    pub async fn start_passkey_login(&self) -> Result<StartPasskeyLoginResponse> {
+        // Generate a random challenge ID to track this authentication attempt
+        let challenge_id = Uuid::new_v4();
 
-        // Find user - return generic error to prevent enumeration
-        let user = self
-            .repo
-            .get_user_by_email(&email_lower)
-            .await?
-            .ok_or(AuthError::InvalidCredentials)?;
-
-        // Check if account is locked - fail early before WebAuthn flow
-        if user.is_locked() {
-            return Err(AuthError::AccountLocked);
-        }
-
-        // Get user's passkeys
-        let passkeys = self.repo.get_passkeys_for_user(user.id).await?;
-        let active_passkeys: Vec<Passkey> = passkeys
-            .iter()
-            .filter(|p| p.is_active)
-            .map(|p| p.passkey.clone())
-            .collect();
-
-        if active_passkeys.is_empty() {
-            // User has no passkeys - return same error as invalid credentials
-            return Err(AuthError::InvalidCredentials);
-        }
-
-        // Generate WebAuthn authentication challenge
+        // Generate WebAuthn discoverable authentication challenge
+        // This creates a challenge without specifying any allowCredentials,
+        // allowing the authenticator to use any resident/discoverable credential
         let (rcr, passkey_authentication) = self
             .webauthn
-            .start_passkey_authentication(&active_passkeys)
+            .start_discoverable_authentication()
             .map_err(|e| AuthError::WebAuthn(e.to_string()))?;
 
-        // Store the challenge state
+        // Store the challenge state with the random challenge_id
         self.repo
-            .store_authentication_challenge(user.id, passkey_authentication)
+            .store_discoverable_authentication_challenge(challenge_id, passkey_authentication)
             .await?;
 
-        Ok(StartPasskeyLoginResponse { options: rcr })
+        Ok(StartPasskeyLoginResponse {
+            options: rcr,
+            challenge_id,
+        })
     }
 
-    /// Complete passkey authentication.
+    /// Complete passkey authentication using discoverable credentials.
     ///
-    /// Validates the credential from the authenticator and creates a session.
+    /// The credential response from the authenticator contains the credential ID,
+    /// which we use to look up the user's passkey and verify the authentication.
     pub async fn complete_passkey_login(
         &self,
         request: CompletePasskeyLoginRequest,
     ) -> Result<LoginResponse> {
-        validate_email(&request.email)?;
-        let email_lower = request.email.to_lowercase();
+        // Retrieve the stored challenge state using the challenge_id
+        let passkey_authentication = self
+            .repo
+            .take_discoverable_authentication_challenge(request.challenge_id)
+            .await?
+            .ok_or(AuthError::PasskeyChallengeExpired)?;
 
-        // Find user
+        // Get the credential ID from the response to look up the passkey
+        let credential_id = request.credential.id.as_ref();
+
+        // Find the passkey by credential ID
+        let passkey_cred = self
+            .repo
+            .get_passkey_by_credential_id(credential_id)
+            .await?
+            .ok_or(AuthError::InvalidCredentials)?;
+
+        // Get the user
         let user = self
             .repo
-            .get_user_by_email(&email_lower)
+            .get_user(passkey_cred.user_id)
             .await?
             .ok_or(AuthError::InvalidCredentials)?;
 
@@ -250,21 +230,19 @@ where
             return Err(AuthError::AccountLocked);
         }
 
-        // Retrieve the stored challenge state
-        let passkey_authentication = self
-            .repo
-            .take_authentication_challenge(user.id)
-            .await?
-            .ok_or(AuthError::PasskeyChallengeExpired)?;
-
-        // Get user's passkeys for verification
+        // Get all user's passkeys for verification
         let passkeys = self.repo.get_passkeys_for_user(user.id).await?;
         let mut active_passkeys: Vec<_> = passkeys.into_iter().filter(|p| p.is_active).collect();
+        // Convert Passkey to DiscoverableKey for discoverable authentication
+        let discoverable_keys: Vec<DiscoverableKey> = active_passkeys
+            .iter()
+            .map(|p| DiscoverableKey::from(&p.passkey))
+            .collect();
 
-        // Complete WebAuthn authentication
+        // Complete WebAuthn discoverable authentication
         let auth_result = self
             .webauthn
-            .finish_passkey_authentication(&request.credential, &passkey_authentication)
+            .finish_discoverable_authentication(&request.credential, passkey_authentication, &discoverable_keys)
             .map_err(|_| {
                 // WebAuthn verification failed - could be a technical issue or attack
                 // Don't increment failed logins (passkey failures can't be brute-forced)

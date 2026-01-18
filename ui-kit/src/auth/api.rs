@@ -5,9 +5,8 @@ use crate::hooks::use_api::{ApiClient, ApiError};
 use super::types::{
     CompleteNewUserPasskeyRegistrationRequest, CompleteNewUserWalletRegistrationRequest,
     CompletePasskeyLoginRequest, CompleteWalletLoginRequest, LoginResponse,
-    StartNewUserPasskeyRegistrationResponse, StartNewUserPasskeyRequest,
-    StartNewUserWalletRegistrationRequest, StartNewUserWalletRegistrationResponse,
-    StartPasskeyLoginRequest, StartPasskeyLoginResponse, StartWalletLoginRequest,
+    StartNewUserPasskeyRegistrationResponse, StartNewUserWalletRegistrationRequest,
+    StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse, StartWalletLoginRequest,
     StartWalletLoginResponse, UserInfo,
 };
 
@@ -59,19 +58,14 @@ impl ApiClient {
     }
 
     // ========================================================================
-    // Passkey Authentication
+    // Passkey Authentication (Discoverable Credentials)
     // ========================================================================
 
-    /// Start passkey login flow.
-    /// Returns WebAuthn request options for the authenticator.
-    pub async fn start_passkey_login(
-        &self,
-        email: &str,
-    ) -> Result<StartPasskeyLoginResponse, ApiError> {
-        let req = StartPasskeyLoginRequest {
-            email: email.to_string(),
-        };
-        self.post("/auth/passkey/login/start", &req).await
+    /// Start passkey login flow using discoverable credentials.
+    /// No email required - the authenticator will present available passkeys.
+    /// Returns WebAuthn request options and a challenge_id for the authenticator.
+    pub async fn start_passkey_login(&self) -> Result<StartPasskeyLoginResponse, ApiError> {
+        self.post("/auth/passkey/login/start", &()).await
     }
 
     /// Complete passkey login with authenticator response.
@@ -83,15 +77,12 @@ impl ApiClient {
     }
 
     /// Start new user passkey registration.
+    /// No email required - user_id is generated server-side.
     /// Returns WebAuthn creation options for the authenticator.
     pub async fn start_passkey_register(
         &self,
-        email: &str,
     ) -> Result<StartNewUserPasskeyRegistrationResponse, ApiError> {
-        let req = StartNewUserPasskeyRequest {
-            email: email.to_string(),
-        };
-        self.post("/auth/passkey/new-user/start", &req).await
+        self.post("/auth/passkey/new-user/start", &()).await
     }
 
     /// Complete new user passkey registration with authenticator response.

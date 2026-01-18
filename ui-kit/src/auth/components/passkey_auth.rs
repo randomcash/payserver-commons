@@ -21,14 +21,15 @@ pub enum PasskeyState {
 
 /// Passkey authentication form component.
 ///
-/// For login: Shows email input and "Sign in with Passkey" button.
-/// For registration: Shows email input and "Create Passkey" button.
+/// Uses discoverable credentials - no email required for either login or registration.
+/// For login: Shows "Sign in with Passkey" button (authenticator shows available passkeys).
+/// For registration: Shows "Create Passkey" button (creates a new passkey).
 #[component]
 pub fn PasskeyAuthForm(
     /// Whether this is for registration (true) or login (false).
     #[prop(optional, default = false)]
     is_registration: bool,
-    /// Callback when authentication starts. Receives email.
+    /// Callback when authentication starts. Receives empty string (email no longer needed).
     on_submit: Callback<String>,
     /// Current state (managed by parent).
     state: ReadSignal<PasskeyState>,
@@ -36,7 +37,6 @@ pub fn PasskeyAuthForm(
     #[prop(optional)]
     error: Option<ReadSignal<Option<String>>>,
 ) -> impl IntoView {
-    let (email, set_email) = signal(String::new());
     let (local_state, _set_local_state) = signal(if is_webauthn_available() {
         PasskeyState::Ready
     } else {
@@ -46,13 +46,9 @@ pub fn PasskeyAuthForm(
     // Use provided state, falling back to local for WebAuthn availability check
     let current_state = if is_webauthn_available() { state } else { local_state };
 
-    let handle_submit = move |ev: leptos::ev::SubmitEvent| {
-        ev.prevent_default();
-        let email_value = email.get();
-        if !email_value.is_empty() {
-            // Note: Parent manages state via the state prop
-            on_submit.run(email_value);
-        }
+    let handle_click = move |_| {
+        // No email needed - pass empty string for compatibility
+        on_submit.run(String::new());
     };
 
     let button_text = if is_registration {
@@ -60,8 +56,6 @@ pub fn PasskeyAuthForm(
     } else {
         "Sign in with Passkey"
     };
-
-    let placeholder = "Enter your email";
 
     view! {
         <div class="ps-passkey-auth">
@@ -76,25 +70,7 @@ pub fn PasskeyAuthForm(
                 }.into_any(),
 
                 _ => view! {
-                    <form class="ps-passkey-form" on:submit=handle_submit>
-                        <div class="ps-form-group">
-                            <label for="passkey-email" class="ps-form-label">
-                                "Email"
-                            </label>
-                            <input
-                                type="email"
-                                id="passkey-email"
-                                class="ps-form-input"
-                                placeholder=placeholder
-                                required=true
-                                disabled=move || current_state.get() == PasskeyState::Authenticating
-                                prop:value=move || email.get()
-                                on:input=move |ev| {
-                                    set_email.set(event_target_value(&ev));
-                                }
-                            />
-                        </div>
-
+                    <div class="ps-passkey-form">
                         {move || {
                             if let Some(error_signal) = error {
                                 if let Some(err) = error_signal.get() {
@@ -112,12 +88,10 @@ pub fn PasskeyAuthForm(
                         }}
 
                         <button
-                            type="submit"
+                            type="button"
                             class="ps-passkey-button"
-                            disabled=move || {
-                                current_state.get() == PasskeyState::Authenticating
-                                    || email.get().is_empty()
-                            }
+                            disabled=move || current_state.get() == PasskeyState::Authenticating
+                            on:click=handle_click
                         >
                             {move || {
                                 if current_state.get() == PasskeyState::Authenticating {
@@ -133,7 +107,7 @@ pub fn PasskeyAuthForm(
                                 }
                             }}
                         </button>
-                    </form>
+                    </div>
                 }.into_any(),
             }}
         </div>

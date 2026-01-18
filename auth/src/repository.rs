@@ -4,7 +4,7 @@
 //! the database implementation.
 
 use async_trait::async_trait;
-use webauthn_rs::prelude::{PasskeyAuthentication, PasskeyRegistration};
+use webauthn_rs::prelude::{DiscoverableAuthentication, PasskeyAuthentication, PasskeyRegistration};
 
 use crate::error::Result;
 use crate::models::{
@@ -120,6 +120,11 @@ pub trait PasskeyRepository: Send + Sync {
     /// Get a passkey by ID.
     async fn get_passkey(&self, id: PasskeyId) -> Result<Option<PasskeyCredential>>;
 
+    /// Get a passkey by its WebAuthn credential ID.
+    /// The credential_id is the raw bytes from the WebAuthn credential.
+    /// This is used for discoverable credential authentication.
+    async fn get_passkey_by_credential_id(&self, credential_id: &[u8]) -> Result<Option<PasskeyCredential>>;
+
     /// Get all passkeys for a user.
     async fn get_passkeys_for_user(&self, user_id: UserId) -> Result<Vec<PasskeyCredential>>;
 
@@ -176,30 +181,48 @@ pub trait WalletRepository: Send + Sync {
 /// The implementor should handle cleanup of expired challenges.
 #[async_trait]
 pub trait ChallengeRepository: Send + Sync {
-    /// Store a passkey registration challenge state along with the email.
-    /// The email is stored to verify consistency between start and complete.
+    /// Store a passkey registration challenge state along with the identifier.
+    /// The identifier is stored to verify consistency between start and complete.
+    /// For email users: the email address
+    /// For passkey-only users: "passkey:{user_id}" format
     async fn store_registration_challenge(
         &self,
         user_id: UserId,
-        email: &str,
+        identifier: &str,
         state: PasskeyRegistration,
     ) -> Result<()>;
 
     /// Retrieve and consume a passkey registration challenge.
     /// Returns None if expired or not found.
-    /// Returns (PasskeyRegistration, email) to verify email consistency.
+    /// Returns (PasskeyRegistration, identifier) to verify identifier consistency.
     async fn take_registration_challenge(&self, user_id: UserId) -> Result<Option<(PasskeyRegistration, String)>>;
 
-    /// Store a passkey authentication challenge state.
+    /// Store a passkey authentication challenge state (for known user).
     async fn store_authentication_challenge(
         &self,
         user_id: UserId,
         state: PasskeyAuthentication,
     ) -> Result<()>;
 
-    /// Retrieve and consume a passkey authentication challenge.
+    /// Retrieve and consume a passkey authentication challenge (for known user).
     /// Returns None if expired or not found.
     async fn take_authentication_challenge(&self, user_id: UserId) -> Result<Option<PasskeyAuthentication>>;
+
+    /// Store a discoverable authentication challenge state.
+    /// Uses a challenge_id instead of user_id since the user is not known yet.
+    /// Returns the challenge_id that must be sent back by the client.
+    async fn store_discoverable_authentication_challenge(
+        &self,
+        challenge_id: uuid::Uuid,
+        state: DiscoverableAuthentication,
+    ) -> Result<()>;
+
+    /// Retrieve and consume a discoverable authentication challenge.
+    /// Returns None if expired or not found.
+    async fn take_discoverable_authentication_challenge(
+        &self,
+        challenge_id: uuid::Uuid,
+    ) -> Result<Option<DiscoverableAuthentication>>;
 
     /// Store a wallet authentication challenge state.
     async fn store_wallet_challenge(&self, user_id: UserId, challenge: WalletChallenge) -> Result<()>;
@@ -363,6 +386,8 @@ pub mod inmemory {
         /// Registration challenges stored with identifier (email or wallet) for consistency verification.
         registration_challenges: RwLock<HashMap<UserId, (PasskeyRegistration, String)>>,
         authentication_challenges: RwLock<HashMap<UserId, PasskeyAuthentication>>,
+        /// Discoverable authentication challenges keyed by challenge_id (not user_id).
+        discoverable_auth_challenges: RwLock<HashMap<uuid::Uuid, DiscoverableAuthentication>>,
         wallet_challenges: RwLock<HashMap<UserId, WalletChallenge>>,
         // Store-related data
         stores: RwLock<HashMap<crate::store::StoreId, crate::store::Store>>,
@@ -678,6 +703,14 @@ pub mod inmemory {
             Ok(passkeys.get(&id).cloned())
         }
 
+        async fn get_passkey_by_credential_id(&self, credential_id: &[u8]) -> Result<Option<PasskeyCredential>> {
+            let passkeys = self.passkeys.read().unwrap_or_else(|e| e.into_inner());
+            Ok(passkeys
+                .values()
+                .find(|p| p.is_active && p.passkey.cred_id().as_ref() == credential_id)
+                .cloned())
+        }
+
         async fn get_passkeys_for_user(&self, user_id: UserId) -> Result<Vec<PasskeyCredential>> {
             let passkeys = self.passkeys.read().unwrap_or_else(|e| e.into_inner());
             Ok(passkeys
@@ -857,6 +890,30 @@ pub mod inmemory {
                 .write()
                 .unwrap_or_else(|e| e.into_inner());
             Ok(challenges.remove(&user_id))
+        }
+
+        async fn store_discoverable_authentication_challenge(
+            &self,
+            challenge_id: uuid::Uuid,
+            state: DiscoverableAuthentication,
+        ) -> Result<()> {
+            let mut challenges = self
+                .discoverable_auth_challenges
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            challenges.insert(challenge_id, state);
+            Ok(())
+        }
+
+        async fn take_discoverable_authentication_challenge(
+            &self,
+            challenge_id: uuid::Uuid,
+        ) -> Result<Option<DiscoverableAuthentication>> {
+            let mut challenges = self
+                .discoverable_auth_challenges
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            Ok(challenges.remove(&challenge_id))
         }
 
         async fn store_wallet_challenge(&self, user_id: UserId, challenge: WalletChallenge) -> Result<()> {

@@ -206,9 +206,8 @@ where
 {
     async fn start_new_user_passkey_registration(
         &self,
-        email: &str,
     ) -> Result<StartNewUserPasskeyRegistrationResponse> {
-        WebAuthnAuthService::start_new_user_passkey_registration(self, email).await
+        WebAuthnAuthService::start_new_user_passkey_registration(self).await
     }
 
     async fn complete_new_user_passkey_registration(
@@ -218,8 +217,8 @@ where
         WebAuthnAuthService::complete_new_user_passkey_registration(self, request).await
     }
 
-    async fn start_passkey_login(&self, email: &str) -> Result<StartPasskeyLoginResponse> {
-        WebAuthnAuthService::start_passkey_login(self, email).await
+    async fn start_passkey_login(&self) -> Result<StartPasskeyLoginResponse> {
+        WebAuthnAuthService::start_passkey_login(self).await
     }
 
     async fn complete_passkey_login(

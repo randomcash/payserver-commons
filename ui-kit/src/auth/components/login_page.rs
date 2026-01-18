@@ -104,10 +104,10 @@ pub fn LoginPage(
         })
     };
 
-    // Passkey login flow
+    // Passkey login flow - uses discoverable credentials (no email needed)
     let on_passkey_submit = {
         let navigate = navigate.clone();
-        Callback::new(move |email: String| {
+        Callback::new(move |_: String| {
             let api = api.get_value();
             let navigate = navigate.clone();
             let redirect = redirect.get_value();
@@ -116,8 +116,8 @@ pub fn LoginPage(
             set_error.set(None);
 
             leptos::task::spawn_local(async move {
-                // Step 1: Get WebAuthn challenge from server
-                let challenge_response = match api.start_passkey_login(&email).await {
+                // Step 1: Get WebAuthn challenge from server (discoverable credentials)
+                let challenge_response = match api.start_passkey_login().await {
                     Ok(r) => r,
                     Err(e) => {
                         set_error.set(Some(format!("Failed to start login: {}", e)));
@@ -126,7 +126,7 @@ pub fn LoginPage(
                     }
                 };
 
-                // Step 2: Get credential from authenticator
+                // Step 2: Get credential from authenticator (shows available passkeys)
                 let credential = match get_credential(&challenge_response.options).await {
                     Ok(cred) => cred,
                     Err(e) => {
@@ -136,10 +136,10 @@ pub fn LoginPage(
                     }
                 };
 
-                // Step 3: Complete login with credential
+                // Step 3: Complete login with credential and challenge_id
                 let device_id = crate::auth::session::get_device_id();
                 let complete_request = CompletePasskeyLoginRequest {
-                    email: email.clone(),
+                    challenge_id: challenge_response.challenge_id,
                     credential,
                     device_id,
                     device_name: get_device_name(),

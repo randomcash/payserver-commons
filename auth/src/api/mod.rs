@@ -78,10 +78,8 @@ impl<A> AuthState<A> {
         management::logout_all,
     ),
     components(schemas(
-        passkey::StartNewUserRequest,
         passkey::StartRegistrationRequest,
         passkey::CompleteRegistrationRequest,
-        passkey::StartLoginRequest,
         wallet::StartRegistrationRequest,
         wallet::CompleteRegistrationRequest,
         recovery::CompleteRecoveryRequestBody,
