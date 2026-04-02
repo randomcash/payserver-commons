@@ -5,16 +5,55 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::RepositoryResult;
+use crate::store::StoreId;
 use crate::traits::PaymentData;
 use crate::types::InvoiceId;
 
 /// Query parameters for listing payments.
 #[derive(Debug, Clone, Default)]
 pub struct PaymentQueryParams {
+    pub store_id: Option<StoreId>,
     pub invoice_id: Option<InvoiceId>,
     pub confirmed: Option<bool>,
     pub limit: i64,
     pub offset: i64,
+}
+
+impl PaymentQueryParams {
+    pub fn new() -> Self {
+        Self {
+            store_id: None,
+            invoice_id: None,
+            confirmed: None,
+            limit: 50,
+            offset: 0,
+        }
+    }
+
+    pub fn with_store_id(mut self, store_id: StoreId) -> Self {
+        self.store_id = Some(store_id);
+        self
+    }
+
+    pub fn with_invoice_id(mut self, invoice_id: InvoiceId) -> Self {
+        self.invoice_id = Some(invoice_id);
+        self
+    }
+
+    pub fn with_confirmed(mut self, confirmed: bool) -> Self {
+        self.confirmed = Some(confirmed);
+        self
+    }
+
+    pub fn with_limit(mut self, limit: i64) -> Self {
+        self.limit = limit;
+        self
+    }
+
+    pub fn with_offset(mut self, offset: i64) -> Self {
+        self.offset = offset;
+        self
+    }
 }
 
 /// Read operations for payments.
@@ -34,6 +73,9 @@ pub trait PaymentReader: Send + Sync {
 
     /// Check if an invoice has any valid (non-reorged) payments.
     async fn has_valid_payments(&self, invoice_id: &InvoiceId) -> RepositoryResult<bool>;
+
+    /// Query payments with filters and pagination.
+    async fn query(&self, params: &PaymentQueryParams) -> RepositoryResult<(i64, Vec<PaymentData>)>;
 }
 
 /// Write operations for payments.
