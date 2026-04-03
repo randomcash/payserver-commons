@@ -1091,3 +1091,126 @@ pub struct CompleteWalletRegistrationRequest {
     /// Human-readable name for this wallet.
     pub wallet_name: String,
 }
+
+// ============================================================================
+// API Key Models
+// ============================================================================
+
+/// Unique identifier for an API key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+pub struct ApiKeyId(pub Uuid);
+
+impl ApiKeyId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+impl Default for ApiKeyId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for ApiKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A stored API key for programmatic access.
+///
+/// The server stores a SHA-256 hash of the key; the plaintext is returned
+/// only once at creation time.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ApiKey {
+    /// Unique identifier for this API key.
+    pub id: ApiKeyId,
+
+    /// User who owns this key.
+    pub user_id: UserId,
+
+    /// Human-readable name (e.g., "Production Key").
+    pub name: String,
+
+    /// SHA-256 hash of the raw key (hex-encoded).
+    #[serde(skip_serializing)]
+    pub key_hash: String,
+
+    /// Display prefix (e.g., "ak_live_****1234").
+    pub key_prefix: String,
+
+    /// Whether this key is currently active (false = revoked).
+    pub is_active: bool,
+
+    /// When this key was created.
+    pub created_at: DateTime<Utc>,
+
+    /// Last time this key was used for authentication.
+    pub last_used_at: Option<DateTime<Utc>>,
+
+    /// Optional expiration time.
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// Sanitized API key information for list responses.
+/// Does NOT include the key hash.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ApiKeyInfo {
+    /// Unique API key identifier.
+    pub id: ApiKeyId,
+
+    /// Human-readable name.
+    pub name: String,
+
+    /// Display prefix (e.g., "ak_live_****1234").
+    pub key_prefix: String,
+
+    /// Whether this key is active.
+    pub is_active: bool,
+
+    /// When this key was created.
+    pub created_at: DateTime<Utc>,
+
+    /// Last time this key was used.
+    pub last_used_at: Option<DateTime<Utc>>,
+
+    /// Optional expiration time.
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+impl From<&ApiKey> for ApiKeyInfo {
+    fn from(key: &ApiKey) -> Self {
+        Self {
+            id: key.id,
+            name: key.name.clone(),
+            key_prefix: key.key_prefix.clone(),
+            is_active: key.is_active,
+            created_at: key.created_at,
+            last_used_at: key.last_used_at,
+            expires_at: key.expires_at,
+        }
+    }
+}
+
+/// Response returned when creating a new API key.
+/// This is the ONLY time the plaintext key is returned.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateApiKeyResponse {
+    /// The API key info.
+    #[serde(flatten)]
+    pub info: ApiKeyInfo,
+
+    /// The plaintext API key. Store this securely — it cannot be retrieved again.
+    pub key: String,
+}
+
+/// Request to create a new API key.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateApiKeyRequest {
+    /// Human-readable name for the key.
+    pub name: String,
+
+    /// Optional expiration time.
+    pub expires_at: Option<DateTime<Utc>>,
+}

@@ -158,6 +158,30 @@ pub enum AuthError {
     /// Insufficient store permissions.
     #[error("Insufficient permissions for this store operation")]
     InsufficientStorePermissions,
+
+    // =========================================================================
+    // API Key Errors
+    // =========================================================================
+
+    /// API key not found.
+    #[error("API key not found: {0}")]
+    ApiKeyNotFound(String),
+
+    /// API key already exists.
+    #[error("API key already exists")]
+    ApiKeyExists,
+
+    /// API key is expired.
+    #[error("API key is expired")]
+    ApiKeyExpired,
+
+    /// API key is revoked.
+    #[error("API key is revoked")]
+    ApiKeyRevoked,
+
+    /// Maximum API keys reached for this user.
+    #[error("Maximum API keys reached ({0}). Please revoke a key first.")]
+    MaxApiKeysReached(u32),
 }
 
 /// Result type for auth operations.

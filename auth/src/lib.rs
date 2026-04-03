@@ -104,6 +104,8 @@ pub use models::{
     StartNewUserWalletRegistrationResponse, StartWalletLoginRequest, StartWalletLoginResponse,
     StartWalletRegistrationRequest, StartWalletRegistrationResponse, WalletChallenge,
     WalletCredential, WalletCredentialId, WalletInfo,
+    // API Key types
+    ApiKey, ApiKeyId, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponse,
     // Recovery types
     CompleteRecoveryRequest, StartRecoveryRequest,
     // WebAuthn re-exports (for client use and repository implementations)
@@ -112,8 +114,9 @@ pub use models::{
     RequestChallengeResponse,
 };
 pub use repository::{
-    AuthRepository, ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository,
-    StoreRepository, StoreRoleRepository, UserRepository, UserStoreRepository, WalletRepository,
+    ApiKeyRepository, AuthRepository, ChallengeRepository, DeviceRepository, PasskeyRepository,
+    SessionRepository, StoreRepository, StoreRoleRepository, UserRepository, UserStoreRepository,
+    WalletRepository,
 };
 pub use service::{AuthConfig, AuthService, WebAuthnAuthService};
 pub use traits::{

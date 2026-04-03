@@ -11,6 +11,9 @@ use crate::types::StoreWallet;
 pub trait StoreWalletReader: Send + Sync {
     /// Get wallet configuration for a store.
     async fn get_wallet(&self, store_id: Uuid) -> RepositoryResult<Option<StoreWallet>>;
+
+    /// Get a wallet by its ID.
+    async fn get_wallet_by_id(&self, wallet_id: Uuid) -> RepositoryResult<Option<StoreWallet>>;
 }
 
 /// Write operations for store wallets.

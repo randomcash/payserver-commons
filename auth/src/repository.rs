@@ -8,8 +8,8 @@ use webauthn_rs::prelude::{DiscoverableAuthentication, PasskeyAuthentication, Pa
 
 use crate::error::Result;
 use crate::models::{
-    Device, DeviceId, PasskeyCredential, PasskeyId, Session, SessionId, User, UserId,
-    WalletChallenge, WalletCredential, WalletCredentialId,
+    ApiKey, ApiKeyId, Device, DeviceId, PasskeyCredential, PasskeyId, Session, SessionId, User,
+    UserId, WalletChallenge, WalletCredential, WalletCredentialId,
 };
 
 /// Repository for user data persistence.
@@ -330,6 +330,34 @@ pub trait UserStoreRepository: Send + Sync {
     async fn get_user_store_infos(&self, user_id: UserId) -> Result<Vec<crate::store::UserStoreInfo>>;
 }
 
+/// Repository for API key data persistence.
+#[async_trait]
+pub trait ApiKeyRepository: Send + Sync {
+    /// Create a new API key.
+    async fn create_api_key(&self, key: &ApiKey) -> Result<()>;
+
+    /// Get an API key by ID.
+    async fn get_api_key(&self, id: ApiKeyId) -> Result<Option<ApiKey>>;
+
+    /// Get an API key by its hash (for authentication).
+    async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>>;
+
+    /// List all API keys for a user.
+    async fn list_user_api_keys(&self, user_id: UserId) -> Result<Vec<ApiKey>>;
+
+    /// Revoke an API key (mark is_active as false).
+    async fn revoke_api_key(&self, id: ApiKeyId) -> Result<()>;
+
+    /// Update last_used_at timestamp for an API key.
+    async fn update_last_used(&self, id: ApiKeyId) -> Result<()>;
+
+    /// Delete an API key permanently.
+    async fn delete_api_key(&self, id: ApiKeyId) -> Result<()>;
+
+    /// Delete all API keys for a user.
+    async fn delete_api_keys_for_user(&self, user_id: UserId) -> Result<()>;
+}
+
 /// Combined repository trait for convenience.
 /// Includes all auth-related repositories.
 #[async_trait]
@@ -343,6 +371,7 @@ pub trait AuthRepository:
     + StoreRepository
     + StoreRoleRepository
     + UserStoreRepository
+    + ApiKeyRepository
 {
 }
 
@@ -357,6 +386,7 @@ impl<T> AuthRepository for T where
         + StoreRepository
         + StoreRoleRepository
         + UserStoreRepository
+        + ApiKeyRepository
 {
 }
 
@@ -393,6 +423,9 @@ pub mod inmemory {
         stores: RwLock<HashMap<crate::store::StoreId, crate::store::Store>>,
         store_roles: RwLock<HashMap<crate::store::StoreRoleId, crate::store::StoreRole>>,
         user_stores: RwLock<HashMap<(UserId, crate::store::StoreId), crate::store::UserStore>>,
+        // API keys
+        api_keys: RwLock<HashMap<ApiKeyId, ApiKey>>,
+        api_keys_by_hash: RwLock<HashMap<String, ApiKeyId>>,
     }
 
     impl InMemoryRepository {
@@ -1170,6 +1203,96 @@ pub mod inmemory {
                 }
             }
             Ok(result)
+        }
+    }
+
+    #[async_trait]
+    impl ApiKeyRepository for InMemoryRepository {
+        async fn create_api_key(&self, key: &ApiKey) -> Result<()> {
+            let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
+            let mut keys_by_hash = self.api_keys_by_hash.write().unwrap_or_else(|e| e.into_inner());
+            
+            if keys.contains_key(&key.id) {
+                return Err(AuthError::ApiKeyExists);
+            }
+            
+            keys_by_hash.insert(key.key_hash.clone(), key.id);
+            keys.insert(key.id, key.clone());
+            Ok(())
+        }
+
+        async fn get_api_key(&self, id: ApiKeyId) -> Result<Option<ApiKey>> {
+            let keys = self.api_keys.read().unwrap_or_else(|e| e.into_inner());
+            Ok(keys.get(&id).cloned())
+        }
+
+        async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>> {
+            let keys = self.api_keys.read().unwrap_or_else(|e| e.into_inner());
+            let keys_by_hash = self.api_keys_by_hash.read().unwrap_or_else(|e| e.into_inner());
+            
+            if let Some(id) = keys_by_hash.get(key_hash) {
+                Ok(keys.get(id).cloned())
+            } else {
+                Ok(None)
+            }
+        }
+
+        async fn list_user_api_keys(&self, user_id: UserId) -> Result<Vec<ApiKey>> {
+            let keys = self.api_keys.read().unwrap_or_else(|e| e.into_inner());
+            Ok(keys.values()
+                .filter(|k| k.user_id == user_id)
+                .cloned()
+                .collect())
+        }
+
+        async fn revoke_api_key(&self, id: ApiKeyId) -> Result<()> {
+            let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
+            
+            if let Some(key) = keys.get_mut(&id) {
+                key.is_active = false;
+                Ok(())
+            } else {
+                Err(AuthError::ApiKeyNotFound)
+            }
+        }
+
+        async fn update_last_used(&self, id: ApiKeyId) -> Result<()> {
+            let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
+            
+            if let Some(key) = keys.get_mut(&id) {
+                key.last_used_at = Some(chrono::Utc::now());
+                Ok(())
+            } else {
+                Err(AuthError::ApiKeyNotFound)
+            }
+        }
+
+        async fn delete_api_key(&self, id: ApiKeyId) -> Result<()> {
+            let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
+            let mut keys_by_hash = self.api_keys_by_hash.write().unwrap_or_else(|e| e.into_inner());
+            
+            if let Some(key) = keys.remove(&id) {
+                keys_by_hash.remove(&key.key_hash);
+                Ok(())
+            } else {
+                Err(AuthError::ApiKeyNotFound)
+            }
+        }
+
+        async fn delete_api_keys_for_user(&self, user_id: UserId) -> Result<()> {
+            let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
+            let mut keys_by_hash = self.api_keys_by_hash.write().unwrap_or_else(|e| e.into_inner());
+            
+            let ids_to_remove: Vec<_> = keys.values()
+                .filter(|k| k.user_id == user_id)
+                .map(|k| (k.id, k.key_hash.clone()))
+                .collect();
+            
+            for (id, hash) in ids_to_remove {
+                keys.remove(&id);
+                keys_by_hash.remove(&hash);
+            }
+            Ok(())
         }
     }
 }
