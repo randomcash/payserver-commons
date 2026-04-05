@@ -13,6 +13,7 @@
 //! - `Store`, `StoreRole`, `UserStore`: Multi-tenant store management
 //! - Network-specific types (like ERC20 tokens) are defined in their respective PayServer crates
 
+pub mod currency;
 pub mod error;
 pub mod repositories;
 pub mod store;
