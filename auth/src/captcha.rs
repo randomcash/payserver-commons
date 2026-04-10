@@ -14,7 +14,7 @@
 //!
 //! #[async_trait::async_trait]
 //! impl CaptchaProvider for MyProvider {
-//!     async fn verify(&self, token: &str) -> Result<bool, CaptchaError> { /* ... */ }
+//!     async fn verify(&self, token: &str) -> Result<(), CaptchaError> { /* ... */ }
 //!     fn site_key(&self) -> &str { /* ... */ }
 //!     fn provider_name(&self) -> &str { "my-provider" }
 //! }
