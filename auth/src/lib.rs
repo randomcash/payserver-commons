@@ -74,6 +74,7 @@
 //! ```
 
 pub mod api;
+pub mod captcha;
 pub mod error;
 #[cfg(feature = "metrics")]
 pub mod metrics;

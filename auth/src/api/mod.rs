@@ -16,12 +16,15 @@
 use std::sync::Arc;
 
 use axum::{
+    Json,
+    extract::State,
     routing::{delete, get, post},
     Router,
 };
 use utoipa::OpenApi;
 
 use crate::AuthenticationService;
+use crate::captcha::{CaptchaConfigResponse, CaptchaProvider};
 
 pub mod management;
 pub mod passkey;
@@ -34,17 +37,28 @@ pub mod wallet;
 /// `AuthenticationService` (the combined trait).
 pub struct AuthState<A> {
     pub service: Arc<A>,
+    /// Optional CAPTCHA provider for registration endpoints.
+    /// When `Some`, new-user registration requires a valid CAPTCHA token.
+    pub captcha: Option<Arc<dyn CaptchaProvider>>,
 }
 
 impl<A> Clone for AuthState<A> {
     fn clone(&self) -> Self {
-        Self { service: Arc::clone(&self.service) }
+        Self {
+            service: Arc::clone(&self.service),
+            captcha: self.captcha.clone(),
+        }
     }
 }
 
 impl<A> AuthState<A> {
     pub fn new(service: Arc<A>) -> Self {
-        Self { service }
+        Self { service, captcha: None }
+    }
+
+    /// Create auth state with a CAPTCHA provider for registration protection.
+    pub fn with_captcha(service: Arc<A>, captcha: Arc<dyn CaptchaProvider>) -> Self {
+        Self { service, captcha: Some(captcha) }
     }
 }
 
@@ -53,6 +67,7 @@ impl<A> AuthState<A> {
 #[openapi(
     info(title = "Auth API", version = "0.1.0", license(name = "MIT")),
     paths(
+        captcha_config,
         passkey::start_new_user_registration,
         passkey::complete_new_user_registration,
         passkey::start_registration,
@@ -78,8 +93,11 @@ impl<A> AuthState<A> {
         management::logout_all,
     ),
     components(schemas(
+        crate::captcha::CaptchaConfigResponse,
+        passkey::StartNewUserRequest,
         passkey::StartRegistrationRequest,
         passkey::CompleteRegistrationRequest,
+        wallet::StartNewUserRequest,
         wallet::StartRegistrationRequest,
         wallet::CompleteRegistrationRequest,
         recovery::CompleteRecoveryRequestBody,
@@ -105,9 +123,36 @@ impl<A> AuthState<A> {
 )]
 pub struct AuthApiDoc;
 
+/// Return the server's CAPTCHA configuration so the frontend can render the correct widget.
+#[utoipa::path(
+    get,
+    path = "/auth/captcha/config",
+    tag = "auth",
+    responses(
+        (status = 200, description = "CAPTCHA configuration", body = CaptchaConfigResponse),
+    )
+)]
+pub async fn captcha_config<A: AuthenticationService>(
+    State(state): State<AuthState<A>>,
+) -> Json<CaptchaConfigResponse> {
+    Json(match &state.captcha {
+        Some(c) => CaptchaConfigResponse {
+            enabled: true,
+            provider: Some(c.provider_name().to_string()),
+            site_key: Some(c.site_key().to_string()),
+        },
+        None => CaptchaConfigResponse {
+            enabled: false,
+            provider: None,
+            site_key: None,
+        },
+    })
+}
+
 /// Create the auth router. Mount at `/auth`.
 pub fn router<A: AuthenticationService + 'static>(state: AuthState<A>) -> Router {
     Router::new()
+        .route("/captcha/config", get(captcha_config::<A>))
         .route("/passkey/new-user/start", post(passkey::start_new_user_registration))
         .route("/passkey/new-user/complete", post(passkey::complete_new_user_registration))
         .route("/passkey/register/start", post(passkey::start_registration))

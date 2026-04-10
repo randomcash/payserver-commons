@@ -3,9 +3,9 @@
 use crate::hooks::use_api::{ApiClient, ApiError};
 
 use super::types::{
-    CompleteNewUserPasskeyRegistrationRequest, CompleteNewUserWalletRegistrationRequest,
-    CompletePasskeyLoginRequest, CompleteWalletLoginRequest, LoginResponse,
-    StartNewUserPasskeyRegistrationResponse, StartNewUserWalletRegistrationRequest,
+    CaptchaConfigResponse, CompleteNewUserPasskeyRegistrationRequest,
+    CompleteNewUserWalletRegistrationRequest, CompletePasskeyLoginRequest,
+    CompleteWalletLoginRequest, LoginResponse, StartNewUserPasskeyRegistrationResponse,
     StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse, StartWalletLoginRequest,
     StartWalletLoginResponse, UserInfo,
 };
@@ -41,11 +41,16 @@ impl ApiClient {
         &self,
         address: &str,
         wallet_name: &str,
+        captcha_token: Option<&str>,
     ) -> Result<StartNewUserWalletRegistrationResponse, ApiError> {
-        let req = StartNewUserWalletRegistrationRequest {
-            address: address.to_string(),
-            wallet_name: wallet_name.to_string(),
-        };
+        #[derive(serde::Serialize)]
+        struct Req<'a> {
+            address: &'a str,
+            wallet_name: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            captcha_token: Option<&'a str>,
+        }
+        let req = Req { address, wallet_name, captcha_token };
         self.post("/auth/wallet/new-user/start", &req).await
     }
 
@@ -81,8 +86,20 @@ impl ApiClient {
     /// Returns WebAuthn creation options for the authenticator.
     pub async fn start_passkey_register(
         &self,
+        captcha_token: Option<&str>,
     ) -> Result<StartNewUserPasskeyRegistrationResponse, ApiError> {
-        self.post("/auth/passkey/new-user/start", &()).await
+        #[derive(serde::Serialize)]
+        struct Req<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            captcha_token: Option<&'a str>,
+        }
+        let req = Req { captcha_token };
+        self.post("/auth/passkey/new-user/start", &req).await
+    }
+
+    /// Get the server's CAPTCHA configuration.
+    pub async fn get_captcha_config(&self) -> Result<CaptchaConfigResponse, ApiError> {
+        self.get("/auth/captcha/config").await
     }
 
     /// Complete new user passkey registration with authenticator response.
