@@ -166,3 +166,120 @@ mod turnstile {
 
 #[cfg(feature = "captcha")]
 pub use turnstile::CloudflareTurnstile;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn captcha_config_disabled() {
+        let config = CaptchaConfigResponse {
+            enabled: false,
+            provider: None,
+            site_key: None,
+        };
+        assert!(!config.enabled);
+        assert!(config.provider.is_none());
+        assert!(config.site_key.is_none());
+    }
+
+    #[test]
+    fn captcha_config_enabled() {
+        let config = CaptchaConfigResponse {
+            enabled: true,
+            provider: Some("turnstile".to_string()),
+            site_key: Some("0xABCDEF".to_string()),
+        };
+        assert!(config.enabled);
+        assert_eq!(config.provider.as_deref(), Some("turnstile"));
+        assert_eq!(config.site_key.as_deref(), Some("0xABCDEF"));
+    }
+
+    #[test]
+    fn captcha_config_serializes() {
+        let config = CaptchaConfigResponse {
+            enabled: true,
+            provider: Some("turnstile".to_string()),
+            site_key: Some("key123".to_string()),
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["enabled"], true);
+        assert_eq!(json["provider"], "turnstile");
+        assert_eq!(json["site_key"], "key123");
+    }
+
+    #[test]
+    fn captcha_config_disabled_serializes_nulls() {
+        let config = CaptchaConfigResponse {
+            enabled: false,
+            provider: None,
+            site_key: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["enabled"], false);
+        assert!(json["provider"].is_null());
+        assert!(json["site_key"].is_null());
+    }
+
+    #[test]
+    fn captcha_error_display() {
+        let err = CaptchaError::VerificationFailed;
+        assert_eq!(err.to_string(), "CAPTCHA verification failed");
+
+        let err = CaptchaError::ServiceUnavailable("timeout".to_string());
+        assert_eq!(err.to_string(), "CAPTCHA service unavailable: timeout");
+    }
+
+    /// Mock provider for testing CAPTCHA integration without hitting external services.
+    pub struct MockCaptchaProvider {
+        pub should_pass: bool,
+        pub site_key: String,
+    }
+
+    #[async_trait]
+    impl CaptchaProvider for MockCaptchaProvider {
+        async fn verify(&self, _token: &str) -> Result<(), CaptchaError> {
+            if self.should_pass {
+                Ok(())
+            } else {
+                Err(CaptchaError::VerificationFailed)
+            }
+        }
+
+        fn site_key(&self) -> &str {
+            &self.site_key
+        }
+
+        fn provider_name(&self) -> &str {
+            "mock"
+        }
+    }
+
+    #[test]
+    fn mock_provider_metadata() {
+        let p = MockCaptchaProvider {
+            should_pass: true,
+            site_key: "test-key".to_string(),
+        };
+        assert_eq!(p.provider_name(), "mock");
+        assert_eq!(p.site_key(), "test-key");
+    }
+
+    #[tokio::test]
+    async fn mock_provider_pass() {
+        let p = MockCaptchaProvider {
+            should_pass: true,
+            site_key: "k".to_string(),
+        };
+        assert!(p.verify("any-token").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn mock_provider_fail() {
+        let p = MockCaptchaProvider {
+            should_pass: false,
+            site_key: "k".to_string(),
+        };
+        assert!(p.verify("any-token").await.is_err());
+    }
+}

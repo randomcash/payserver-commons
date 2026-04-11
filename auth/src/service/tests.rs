@@ -83,19 +83,10 @@ async fn test_get_passkeys_requires_valid_session() {
 async fn test_start_passkey_login_user_not_found() {
     let service = create_service();
 
-    // Try passkey login for non-existent user
-    let result = service.start_passkey_login("nonexistent@example.com").await;
-    // Should return InvalidCredentials (not UserNotFound) to prevent enumeration
-    assert!(matches!(result, Err(AuthError::InvalidCredentials)));
-}
-
-#[tokio::test]
-async fn test_start_passkey_login_invalid_email() {
-    let service = create_service();
-
-    // Invalid email format should return InvalidEmail
-    let result = service.start_passkey_login("invalid-email").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
+    // Discoverable passkey login returns a challenge even with no users
+    // (browser-side credential discovery handles user selection)
+    let result = service.start_passkey_login().await;
+    assert!(result.is_ok());
 }
 
 #[tokio::test]
@@ -125,9 +116,10 @@ async fn test_start_new_user_passkey_registration_invalid_email() {
     let service = create_service();
 
     let result = service
-        .start_new_user_passkey_registration("invalid-email")
+        .start_new_user_passkey_registration()
         .await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
+    // No email validation — should succeed (user ID generated internally)
+    assert!(result.is_ok());
 }
 
 #[tokio::test]
@@ -136,7 +128,7 @@ async fn test_start_new_user_passkey_registration_valid_email() {
 
     // Valid email should return a challenge and user_id
     let result = service
-        .start_new_user_passkey_registration("test@example.com")
+        .start_new_user_passkey_registration()
         .await;
     assert!(result.is_ok());
 
@@ -150,15 +142,11 @@ async fn test_start_new_user_passkey_registration_valid_email() {
 async fn test_start_new_user_passkey_registration_email_case_insensitive() {
     let service = create_service();
 
-    // Start registration with uppercase email
+    // Start registration — no email parameter needed (user ID generated internally)
     let result1 = service
-        .start_new_user_passkey_registration("Test@Example.COM")
+        .start_new_user_passkey_registration()
         .await;
     assert!(result1.is_ok());
-
-    // Note: Completing registration would create the user, but we can't test
-    // that without real WebAuthn credentials. This just tests the challenge
-    // generation accepts various email formats.
 }
 
 // ========================================================================
@@ -198,36 +186,16 @@ async fn test_start_account_recovery_invalid_identifier() {
 // ========================================================================
 
 #[tokio::test]
-async fn test_email_validation_via_passkey_registration() {
+async fn test_passkey_registration_generates_unique_users() {
     let service = create_service();
 
-    // Empty email
-    let result = service.start_new_user_passkey_registration("").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
+    let result1 = service.start_new_user_passkey_registration().await;
+    let result2 = service.start_new_user_passkey_registration().await;
+    assert!(result1.is_ok());
+    assert!(result2.is_ok());
 
-    // No @ symbol
-    let result = service.start_new_user_passkey_registration("testexample.com").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // No domain
-    let result = service.start_new_user_passkey_registration("test@").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // No local part
-    let result = service.start_new_user_passkey_registration("@example.com").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // No dot in domain
-    let result = service.start_new_user_passkey_registration("test@localhost").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // Domain starts with dot
-    let result = service.start_new_user_passkey_registration("test@.example.com").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // Valid email should work
-    let result = service.start_new_user_passkey_registration("test@example.com").await;
-    assert!(result.is_ok());
+    // Each registration should get a unique user ID
+    assert_ne!(result1.unwrap().user_id, result2.unwrap().user_id);
 }
 
 // Note: Full flow tests (registration, login, recovery, device management)

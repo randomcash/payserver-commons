@@ -1252,7 +1252,7 @@ pub mod inmemory {
                 key.is_active = false;
                 Ok(())
             } else {
-                Err(AuthError::ApiKeyNotFound)
+                Err(AuthError::ApiKeyNotFound(id.to_string()))
             }
         }
 
@@ -1263,7 +1263,7 @@ pub mod inmemory {
                 key.last_used_at = Some(chrono::Utc::now());
                 Ok(())
             } else {
-                Err(AuthError::ApiKeyNotFound)
+                Err(AuthError::ApiKeyNotFound(id.to_string()))
             }
         }
 
@@ -1275,7 +1275,7 @@ pub mod inmemory {
                 keys_by_hash.remove(&key.key_hash);
                 Ok(())
             } else {
-                Err(AuthError::ApiKeyNotFound)
+                Err(AuthError::ApiKeyNotFound(id.to_string()))
             }
         }
 
