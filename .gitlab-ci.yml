@@ -1,0 +1,35 @@
+stages:
+  - check
+
+variables:
+  CARGO_INCREMENTAL: "1"
+
+lint:
+  stage: check
+  script:
+    - cargo fmt --workspace -- --check
+    - cargo clippy --workspace --all-targets -- -D warnings
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+test:
+  stage: check
+  script:
+    - cargo test --workspace --lib --no-fail-fast
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+audit:
+  stage: check
+  script:
+    - git config --global --unset-all url."ssh://git@github.com/".insteadOf || true
+    - rm -rf ${CARGO_HOME:-$HOME/.cargo}/advisory-db
+    - git clone --depth 1 https://github.com/RustSec/advisory-db.git ${CARGO_HOME:-$HOME/.cargo}/advisory-db
+    - cargo audit --no-fetch
+  timeout: 10 minutes
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
