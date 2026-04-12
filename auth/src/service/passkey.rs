@@ -164,7 +164,7 @@ where
             device_id,
             encrypted_symmetric_key: request.encrypted_symmetric_key.clone(),
             kdf_params: request.kdf_params.clone(),
-            email: None, // Passkey-only registration, no email
+            email: None,                  // Passkey-only registration, no email
             primary_wallet_address: None, // No wallet either
             expires_at,
         })
@@ -254,7 +254,11 @@ where
         // Complete WebAuthn discoverable authentication
         let auth_result = self
             .webauthn
-            .finish_discoverable_authentication(&request.credential, passkey_authentication, &discoverable_keys)
+            .finish_discoverable_authentication(
+                &request.credential,
+                passkey_authentication,
+                &discoverable_keys,
+            )
             .map_err(|_| {
                 // WebAuthn verification failed - could be a technical issue or attack
                 // Don't increment failed logins (passkey failures can't be brute-forced)
@@ -304,7 +308,9 @@ where
             // No device ID provided - create new device
             let active_count = self.repo.count_active_devices(user.id).await?;
             if active_count >= self.config.max_devices_per_user {
-                return Err(AuthError::MaxDevicesReached(self.config.max_devices_per_user));
+                return Err(AuthError::MaxDevicesReached(
+                    self.config.max_devices_per_user,
+                ));
             }
 
             let new_device = Device::new(
@@ -363,7 +369,9 @@ where
         // Check passkey limit
         let passkey_count = self.repo.count_active_passkeys(user_info.id).await?;
         if passkey_count >= self.config.max_passkeys_per_user {
-            return Err(AuthError::MaxPasskeysReached(self.config.max_passkeys_per_user));
+            return Err(AuthError::MaxPasskeysReached(
+                self.config.max_passkeys_per_user,
+            ));
         }
 
         // Get existing passkeys to exclude from registration
@@ -378,7 +386,12 @@ where
         let user_identifier = user_info
             .email
             .clone()
-            .or_else(|| user_info.primary_wallet_address.clone().map(|w| format!("wallet:{}", w)))
+            .or_else(|| {
+                user_info
+                    .primary_wallet_address
+                    .clone()
+                    .map(|w| format!("wallet:{}", w))
+            })
             .ok_or_else(|| {
                 AuthError::Repository("User has neither email nor wallet address".into())
             })?;
@@ -420,7 +433,9 @@ where
         // Re-check passkey limit (race condition protection)
         let passkey_count = self.repo.count_active_passkeys(user_info.id).await?;
         if passkey_count >= self.config.max_passkeys_per_user {
-            return Err(AuthError::MaxPasskeysReached(self.config.max_passkeys_per_user));
+            return Err(AuthError::MaxPasskeysReached(
+                self.config.max_passkeys_per_user,
+            ));
         }
 
         // Retrieve the stored challenge state and verify identifier consistency
@@ -434,7 +449,12 @@ where
         let user_identifier = user_info
             .email
             .clone()
-            .or_else(|| user_info.primary_wallet_address.clone().map(|w| format!("wallet:{}", w)))
+            .or_else(|| {
+                user_info
+                    .primary_wallet_address
+                    .clone()
+                    .map(|w| format!("wallet:{}", w))
+            })
             .ok_or_else(|| {
                 AuthError::Repository("User has neither email nor wallet address".into())
             })?;

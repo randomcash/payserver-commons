@@ -919,8 +919,7 @@ impl WalletChallenge {
         // Truncate to microseconds to match Postgres precision
         let now = Utc::now();
         let micros = now.timestamp_micros();
-        let created_at = DateTime::from_timestamp_micros(micros)
-            .unwrap_or(now);
+        let created_at = DateTime::from_timestamp_micros(micros).unwrap_or(now);
 
         Self {
             challenge,

@@ -518,6 +518,9 @@ mod tests {
         assert!(Role::ServerAdmin.is_admin());
         assert!(!Role::User.is_admin());
         // is_admin is alias for is_server_admin
-        assert_eq!(Role::ServerAdmin.is_admin(), Role::ServerAdmin.is_server_admin());
+        assert_eq!(
+            Role::ServerAdmin.is_admin(),
+            Role::ServerAdmin.is_server_admin()
+        );
     }
 }

@@ -1,6 +1,6 @@
 //! Passkey (WebAuthn) authentication handlers.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -40,11 +40,16 @@ pub async fn start_new_user_registration<A: AuthenticationService>(
         let token = body
             .as_ref()
             .and_then(|b| b.captcha_token.as_deref())
-            .ok_or((StatusCode::BAD_REQUEST, "CAPTCHA token required".to_string()))?;
-        captcha
-            .verify(token)
-            .await
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("CAPTCHA verification failed: {e}")))?;
+            .ok_or((
+                StatusCode::BAD_REQUEST,
+                "CAPTCHA token required".to_string(),
+            ))?;
+        captcha.verify(token).await.map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("CAPTCHA verification failed: {e}"),
+            )
+        })?;
     }
 
     state

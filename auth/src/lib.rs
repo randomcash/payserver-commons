@@ -91,41 +91,73 @@ pub use api::AuthApiDoc;
 // Re-export main types
 pub use error::{AuthError, Result};
 pub use models::{
-    // User/Device/Session types
-    Device, DeviceId, DeviceInfo, DeviceType, LoginResponse, Session, SessionId, User, UserId,
-    UserInfo,
-    // Passkey types (primary authentication)
-    CompleteNewUserPasskeyRegistrationRequest, CompletePasskeyLoginRequest,
-    CompletePasskeyRegistrationRequest, PasskeyCredential, PasskeyId, PasskeyInfo,
-    StartNewUserPasskeyRegistrationResponse, StartPasskeyLoginResponse,
-    StartPasskeyRegistrationRequest, StartPasskeyRegistrationResponse,
-    // Wallet types (Ethereum wallet authentication)
-    CompleteNewUserWalletRegistrationRequest, CompleteWalletLoginRequest,
-    CompleteWalletRegistrationRequest, StartNewUserWalletRegistrationRequest,
-    StartNewUserWalletRegistrationResponse, StartWalletLoginRequest, StartWalletLoginResponse,
-    StartWalletRegistrationRequest, StartWalletRegistrationResponse, WalletChallenge,
-    WalletCredential, WalletCredentialId, WalletInfo,
     // API Key types
-    ApiKey, ApiKeyId, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponse,
+    ApiKey,
+    ApiKeyId,
+    ApiKeyInfo,
+    // Passkey types (primary authentication)
+    CompleteNewUserPasskeyRegistrationRequest,
+    // Wallet types (Ethereum wallet authentication)
+    CompleteNewUserWalletRegistrationRequest,
+    CompletePasskeyLoginRequest,
+    CompletePasskeyRegistrationRequest,
     // Recovery types
-    CompleteRecoveryRequest, StartRecoveryRequest,
+    CompleteRecoveryRequest,
+    CompleteWalletLoginRequest,
+    CompleteWalletRegistrationRequest,
+    CreateApiKeyRequest,
+    CreateApiKeyResponse,
     // WebAuthn re-exports (for client use and repository implementations)
-    CreationChallengeResponse, DiscoverableAuthentication, Passkey, PasskeyAuthentication,
-    PasskeyRegistration, PublicKeyCredential, RegisterPublicKeyCredential,
+    CreationChallengeResponse,
+    // User/Device/Session types
+    Device,
+    DeviceId,
+    DeviceInfo,
+    DeviceType,
+    DiscoverableAuthentication,
+    LoginResponse,
+    Passkey,
+    PasskeyAuthentication,
+    PasskeyCredential,
+    PasskeyId,
+    PasskeyInfo,
+    PasskeyRegistration,
+    PublicKeyCredential,
+    RegisterPublicKeyCredential,
     RequestChallengeResponse,
+    Session,
+    SessionId,
+    StartNewUserPasskeyRegistrationResponse,
+    StartNewUserWalletRegistrationRequest,
+    StartNewUserWalletRegistrationResponse,
+    StartPasskeyLoginResponse,
+    StartPasskeyRegistrationRequest,
+    StartPasskeyRegistrationResponse,
+    StartRecoveryRequest,
+    StartWalletLoginRequest,
+    StartWalletLoginResponse,
+    StartWalletRegistrationRequest,
+    StartWalletRegistrationResponse,
+    User,
+    UserId,
+    UserInfo,
+    WalletChallenge,
+    WalletCredential,
+    WalletCredentialId,
+    WalletInfo,
 };
+pub use permissions::{Permission, Policies, Role};
 pub use repository::{
     ApiKeyRepository, AuthRepository, ChallengeRepository, DeviceRepository, PasskeyRepository,
     SessionRepository, StoreRepository, StoreRoleRepository, UserRepository, UserStoreRepository,
     WalletRepository,
 };
 pub use service::{AuthConfig, AuthService, WebAuthnAuthService};
-pub use traits::{
-    AuthenticationService, DeviceService, PasskeyAuthService, RecoveryService, SessionService,
-    WalletAuthService,
-};
-pub use permissions::{Permission, Policies, Role};
 pub use store::{
     Store, StoreId, StoreInfo, StoreRole, StoreRoleId, StoreRoleInfo, UserStore, UserStoreInfo,
     default_roles,
+};
+pub use traits::{
+    AuthenticationService, DeviceService, PasskeyAuthService, RecoveryService, SessionService,
+    WalletAuthService,
 };

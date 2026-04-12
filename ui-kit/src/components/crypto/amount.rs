@@ -221,7 +221,11 @@ mod tests {
     fn test_format_crypto_amount_very_small_values() {
         // Values < 0.0001 get scientific notation
         let result = format_crypto_amount("0.00001", 18);
-        assert!(result.contains("e"), "Expected scientific notation, got: {}", result);
+        assert!(
+            result.contains("e"),
+            "Expected scientific notation, got: {}",
+            result
+        );
     }
 
     #[test]

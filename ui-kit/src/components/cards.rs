@@ -48,7 +48,11 @@ pub fn StatCard(
     #[prop(optional)] change: Option<String>,
     #[prop(default = true)] positive: bool,
 ) -> impl IntoView {
-    let change_class = if positive { "ps-stat-change-positive" } else { "ps-stat-change-negative" };
+    let change_class = if positive {
+        "ps-stat-change-positive"
+    } else {
+        "ps-stat-change-negative"
+    };
 
     view! {
         <div class="ps-stat-card">

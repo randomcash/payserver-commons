@@ -5,7 +5,7 @@
 //! - HMAC-SHA256 for authentication (computed over IV || ciphertext)
 //! - Random 128-bit IV for each encryption
 
-use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
@@ -84,14 +84,20 @@ pub fn decrypt(blob: &EncryptedBlob, key: &StretchedKey) -> Result<Vec<u8>, Cryp
 /// Encrypt a symmetric key for storage.
 ///
 /// Wraps a SymmetricKey using the stretched key.
-pub fn encrypt_key(key_to_encrypt: &SymmetricKey, wrap_key: &StretchedKey) -> Result<EncryptedBlob, CryptoError> {
+pub fn encrypt_key(
+    key_to_encrypt: &SymmetricKey,
+    wrap_key: &StretchedKey,
+) -> Result<EncryptedBlob, CryptoError> {
     encrypt(key_to_encrypt.as_bytes(), wrap_key)
 }
 
 /// Decrypt a stored symmetric key.
 ///
 /// Returns a SymmetricKey which automatically zeroizes on drop.
-pub fn decrypt_key(blob: &EncryptedBlob, wrap_key: &StretchedKey) -> Result<SymmetricKey, CryptoError> {
+pub fn decrypt_key(
+    blob: &EncryptedBlob,
+    wrap_key: &StretchedKey,
+) -> Result<SymmetricKey, CryptoError> {
     let mut decrypted = decrypt(blob, wrap_key)?;
     if decrypted.len() != 32 {
         decrypted.zeroize();

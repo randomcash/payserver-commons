@@ -74,11 +74,14 @@ pub fn NetworkBadge(
     /// The network type.
     network: Network,
     /// Custom name override. If not provided, uses `network.display_name()`.
-    #[prop(optional)] name: Option<String>,
+    #[prop(optional)]
+    name: Option<String>,
     /// Explicit color override (ignored for testnets).
-    #[prop(optional)] color: Option<NetworkColor>,
+    #[prop(optional)]
+    color: Option<NetworkColor>,
     /// Whether this is a testnet. Testnets use gray color.
-    #[prop(default = false)] testnet: bool,
+    #[prop(default = false)]
+    testnet: bool,
 ) -> impl IntoView {
     // Testnets always use gray, mainnets use network color or explicit override
     let badge_color = if testnet {
@@ -101,9 +104,7 @@ pub fn NetworkBadge(
 
 /// Status badge for payment/invoice states.
 #[component]
-pub fn StatusBadge(
-    status: String,
-) -> impl IntoView {
+pub fn StatusBadge(status: String) -> impl IntoView {
     let status_class = match status.to_lowercase().as_str() {
         "pending" => "ps-status-pending",
         "processing" => "ps-status-processing",
@@ -184,8 +185,14 @@ mod tests {
 
     #[test]
     fn test_color_for_network_bitcoin() {
-        assert_eq!(color_for_network(&Network::BitcoinMainnet), NetworkColor::Orange);
-        assert_eq!(color_for_network(&Network::BitcoinLightning), NetworkColor::Orange);
+        assert_eq!(
+            color_for_network(&Network::BitcoinMainnet),
+            NetworkColor::Orange
+        );
+        assert_eq!(
+            color_for_network(&Network::BitcoinLightning),
+            NetworkColor::Orange
+        );
     }
 
     #[test]
@@ -204,7 +211,10 @@ mod tests {
         assert_eq!(color_for_network(&Network::Polygon), NetworkColor::Purple);
         assert_eq!(color_for_network(&Network::ZkSync), NetworkColor::Purple);
         assert_eq!(color_for_network(&Network::Avalanche), NetworkColor::Red);
-        assert_eq!(color_for_network(&Network::BinanceSmartChain), NetworkColor::Yellow);
+        assert_eq!(
+            color_for_network(&Network::BinanceSmartChain),
+            NetworkColor::Yellow
+        );
         assert_eq!(color_for_network(&Network::Scroll), NetworkColor::Orange);
     }
 
@@ -229,7 +239,12 @@ mod tests {
         for network in networks {
             let color = color_for_network(&network);
             // Should not be default gray for any mainnet
-            assert_ne!(color, NetworkColor::Gray, "Network {:?} should have a brand color", network);
+            assert_ne!(
+                color,
+                NetworkColor::Gray,
+                "Network {:?} should have a brand color",
+                network
+            );
         }
     }
 }

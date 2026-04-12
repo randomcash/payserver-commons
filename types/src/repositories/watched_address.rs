@@ -26,7 +26,9 @@ pub trait WatchedAddressReader: Send + Sync {
 
     /// Get all active watched addresses.
     /// Returns tuples of (address, payment_option_id, chain_id, token_address).
-    async fn get_active(&self) -> RepositoryResult<Vec<(String, PaymentOptionId, u64, Option<String>)>>;
+    async fn get_active(
+        &self,
+    ) -> RepositoryResult<Vec<(String, PaymentOptionId, u64, Option<String>)>>;
 
     /// Get watched addresses pending notification to the monitor.
     async fn get_pending(&self) -> RepositoryResult<Vec<PendingWatchInfo>>;

@@ -200,8 +200,7 @@ mod tests {
     #[test]
     fn test_store_creation() {
         let owner_id = UserId::new();
-        let store = Store::new("My Store", owner_id)
-            .with_website("https://example.com");
+        let store = Store::new("My Store", owner_id).with_website("https://example.com");
 
         assert_eq!(store.name, "My Store");
         assert_eq!(store.website, Some("https://example.com".to_string()));

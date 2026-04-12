@@ -41,7 +41,9 @@ pub fn LoginPage(
     let (passkey_state, set_passkey_state) = signal(PasskeyState::Ready);
 
     let auth = use_auth();
-    let api = StoredValue::new(ApiClient::new(api_url.unwrap_or_else(|| "/api".to_string())));
+    let api = StoredValue::new(ApiClient::new(
+        api_url.unwrap_or_else(|| "/api".to_string()),
+    ));
     let navigate = use_navigate();
     let redirect = StoredValue::new(redirect_to.clone());
 
@@ -83,14 +85,15 @@ pub fn LoginPage(
                 };
 
                 // Step 2: Sign the challenge with wallet
-                let signature = match sign_message(&address, &challenge_response.challenge_message).await {
-                    Ok(sig) => sig,
-                    Err(e) => {
-                        set_error.set(Some(format!("Failed to sign message: {}", e)));
-                        set_loading.set(false);
-                        return;
-                    }
-                };
+                let signature =
+                    match sign_message(&address, &challenge_response.challenge_message).await {
+                        Ok(sig) => sig,
+                        Err(e) => {
+                            set_error.set(Some(format!("Failed to sign message: {}", e)));
+                            set_loading.set(false);
+                            return;
+                        }
+                    };
 
                 // Step 3: Complete login with signature
                 let device_id = crate::auth::session::get_device_id();

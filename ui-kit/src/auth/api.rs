@@ -50,7 +50,11 @@ impl ApiClient {
             #[serde(skip_serializing_if = "Option::is_none")]
             captcha_token: Option<&'a str>,
         }
-        let req = Req { address, wallet_name, captcha_token };
+        let req = Req {
+            address,
+            wallet_name,
+            captcha_token,
+        };
         self.post("/auth/wallet/new-user/start", &req).await
     }
 

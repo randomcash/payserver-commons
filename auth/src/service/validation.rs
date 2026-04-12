@@ -14,7 +14,9 @@ pub fn validate_email(email: &str) -> Result<()> {
     // Split at @ and validate parts
     let parts: Vec<&str> = email.split('@').collect();
     if parts.len() != 2 {
-        return Err(AuthError::InvalidEmail("email must contain exactly one @".into()));
+        return Err(AuthError::InvalidEmail(
+            "email must contain exactly one @".into(),
+        ));
     }
 
     let local = parts[0];
@@ -35,7 +37,9 @@ pub fn validate_email(email: &str) -> Result<()> {
 
     // Domain cannot start or end with a dot
     if domain.starts_with('.') || domain.ends_with('.') {
-        return Err(AuthError::InvalidEmail("domain cannot start or end with a dot".into()));
+        return Err(AuthError::InvalidEmail(
+            "domain cannot start or end with a dot".into(),
+        ));
     }
 
     Ok(())

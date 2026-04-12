@@ -16,10 +16,9 @@
 use std::sync::Arc;
 
 use axum::{
-    Json,
+    Json, Router,
     extract::State,
     routing::{delete, get, post},
-    Router,
 };
 use utoipa::OpenApi;
 
@@ -53,12 +52,18 @@ impl<A> Clone for AuthState<A> {
 
 impl<A> AuthState<A> {
     pub fn new(service: Arc<A>) -> Self {
-        Self { service, captcha: None }
+        Self {
+            service,
+            captcha: None,
+        }
     }
 
     /// Create auth state with a CAPTCHA provider for registration protection.
     pub fn with_captcha(service: Arc<A>, captcha: Arc<dyn CaptchaProvider>) -> Self {
-        Self { service, captcha: Some(captcha) }
+        Self {
+            service,
+            captcha: Some(captcha),
+        }
     }
 }
 
@@ -153,16 +158,34 @@ pub async fn captcha_config<A: AuthenticationService>(
 pub fn router<A: AuthenticationService + 'static>(state: AuthState<A>) -> Router {
     Router::new()
         .route("/captcha/config", get(captcha_config::<A>))
-        .route("/passkey/new-user/start", post(passkey::start_new_user_registration))
-        .route("/passkey/new-user/complete", post(passkey::complete_new_user_registration))
+        .route(
+            "/passkey/new-user/start",
+            post(passkey::start_new_user_registration),
+        )
+        .route(
+            "/passkey/new-user/complete",
+            post(passkey::complete_new_user_registration),
+        )
         .route("/passkey/register/start", post(passkey::start_registration))
-        .route("/passkey/register/complete", post(passkey::complete_registration))
+        .route(
+            "/passkey/register/complete",
+            post(passkey::complete_registration),
+        )
         .route("/passkey/login/start", post(passkey::start_login))
         .route("/passkey/login/complete", post(passkey::complete_login))
-        .route("/wallet/new-user/start", post(wallet::start_new_user_registration))
-        .route("/wallet/new-user/complete", post(wallet::complete_new_user_registration))
+        .route(
+            "/wallet/new-user/start",
+            post(wallet::start_new_user_registration),
+        )
+        .route(
+            "/wallet/new-user/complete",
+            post(wallet::complete_new_user_registration),
+        )
         .route("/wallet/register/start", post(wallet::start_registration))
-        .route("/wallet/register/complete", post(wallet::complete_registration))
+        .route(
+            "/wallet/register/complete",
+            post(wallet::complete_registration),
+        )
         .route("/wallet/login/start", post(wallet::start_login))
         .route("/wallet/login/complete", post(wallet::complete_login))
         .route("/recovery/start", post(recovery::start_recovery))

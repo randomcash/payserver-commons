@@ -1,9 +1,9 @@
 //! Device, passkey, wallet, and session management handlers.
 
 use axum::{
-    extract::{Path, State},
-    http::{header, HeaderMap, StatusCode},
     Json,
+    extract::{Path, State},
+    http::{HeaderMap, StatusCode, header},
 };
 use serde::Deserialize;
 use utoipa::ToSchema;
@@ -22,20 +22,29 @@ pub struct AuthenticatedRequest {
 
 /// Extract session ID from Authorization header (Bearer token).
 fn extract_session_from_header(headers: &HeaderMap) -> Result<SessionId, (StatusCode, String)> {
-    let auth_header = headers
-        .get(header::AUTHORIZATION)
-        .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header".to_string()))?;
+    let auth_header = headers.get(header::AUTHORIZATION).ok_or((
+        StatusCode::UNAUTHORIZED,
+        "Missing Authorization header".to_string(),
+    ))?;
 
-    let auth_str = auth_header
-        .to_str()
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid Authorization header".to_string()))?;
+    let auth_str = auth_header.to_str().map_err(|_| {
+        (
+            StatusCode::UNAUTHORIZED,
+            "Invalid Authorization header".to_string(),
+        )
+    })?;
 
-    let token = auth_str
-        .strip_prefix("Bearer ")
-        .ok_or((StatusCode::UNAUTHORIZED, "Invalid Bearer token format".to_string()))?;
+    let token = auth_str.strip_prefix("Bearer ").ok_or((
+        StatusCode::UNAUTHORIZED,
+        "Invalid Bearer token format".to_string(),
+    ))?;
 
-    let session_uuid = uuid::Uuid::parse_str(token)
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid session ID format".to_string()))?;
+    let session_uuid = uuid::Uuid::parse_str(token).map_err(|_| {
+        (
+            StatusCode::UNAUTHORIZED,
+            "Invalid session ID format".to_string(),
+        )
+    })?;
 
     Ok(SessionId(session_uuid))
 }

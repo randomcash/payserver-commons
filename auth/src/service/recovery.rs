@@ -15,8 +15,8 @@ use crate::repository::{
     WalletRepository,
 };
 
-use super::validation::validate_email;
 use super::WebAuthnAuthService;
+use super::validation::validate_email;
 
 impl<R> WebAuthnAuthService<R>
 where

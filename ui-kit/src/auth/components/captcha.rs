@@ -29,9 +29,7 @@ fn ensure_turnstile_script() {
             "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
         )
         .expect("set src");
-    script
-        .set_attribute("async", "true")
-        .expect("set async");
+    script.set_attribute("async", "true").expect("set async");
     script
         .set_attribute("data-captcha-turnstile", "true")
         .expect("set marker");

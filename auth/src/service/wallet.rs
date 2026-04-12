@@ -3,8 +3,8 @@
 use alloy_primitives::Address;
 use chrono::Utc;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
-use sha3::Keccak256;
 use sha3::Digest;
+use sha3::Keccak256;
 
 use crate::error::{AuthError, Result};
 #[cfg(feature = "metrics")]
@@ -134,8 +134,8 @@ where
         let v = signature_bytes[64];
 
         // Parse the signature
-        let signature = Signature::from_slice(r_s)
-            .map_err(|_| AuthError::WalletSignatureVerificationFailed)?;
+        let signature =
+            Signature::from_slice(r_s).map_err(|_| AuthError::WalletSignatureVerificationFailed)?;
 
         // Determine recovery ID (v is either 27/28 or 0/1)
         let recovery_id = match v {
@@ -144,8 +144,7 @@ where
             _ => return Err(AuthError::WalletSignatureVerificationFailed),
         };
 
-        let recovery_id =
-            recovery_id.map_err(|_| AuthError::WalletSignatureVerificationFailed)?;
+        let recovery_id = recovery_id.map_err(|_| AuthError::WalletSignatureVerificationFailed)?;
 
         // Hash the message with EIP-191 prefix
         let prefix = format!("\x19Ethereum Signed Message:\n{}", message.len());
@@ -155,8 +154,9 @@ where
         let message_hash = hasher.finalize();
 
         // Recover the public key
-        let recovered_key = VerifyingKey::recover_from_prehash(&message_hash, &signature, recovery_id)
-            .map_err(|_| AuthError::WalletSignatureVerificationFailed)?;
+        let recovered_key =
+            VerifyingKey::recover_from_prehash(&message_hash, &signature, recovery_id)
+                .map_err(|_| AuthError::WalletSignatureVerificationFailed)?;
 
         // Convert public key to address
         let public_key_bytes = recovered_key.to_encoded_point(false);
@@ -220,7 +220,9 @@ where
             &checksummed_address,
             &wallet_challenge.created_at,
         );
-        self.repo.store_wallet_challenge(user.id, wallet_challenge).await?;
+        self.repo
+            .store_wallet_challenge(user.id, wallet_challenge)
+            .await?;
 
         Ok(StartWalletLoginResponse {
             challenge_message,
@@ -297,7 +299,9 @@ where
             // Check device limit
             let device_count = self.repo.count_active_devices(user.id).await?;
             if device_count >= self.config.max_devices_per_user {
-                return Err(AuthError::MaxDevicesReached(self.config.max_devices_per_user));
+                return Err(AuthError::MaxDevicesReached(
+                    self.config.max_devices_per_user,
+                ));
             }
 
             // Create new device
@@ -361,12 +365,22 @@ where
         let checksummed_address = self.validate_and_checksum_address(&request.address)?;
 
         // Check if wallet is already registered
-        if self.repo.get_wallet_by_address(&checksummed_address).await?.is_some() {
+        if self
+            .repo
+            .get_wallet_by_address(&checksummed_address)
+            .await?
+            .is_some()
+        {
             return Err(AuthError::WalletAlreadyRegistered);
         }
 
         // Check if wallet is already a primary address for a user
-        if self.repo.get_user_by_wallet_address(&checksummed_address).await?.is_some() {
+        if self
+            .repo
+            .get_user_by_wallet_address(&checksummed_address)
+            .await?
+            .is_some()
+        {
             return Err(AuthError::WalletAlreadyRegistered);
         }
 
@@ -381,7 +395,9 @@ where
             &checksummed_address,
             &wallet_challenge.created_at,
         );
-        self.repo.store_wallet_challenge(user_id, wallet_challenge).await?;
+        self.repo
+            .store_wallet_challenge(user_id, wallet_challenge)
+            .await?;
 
         Ok(StartNewUserWalletRegistrationResponse {
             challenge_message,
@@ -399,7 +415,12 @@ where
         let checksummed_address = self.validate_and_checksum_address(&request.address)?;
 
         // Check if wallet is already registered (race condition check)
-        if self.repo.get_wallet_by_address(&checksummed_address).await?.is_some() {
+        if self
+            .repo
+            .get_wallet_by_address(&checksummed_address)
+            .await?
+            .is_some()
+        {
             return Err(AuthError::WalletAlreadyRegistered);
         }
 
@@ -490,11 +511,18 @@ where
         // Check wallet limit
         let wallet_count = self.repo.count_active_wallets(user_info.id).await?;
         if wallet_count >= self.config.max_wallets_per_user {
-            return Err(AuthError::MaxWalletsReached(self.config.max_wallets_per_user));
+            return Err(AuthError::MaxWalletsReached(
+                self.config.max_wallets_per_user,
+            ));
         }
 
         // Check if wallet is already registered
-        if self.repo.get_wallet_by_address(&checksummed_address).await?.is_some() {
+        if self
+            .repo
+            .get_wallet_by_address(&checksummed_address)
+            .await?
+            .is_some()
+        {
             return Err(AuthError::WalletAlreadyRegistered);
         }
 
@@ -506,7 +534,9 @@ where
             &checksummed_address,
             &wallet_challenge.created_at,
         );
-        self.repo.store_wallet_challenge(user_info.id, wallet_challenge).await?;
+        self.repo
+            .store_wallet_challenge(user_info.id, wallet_challenge)
+            .await?;
 
         Ok(StartWalletRegistrationResponse {
             challenge_message,
@@ -529,7 +559,9 @@ where
         // Re-check wallet limit (race condition protection)
         let wallet_count = self.repo.count_active_wallets(user_info.id).await?;
         if wallet_count >= self.config.max_wallets_per_user {
-            return Err(AuthError::MaxWalletsReached(self.config.max_wallets_per_user));
+            return Err(AuthError::MaxWalletsReached(
+                self.config.max_wallets_per_user,
+            ));
         }
 
         // Verify challenge and signature

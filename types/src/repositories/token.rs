@@ -72,11 +72,19 @@ pub trait TokenReader: Send + Sync {
     async fn get(&self, id: i64) -> RepositoryResult<Option<TokenData>>;
 
     /// Get a token by network and contract address.
-    async fn get_by_address(&self, network: Network, address: &str) -> RepositoryResult<Option<TokenData>>;
+    async fn get_by_address(
+        &self,
+        network: Network,
+        address: &str,
+    ) -> RepositoryResult<Option<TokenData>>;
 
     /// Find a token by network and symbol.
     /// Note: If multiple tokens have the same symbol on a network, returns the first match.
-    async fn find_by_symbol(&self, network: Network, symbol: &str) -> RepositoryResult<Option<TokenData>>;
+    async fn find_by_symbol(
+        &self,
+        network: Network,
+        symbol: &str,
+    ) -> RepositoryResult<Option<TokenData>>;
 
     /// Query tokens with filters and pagination.
     /// Returns (total_count, tokens).

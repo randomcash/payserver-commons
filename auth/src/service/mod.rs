@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use url::Url;
-use webauthn_rs::prelude::*;
 use webauthn_rs::Webauthn;
+use webauthn_rs::prelude::*;
 
 use crate::error::Result;
 use crate::models::{
@@ -64,8 +64,7 @@ pub type AuthService<R> = WebAuthnAuthService<R>;
 /// Build a Webauthn instance from config.
 fn build_webauthn(config: &AuthConfig) -> std::result::Result<Webauthn, WebauthnError> {
     let rp_origin = Url::parse(&config.rp_origin).map_err(|_| WebauthnError::Configuration)?;
-    let builder = WebauthnBuilder::new(&config.rp_id, &rp_origin)?
-        .rp_name(&config.rp_name);
+    let builder = WebauthnBuilder::new(&config.rp_id, &rp_origin)?.rp_name(&config.rp_name);
     builder.build()
 }
 

@@ -44,7 +44,11 @@ pub fn PasskeyAuthForm(
     });
 
     // Use provided state, falling back to local for WebAuthn availability check
-    let current_state = if is_webauthn_available() { state } else { local_state };
+    let current_state = if is_webauthn_available() {
+        state
+    } else {
+        local_state
+    };
 
     let handle_click = move |_| {
         // No email needed - pass empty string for compatibility

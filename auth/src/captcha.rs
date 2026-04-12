@@ -114,10 +114,7 @@ mod turnstile {
             let resp = self
                 .client
                 .post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
-                .form(&[
-                    ("secret", self.secret_key.as_str()),
-                    ("response", token),
-                ])
+                .form(&[("secret", self.secret_key.as_str()), ("response", token)])
                 .send()
                 .await
                 .map_err(|e| CaptchaError::ServiceUnavailable(e.to_string()))?;

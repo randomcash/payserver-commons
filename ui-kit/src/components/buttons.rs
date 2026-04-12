@@ -55,12 +55,7 @@ pub fn Button(
     #[prop(optional)] class: &'static str,
     children: Children,
 ) -> impl IntoView {
-    let class_name = format!(
-        "{} {} {}",
-        variant.class(),
-        size.class(),
-        class
-    );
+    let class_name = format!("{} {} {}", variant.class(), size.class(), class);
 
     let is_disabled = disabled || loading;
 
@@ -97,11 +92,7 @@ pub fn IconButton(
     #[prop(optional)] title: &'static str,
     children: Children,
 ) -> impl IntoView {
-    let class_name = format!(
-        "{} {} ps-btn-icon",
-        variant.class(),
-        size.class()
-    );
+    let class_name = format!("{} {} ps-btn-icon", variant.class(), size.class());
 
     view! {
         <button

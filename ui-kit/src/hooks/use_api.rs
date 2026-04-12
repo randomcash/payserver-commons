@@ -1,7 +1,7 @@
 //! API client hooks.
 
 use gloo_net::http::{Request, RequestBuilder};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 /// API errors.
@@ -196,8 +196,8 @@ mod tests {
 
     #[test]
     fn test_api_client_with_token() {
-        let client = ApiClient::new("https://api.example.com")
-            .with_token(Some("my-token".to_string()));
+        let client =
+            ApiClient::new("https://api.example.com").with_token(Some("my-token".to_string()));
 
         assert_eq!(client.token, Some("my-token".to_string()));
     }
@@ -213,8 +213,8 @@ mod tests {
 
     #[test]
     fn test_api_client_clone() {
-        let client = ApiClient::new("https://api.example.com")
-            .with_token(Some("token".to_string()));
+        let client =
+            ApiClient::new("https://api.example.com").with_token(Some("token".to_string()));
 
         let cloned = client.clone();
 

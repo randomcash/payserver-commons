@@ -6,10 +6,8 @@
 /// Common fiat currency codes (ISO 4217) supported for invoice denomination.
 pub const FIAT_CURRENCIES: &[&str] = &[
     // Major currencies
-    "USD", "EUR", "GBP", "JPY", "CHF", "CNY",
-    // Americas
-    "CAD", "MXN", "BRL", "ARS", "CLP", "COP", "PEN",
-    // Asia-Pacific
+    "USD", "EUR", "GBP", "JPY", "CHF", "CNY", // Americas
+    "CAD", "MXN", "BRL", "ARS", "CLP", "COP", "PEN", // Asia-Pacific
     "AUD", "NZD", "SGD", "HKD", "KRW", "INR", "IDR", "THB", "VND", "PHP", "MYR", "TWD",
     // Europe
     "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "RON", "BGN", "HRK", "RUB", "UAH", "TRY",

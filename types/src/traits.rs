@@ -175,7 +175,6 @@ pub struct PaymentData {
     // into a single invoice total. Without these, we couldn't compare a payment
     // of 0.05 ETH against a $100 USD invoice.
     // =========================================================================
-
     /// The payment's value credited toward the invoice total, expressed in the
     /// invoice's currency.
     ///

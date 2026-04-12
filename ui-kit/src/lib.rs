@@ -26,8 +26,8 @@ pub use module::*;
 pub use types::*;
 
 #[cfg(feature = "auth")]
+pub use auth::wallet::WalletError;
+#[cfg(feature = "auth")]
 pub use auth::{
     LoginPage, PasskeyAuthForm, PasskeyState, RecoverySetup, RegisterPage, WalletConnectButton,
 };
-#[cfg(feature = "auth")]
-pub use auth::wallet::WalletError;

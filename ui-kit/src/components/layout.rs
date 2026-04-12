@@ -4,10 +4,7 @@ use leptos::prelude::*;
 
 /// Main container with max-width.
 #[component]
-pub fn Container(
-    #[prop(optional)] class: &'static str,
-    children: Children,
-) -> impl IntoView {
+pub fn Container(#[prop(optional)] class: &'static str, children: Children) -> impl IntoView {
     view! {
         <div class=format!("ps-container {}", class)>
             {children()}
@@ -26,9 +23,17 @@ pub fn Stack(
     children: Children,
 ) -> impl IntoView {
     let gap_class = format!("ps-gap-{}", gap);
-    let dir_class = if direction == "row" { "ps-stack-row" } else { "ps-stack-col" };
-    let align_style = align.map(|a| format!("align-items: {};", a)).unwrap_or_default();
-    let justify_style = justify.map(|j| format!("justify-content: {};", j)).unwrap_or_default();
+    let dir_class = if direction == "row" {
+        "ps-stack-row"
+    } else {
+        "ps-stack-col"
+    };
+    let align_style = align
+        .map(|a| format!("align-items: {};", a))
+        .unwrap_or_default();
+    let justify_style = justify
+        .map(|j| format!("justify-content: {};", j))
+        .unwrap_or_default();
 
     view! {
         <div
@@ -81,10 +86,12 @@ pub fn PageHeader(
 
 /// Divider line.
 #[component]
-pub fn Divider(
-    #[prop(optional)] vertical: bool,
-) -> impl IntoView {
-    let class = if vertical { "ps-divider-v" } else { "ps-divider-h" };
+pub fn Divider(#[prop(optional)] vertical: bool) -> impl IntoView {
+    let class = if vertical {
+        "ps-divider-v"
+    } else {
+        "ps-divider-h"
+    };
     view! { <div class=class></div> }
 }
 

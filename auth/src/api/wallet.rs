@@ -1,6 +1,6 @@
 //! Ethereum wallet (EIP-191) authentication handlers.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -42,14 +42,16 @@ pub async fn start_new_user_registration<A: AuthenticationService>(
     Json(req): Json<StartNewUserRequest>,
 ) -> Result<Json<StartNewUserWalletRegistrationResponse>, (StatusCode, String)> {
     if let Some(captcha) = &state.captcha {
-        let token = req
-            .captcha_token
-            .as_deref()
-            .ok_or((StatusCode::BAD_REQUEST, "CAPTCHA token required".to_string()))?;
-        captcha
-            .verify(token)
-            .await
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("CAPTCHA verification failed: {e}")))?;
+        let token = req.captcha_token.as_deref().ok_or((
+            StatusCode::BAD_REQUEST,
+            "CAPTCHA token required".to_string(),
+        ))?;
+        captcha.verify(token).await.map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("CAPTCHA verification failed: {e}"),
+            )
+        })?;
     }
 
     let wallet_req = StartNewUserWalletRegistrationRequest {

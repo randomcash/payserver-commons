@@ -133,12 +133,7 @@ impl RateProvider for KrakenRateProvider {
             "Fetching rate from Kraken"
         );
 
-        let response: KrakenTickerResponse = self.client
-            .get(&url)
-            .send()
-            .await?
-            .json()
-            .await?;
+        let response: KrakenTickerResponse = self.client.get(&url).send().await?.json().await?;
 
         // Check for API errors
         if !response.error.is_empty() {
@@ -153,28 +148,32 @@ impl RateProvider for KrakenRateProvider {
         }
 
         // Extract ticker data
-        let result = response.result.ok_or_else(|| {
-            RateError::InvalidResponse("Missing result in response".to_string())
-        })?;
+        let result = response
+            .result
+            .ok_or_else(|| RateError::InvalidResponse("Missing result in response".to_string()))?;
 
         // Kraken returns data with a key that might differ from our query
         // (e.g., "XETHZUSD" instead of "ETHUSD")
-        let ticker = result.values().next().ok_or_else(|| {
-            RateError::InvalidResponse("No ticker data in response".to_string())
-        })?;
+        let ticker = result
+            .values()
+            .next()
+            .ok_or_else(|| RateError::InvalidResponse("No ticker data in response".to_string()))?;
 
         // Use the last trade price
-        let price_str = ticker.c.first().ok_or_else(|| {
-            RateError::InvalidResponse("No price in ticker data".to_string())
-        })?;
+        let price_str = ticker
+            .c
+            .first()
+            .ok_or_else(|| RateError::InvalidResponse("No price in ticker data".to_string()))?;
 
-        let price: Decimal = price_str.parse().map_err(|e| {
-            RateError::InvalidResponse(format!("Invalid price format: {}", e))
-        })?;
+        let price: Decimal = price_str
+            .parse()
+            .map_err(|e| RateError::InvalidResponse(format!("Invalid price format: {}", e)))?;
 
         // Validate price is positive
         if price.is_zero() {
-            return Err(RateError::InvalidResponse("Received zero price from exchange".to_string()));
+            return Err(RateError::InvalidResponse(
+                "Received zero price from exchange".to_string(),
+            ));
         }
 
         // Calculate final rate

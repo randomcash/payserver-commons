@@ -116,8 +116,8 @@ pub fn verify_signature(
     message: &[u8],
     signature: &[u8; 64],
 ) -> Result<(), CryptoError> {
-    let verifying_key = VerifyingKey::from_bytes(public_key)
-        .map_err(|_| CryptoError::InvalidSignature)?;
+    let verifying_key =
+        VerifyingKey::from_bytes(public_key).map_err(|_| CryptoError::InvalidSignature)?;
     let sig = Signature::from_bytes(signature);
     verifying_key
         .verify(message, &sig)

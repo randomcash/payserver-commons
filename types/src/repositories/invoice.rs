@@ -68,7 +68,8 @@ pub trait InvoiceReader: Send + Sync {
 
     /// Query invoices with pagination.
     /// Returns (total_count, invoices).
-    async fn query(&self, params: &InvoiceQueryParams) -> RepositoryResult<(i64, Vec<InvoiceData>)>;
+    async fn query(&self, params: &InvoiceQueryParams)
+    -> RepositoryResult<(i64, Vec<InvoiceData>)>;
 
     /// Get all pending invoices that have expired.
     async fn get_expired(&self) -> RepositoryResult<Vec<InvoiceData>>;

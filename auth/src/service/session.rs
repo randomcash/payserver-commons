@@ -98,7 +98,9 @@ where
         }
 
         // Delete all sessions for this user (including the current one)
-        self.repo.delete_all_sessions_for_user(session.user_id).await?;
+        self.repo
+            .delete_all_sessions_for_user(session.user_id)
+            .await?;
         #[cfg(feature = "metrics")]
         metrics::record_user_logout();
         Ok(())
@@ -110,6 +112,8 @@ where
     /// - Absolutely expired (past expires_at)
     /// - Idle-timed-out (no activity for idle_timeout duration)
     pub async fn cleanup_stale_sessions(&self) -> Result<u64> {
-        self.repo.delete_stale_sessions(self.config.idle_timeout).await
+        self.repo
+            .delete_stale_sessions(self.config.idle_timeout)
+            .await
     }
 }
