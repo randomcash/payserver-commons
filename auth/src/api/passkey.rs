@@ -1,6 +1,6 @@
 //! Passkey (WebAuthn) authentication handlers.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -13,18 +13,45 @@ use crate::{
 
 use super::AuthState;
 
+/// Request body for starting new-user passkey registration.
+/// Only required when CAPTCHA is enabled on the server.
+#[derive(Debug, Default, Deserialize, ToSchema)]
+pub struct StartNewUserRequest {
+    /// CAPTCHA response token from the client widget.
+    /// Required when the server has CAPTCHA enabled.
+    pub captcha_token: Option<String>,
+}
+
 #[utoipa::path(
     post,
     path = "/auth/passkey/new-user/start",
     tag = "passkey",
+    request_body(content = Option<StartNewUserRequest>, description = "CAPTCHA token (required when CAPTCHA is enabled)"),
     responses(
         (status = 200, description = "Challenge created", body = StartNewUserPasskeyRegistrationResponse),
-        (status = 400, description = "Error creating challenge"),
+        (status = 400, description = "Error creating challenge or CAPTCHA failed"),
     )
 )]
 pub async fn start_new_user_registration<A: AuthenticationService>(
     State(state): State<AuthState<A>>,
+    body: Option<Json<StartNewUserRequest>>,
 ) -> Result<Json<StartNewUserPasskeyRegistrationResponse>, (StatusCode, String)> {
+    if let Some(captcha) = &state.captcha {
+        let token = body
+            .as_ref()
+            .and_then(|b| b.captcha_token.as_deref())
+            .ok_or((
+                StatusCode::BAD_REQUEST,
+                "CAPTCHA token required".to_string(),
+            ))?;
+        captcha.verify(token).await.map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("CAPTCHA verification failed: {e}"),
+            )
+        })?;
+    }
+
     state
         .service
         .start_new_user_passkey_registration()

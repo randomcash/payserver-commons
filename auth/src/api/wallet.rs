@@ -1,6 +1,6 @@
 //! Ethereum wallet (EIP-191) authentication handlers.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -14,23 +14,54 @@ use crate::{
 
 use super::AuthState;
 
+/// Request body for starting new-user wallet registration.
+/// Wraps the standard wallet request with an optional CAPTCHA token.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct StartNewUserRequest {
+    /// CAPTCHA response token from the client widget.
+    /// Required when the server has CAPTCHA enabled.
+    pub captcha_token: Option<String>,
+    /// Wallet address for the new account (will be checksummed by server).
+    pub address: String,
+    /// Human-readable name for this wallet.
+    pub wallet_name: String,
+}
+
 #[utoipa::path(
     post,
     path = "/auth/wallet/new-user/start",
     tag = "wallet",
-    request_body = StartNewUserWalletRegistrationRequest,
+    request_body = StartNewUserRequest,
     responses(
         (status = 200, description = "Challenge created", body = StartNewUserWalletRegistrationResponse),
-        (status = 400, description = "Invalid address or user exists"),
+        (status = 400, description = "Invalid address, user exists, or CAPTCHA failed"),
     )
 )]
 pub async fn start_new_user_registration<A: AuthenticationService>(
     State(state): State<AuthState<A>>,
-    Json(req): Json<StartNewUserWalletRegistrationRequest>,
+    Json(req): Json<StartNewUserRequest>,
 ) -> Result<Json<StartNewUserWalletRegistrationResponse>, (StatusCode, String)> {
+    if let Some(captcha) = &state.captcha {
+        let token = req.captcha_token.as_deref().ok_or((
+            StatusCode::BAD_REQUEST,
+            "CAPTCHA token required".to_string(),
+        ))?;
+        captcha.verify(token).await.map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("CAPTCHA verification failed: {e}"),
+            )
+        })?;
+    }
+
+    let wallet_req = StartNewUserWalletRegistrationRequest {
+        address: req.address,
+        wallet_name: req.wallet_name,
+    };
+
     state
         .service
-        .start_new_user_wallet_registration(req)
+        .start_new_user_wallet_registration(wallet_req)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))

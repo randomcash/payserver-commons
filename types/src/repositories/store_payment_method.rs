@@ -10,10 +10,16 @@ use crate::types::StorePaymentMethod;
 #[async_trait]
 pub trait StorePaymentMethodReader: Send + Sync {
     /// Get all payment methods for a store.
-    async fn get_payment_methods(&self, store_id: Uuid) -> RepositoryResult<Vec<StorePaymentMethod>>;
+    async fn get_payment_methods(
+        &self,
+        store_id: Uuid,
+    ) -> RepositoryResult<Vec<StorePaymentMethod>>;
 
     /// Get enabled payment methods for a store.
-    async fn get_enabled_payment_methods(&self, store_id: Uuid) -> RepositoryResult<Vec<StorePaymentMethod>>;
+    async fn get_enabled_payment_methods(
+        &self,
+        store_id: Uuid,
+    ) -> RepositoryResult<Vec<StorePaymentMethod>>;
 
     /// Get a specific payment method by ID.
     async fn get_payment_method(&self, id: Uuid) -> RepositoryResult<Option<StorePaymentMethod>>;
@@ -66,6 +72,9 @@ pub trait StorePaymentMethodWriter: Send + Sync {
 }
 
 /// Combined store payment method repository.
-pub trait StorePaymentMethodRepository: StorePaymentMethodReader + StorePaymentMethodWriter {}
+pub trait StorePaymentMethodRepository:
+    StorePaymentMethodReader + StorePaymentMethodWriter
+{
+}
 
 impl<T: StorePaymentMethodReader + StorePaymentMethodWriter> StorePaymentMethodRepository for T {}

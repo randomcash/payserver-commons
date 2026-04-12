@@ -4,9 +4,7 @@ use leptos::prelude::*;
 
 /// Spinner for loading states.
 #[component]
-pub fn Spinner(
-    #[prop(default = "md")] size: &'static str,
-) -> impl IntoView {
+pub fn Spinner(#[prop(default = "md")] size: &'static str) -> impl IntoView {
     let size_class = format!("ps-spinner-{}", size);
     view! {
         <div class=format!("ps-spinner {}", size_class)></div>
@@ -25,7 +23,11 @@ pub fn Skeleton(
         width.unwrap_or("100%"),
         height.unwrap_or("1rem")
     );
-    let class = if rounded { "ps-skeleton ps-skeleton-rounded" } else { "ps-skeleton" };
+    let class = if rounded {
+        "ps-skeleton ps-skeleton-rounded"
+    } else {
+        "ps-skeleton"
+    };
 
     view! {
         <div class=class style=style></div>
@@ -34,9 +36,7 @@ pub fn Skeleton(
 
 /// Full-page loading overlay.
 #[component]
-pub fn LoadingOverlay(
-    #[prop(optional)] message: Option<&'static str>,
-) -> impl IntoView {
+pub fn LoadingOverlay(#[prop(optional)] message: Option<&'static str>) -> impl IntoView {
     view! {
         <div class="ps-loading-overlay">
             <div class="ps-loading-content">
@@ -49,11 +49,8 @@ pub fn LoadingOverlay(
 
 /// Progress bar.
 #[component]
-pub fn Progress(
-    value: f64,
-    #[prop(default = 100.0)] max: f64,
-) -> impl IntoView {
-    let percentage = (value / max * 100.0).min(100.0).max(0.0);
+pub fn Progress(value: f64, #[prop(default = 100.0)] max: f64) -> impl IntoView {
+    let percentage = (value / max * 100.0).clamp(0.0, 100.0);
 
     view! {
         <div class="ps-progress">

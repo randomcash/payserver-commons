@@ -146,8 +146,8 @@ mod tests {
 
     #[test]
     fn test_rate_provider_config_with_url() {
-        let config = RateProviderConfig::new("kraken")
-            .with_api_url("https://custom.api.com".to_string());
+        let config =
+            RateProviderConfig::new("kraken").with_api_url("https://custom.api.com".to_string());
         assert_eq!(config.api_url, Some("https://custom.api.com".to_string()));
     }
 }

@@ -215,6 +215,21 @@ pub struct UserInfo {
 }
 
 // ============================================================================
+// CAPTCHA Types
+// ============================================================================
+
+/// Server CAPTCHA configuration returned by `GET /auth/captcha/config`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptchaConfigResponse {
+    /// Whether CAPTCHA is enabled on this server.
+    pub enabled: bool,
+    /// Provider name (e.g. `"turnstile"`).
+    pub provider: Option<String>,
+    /// Public site key for the widget.
+    pub site_key: Option<String>,
+}
+
+// ============================================================================
 // Client-side Session Types
 // ============================================================================
 

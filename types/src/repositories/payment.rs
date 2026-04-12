@@ -69,13 +69,17 @@ pub trait PaymentReader: Send + Sync {
     async fn get_awaiting_confirmation(&self) -> RepositoryResult<Vec<PaymentData>>;
 
     /// Get valid (non-reorged) payments for an invoice.
-    async fn get_valid_for_invoice(&self, invoice_id: &InvoiceId) -> RepositoryResult<Vec<PaymentData>>;
+    async fn get_valid_for_invoice(
+        &self,
+        invoice_id: &InvoiceId,
+    ) -> RepositoryResult<Vec<PaymentData>>;
 
     /// Check if an invoice has any valid (non-reorged) payments.
     async fn has_valid_payments(&self, invoice_id: &InvoiceId) -> RepositoryResult<bool>;
 
     /// Query payments with filters and pagination.
-    async fn query(&self, params: &PaymentQueryParams) -> RepositoryResult<(i64, Vec<PaymentData>)>;
+    async fn query(&self, params: &PaymentQueryParams)
+    -> RepositoryResult<(i64, Vec<PaymentData>)>;
 }
 
 /// Write operations for payments.

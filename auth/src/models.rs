@@ -278,6 +278,7 @@ impl Device {
 /// Type of device for UI categorization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum DeviceType {
     /// Web browser.
     Browser,
@@ -288,13 +289,8 @@ pub enum DeviceType {
     /// API client (programmatic access).
     ApiClient,
     /// Unknown/other device type.
+    #[default]
     Unknown,
-}
-
-impl Default for DeviceType {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// An active login session.
@@ -919,8 +915,7 @@ impl WalletChallenge {
         // Truncate to microseconds to match Postgres precision
         let now = Utc::now();
         let micros = now.timestamp_micros();
-        let created_at = DateTime::from_timestamp_micros(micros)
-            .unwrap_or(now);
+        let created_at = DateTime::from_timestamp_micros(micros).unwrap_or(now);
 
         Self {
             challenge,

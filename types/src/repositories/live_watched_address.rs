@@ -33,7 +33,9 @@ pub trait LiveWatchedAddressReader: Send + Sync {
     /// Get all currently watched addresses.
     ///
     /// Returns tuples of (address, invoice_id, chain_id, token_address).
-    async fn get_all_watched(&self) -> RepositoryResult<Vec<(String, InvoiceId, u64, Option<String>)>>;
+    async fn get_all_watched(
+        &self,
+    ) -> RepositoryResult<Vec<(String, InvoiceId, u64, Option<String>)>>;
 }
 
 /// Write operations for live watched addresses.
@@ -65,7 +67,10 @@ pub trait LiveWatchedAddressWriter: Send + Sync {
 }
 
 /// Combined live watched address repository with full read/write access.
-pub trait LiveWatchedAddressRepository: LiveWatchedAddressReader + LiveWatchedAddressWriter {}
+pub trait LiveWatchedAddressRepository:
+    LiveWatchedAddressReader + LiveWatchedAddressWriter
+{
+}
 
 /// Blanket implementation for any type implementing both Reader and Writer.
 impl<T: LiveWatchedAddressReader + LiveWatchedAddressWriter> LiveWatchedAddressRepository for T {}

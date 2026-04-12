@@ -102,7 +102,6 @@ pub enum AuthError {
     // =========================================================================
     // Wallet Authentication Errors
     // =========================================================================
-
     /// Invalid wallet address format.
     #[error("Invalid wallet address: {0}")]
     InvalidWalletAddress(String),
@@ -134,7 +133,6 @@ pub enum AuthError {
     // =========================================================================
     // Store Errors
     // =========================================================================
-
     /// Store not found.
     #[error("Store not found: {0}")]
     StoreNotFound(String),
@@ -162,7 +160,6 @@ pub enum AuthError {
     // =========================================================================
     // API Key Errors
     // =========================================================================
-
     /// API key not found.
     #[error("API key not found: {0}")]
     ApiKeyNotFound(String),

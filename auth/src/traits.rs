@@ -11,12 +11,12 @@ use crate::models::{
     CompleteNewUserPasskeyRegistrationRequest, CompleteNewUserWalletRegistrationRequest,
     CompletePasskeyLoginRequest, CompletePasskeyRegistrationRequest, CompleteRecoveryRequest,
     CompleteWalletLoginRequest, CompleteWalletRegistrationRequest, DeviceId, DeviceInfo,
-    LoginResponse, PasskeyId, PasskeyInfo, Session, SessionId, StartNewUserPasskeyRegistrationResponse,
-    StartNewUserWalletRegistrationRequest, StartNewUserWalletRegistrationResponse,
-    StartPasskeyLoginResponse, StartPasskeyRegistrationRequest, StartPasskeyRegistrationResponse,
-    StartRecoveryRequest, StartWalletLoginRequest, StartWalletLoginResponse,
-    StartWalletRegistrationRequest, StartWalletRegistrationResponse, UserInfo, WalletCredentialId,
-    WalletInfo,
+    LoginResponse, PasskeyId, PasskeyInfo, Session, SessionId,
+    StartNewUserPasskeyRegistrationResponse, StartNewUserWalletRegistrationRequest,
+    StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse,
+    StartPasskeyRegistrationRequest, StartPasskeyRegistrationResponse, StartRecoveryRequest,
+    StartWalletLoginRequest, StartWalletLoginResponse, StartWalletRegistrationRequest,
+    StartWalletRegistrationResponse, UserInfo, WalletCredentialId, WalletInfo,
 };
 
 /// Session management service.

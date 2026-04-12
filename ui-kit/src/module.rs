@@ -148,13 +148,11 @@ mod tests {
             name,
             icon: "icon",
             api_url: format!("http://localhost/{}", id),
-            routes: vec![
-                RouteInfo {
-                    path: format!("/{}", id),
-                    label: name.to_string(),
-                    icon: None,
-                },
-            ],
+            routes: vec![RouteInfo {
+                path: format!("/{}", id),
+                label: name.to_string(),
+                icon: None,
+            }],
         }
     }
 

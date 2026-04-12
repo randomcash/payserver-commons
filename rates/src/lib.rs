@@ -29,6 +29,6 @@ mod currency;
 mod provider;
 mod providers;
 
-pub use currency::{is_crypto_currency, is_fiat_currency, FIAT_CURRENCIES};
+pub use currency::{FIAT_CURRENCIES, is_crypto_currency, is_fiat_currency};
 pub use provider::{ExchangeRate, RateError, RateProvider, RateProviderConfig};
 pub use providers::{KrakenRateProvider, NoOpRateProvider};

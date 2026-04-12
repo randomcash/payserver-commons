@@ -6,11 +6,13 @@ use leptos_router::hooks::use_navigate;
 use std::sync::Arc;
 
 use crate::auth::{
-    components::{PasskeyAuthForm, PasskeyState, RecoverySetup, WalletConnectButton},
+    components::{
+        PasskeyAuthForm, PasskeyState, RecoverySetup, TurnstileWidget, WalletConnectButton,
+    },
     session::get_device_name,
     types::{
-        CompleteNewUserPasskeyRegistrationRequest, CompleteNewUserWalletRegistrationRequest,
-        DeviceType, EncryptedBlob, KdfParams,
+        CaptchaConfigResponse, CompleteNewUserPasskeyRegistrationRequest,
+        CompleteNewUserWalletRegistrationRequest, DeviceType, EncryptedBlob, KdfParams,
     },
     wallet::sign_message,
     webauthn::create_credential,
@@ -60,11 +62,25 @@ pub fn RegisterPage(
     let (loading, set_loading) = signal(false);
     let (passkey_state, set_passkey_state) = signal(PasskeyState::Ready);
     let (reg_state, set_reg_state) = signal(RegistrationState::default());
+    let (captcha_config, set_captcha_config) = signal::<Option<CaptchaConfigResponse>>(None);
+    let (captcha_token, set_captcha_token) = signal::<Option<String>>(None);
 
     let auth = use_auth();
-    let api = StoredValue::new(ApiClient::new(api_url.unwrap_or_else(|| "/api".to_string())));
+    let api = StoredValue::new(ApiClient::new(
+        api_url.unwrap_or_else(|| "/api".to_string()),
+    ));
     let navigate = use_navigate();
     let redirect = StoredValue::new(redirect_to.clone());
+
+    // Fetch CAPTCHA configuration from the server
+    {
+        let api = api.get_value();
+        leptos::task::spawn_local(async move {
+            if let Ok(config) = api.get_captcha_config().await {
+                set_captcha_config.set(Some(config));
+            }
+        });
+    }
 
     // Redirect to dashboard if already authenticated
     {
@@ -81,30 +97,32 @@ pub fn RegisterPage(
     // Wallet connect handler
     let on_wallet_connect = Callback::new(move |address: String| {
         let api = api.get_value();
+        let token = captcha_token.get();
         set_loading.set(true);
         set_error.set(None);
 
         leptos::task::spawn_local(async move {
-            match api.start_wallet_register(&address, "Primary Wallet").await {
-                Ok(response) => {
-                    match sign_message(&address, &response.challenge_message).await {
-                        Ok(signature) => {
-                            set_reg_state.set(RegistrationState {
-                                wallet_address: Some(response.address),
-                                user_id: Some(response.user_id),
-                                signature: Some(signature),
-                                mnemonic_words: generate_placeholder_mnemonic(),
-                                ..Default::default()
-                            });
-                            set_step.set(RegisterStep::Recovery);
-                            set_loading.set(false);
-                        }
-                        Err(e) => {
-                            set_error.set(Some(format!("Failed to sign: {}", e)));
-                            set_loading.set(false);
-                        }
+            match api
+                .start_wallet_register(&address, "Primary Wallet", token.as_deref())
+                .await
+            {
+                Ok(response) => match sign_message(&address, &response.challenge_message).await {
+                    Ok(signature) => {
+                        set_reg_state.set(RegistrationState {
+                            wallet_address: Some(response.address),
+                            user_id: Some(response.user_id),
+                            signature: Some(signature),
+                            mnemonic_words: generate_placeholder_mnemonic(),
+                            ..Default::default()
+                        });
+                        set_step.set(RegisterStep::Recovery);
+                        set_loading.set(false);
                     }
-                }
+                    Err(e) => {
+                        set_error.set(Some(format!("Failed to sign: {}", e)));
+                        set_loading.set(false);
+                    }
+                },
                 Err(e) => {
                     set_error.set(Some(format!("Registration failed: {}", e)));
                     set_loading.set(false);
@@ -116,29 +134,28 @@ pub fn RegisterPage(
     // Passkey submit handler - no email required
     let on_passkey_submit = Callback::new(move |_: String| {
         let api = api.get_value();
+        let token = captcha_token.get();
         set_passkey_state.set(PasskeyState::Authenticating);
         set_error.set(None);
 
         leptos::task::spawn_local(async move {
-            match api.start_passkey_register().await {
-                Ok(response) => {
-                    match create_credential(&response.options).await {
-                        Ok(credential) => {
-                            set_reg_state.set(RegistrationState {
-                                user_id: Some(response.user_id),
-                                passkey_credential: Some(credential),
-                                mnemonic_words: generate_placeholder_mnemonic(),
-                                ..Default::default()
-                            });
-                            set_step.set(RegisterStep::Recovery);
-                            set_passkey_state.set(PasskeyState::Ready);
-                        }
-                        Err(e) => {
-                            set_error.set(Some(format!("Failed to create passkey: {}", e)));
-                            set_passkey_state.set(PasskeyState::Error(e.to_string()));
-                        }
+            match api.start_passkey_register(token.as_deref()).await {
+                Ok(response) => match create_credential(&response.options).await {
+                    Ok(credential) => {
+                        set_reg_state.set(RegistrationState {
+                            user_id: Some(response.user_id),
+                            passkey_credential: Some(credential),
+                            mnemonic_words: generate_placeholder_mnemonic(),
+                            ..Default::default()
+                        });
+                        set_step.set(RegisterStep::Recovery);
+                        set_passkey_state.set(PasskeyState::Ready);
                     }
-                }
+                    Err(e) => {
+                        set_error.set(Some(format!("Failed to create passkey: {}", e)));
+                        set_passkey_state.set(PasskeyState::Error(e.to_string()));
+                    }
+                },
                 Err(e) => {
                     set_error.set(Some(format!("Registration failed: {}", e)));
                     set_passkey_state.set(PasskeyState::Error(e.to_string()));
@@ -164,9 +181,11 @@ pub fn RegisterPage(
             leptos::task::spawn_local(async move {
                 let (kdf_params, encrypted_key, recovery_hash) = generate_placeholder_crypto();
 
-                let result = if let (Some(user_id), Some(address), Some(signature)) =
-                    (state.user_id, state.wallet_address.as_ref(), state.signature.as_ref())
-                {
+                let result = if let (Some(user_id), Some(address), Some(signature)) = (
+                    state.user_id,
+                    state.wallet_address.as_ref(),
+                    state.signature.as_ref(),
+                ) {
                     let request = CompleteNewUserWalletRegistrationRequest {
                         user_id,
                         address: address.clone(),
@@ -211,7 +230,8 @@ pub fn RegisterPage(
                             if let Some(window) = web_sys::window() {
                                 let _ = window.location().set_href(&redirect);
                             }
-                        }).forget();
+                        })
+                        .forget();
                     }
                     Err(e) => {
                         set_error.set(Some(format!("Registration failed: {}", e)));
@@ -337,6 +357,26 @@ pub fn RegisterPage(
                         </Show>
                     </div>
 
+                    // CAPTCHA widget (shown when enabled by server)
+                    {move || {
+                        captcha_config.get().and_then(|config| {
+                            if config.enabled {
+                                config.site_key.map(|key| view! {
+                                    <div class="ps-auth-captcha">
+                                        <TurnstileWidget
+                                            site_key=key
+                                            on_token=Callback::new(move |token: String| {
+                                                set_captcha_token.set(Some(token));
+                                            })
+                                        />
+                                    </div>
+                                })
+                            } else {
+                                None
+                            }
+                        })
+                    }}
+
                     <div class="ps-auth-footer">
                         <p>
                             "Already have an account? "
@@ -352,8 +392,8 @@ pub fn RegisterPage(
 // TODO: Replace with real BIP39 mnemonic generation using payserver-commons/crypto crate
 fn generate_placeholder_mnemonic() -> Vec<String> {
     vec![
-        "abandon", "ability", "able", "about", "above", "absent",
-        "absorb", "abstract", "absurd", "abuse", "access", "accident",
+        "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd",
+        "abuse", "access", "accident",
     ]
     .into_iter()
     .map(|s| s.to_string())

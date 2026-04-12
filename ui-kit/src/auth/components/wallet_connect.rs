@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 
-use crate::auth::wallet::{connect_wallet, format_address, is_wallet_available, WalletError};
+use crate::auth::wallet::{WalletError, connect_wallet, format_address, is_wallet_available};
 
 /// State of the wallet connection.
 #[derive(Debug, Clone, PartialEq)]

@@ -63,7 +63,9 @@ async fn test_get_devices_requires_valid_session() {
 async fn test_revoke_device_requires_valid_session() {
     let service = create_service();
 
-    let result = service.revoke_device(SessionId::new(), DeviceId::new()).await;
+    let result = service
+        .revoke_device(SessionId::new(), DeviceId::new())
+        .await;
     assert!(matches!(result, Err(AuthError::SessionInvalid)));
 }
 
@@ -83,26 +85,19 @@ async fn test_get_passkeys_requires_valid_session() {
 async fn test_start_passkey_login_user_not_found() {
     let service = create_service();
 
-    // Try passkey login for non-existent user
-    let result = service.start_passkey_login("nonexistent@example.com").await;
-    // Should return InvalidCredentials (not UserNotFound) to prevent enumeration
-    assert!(matches!(result, Err(AuthError::InvalidCredentials)));
-}
-
-#[tokio::test]
-async fn test_start_passkey_login_invalid_email() {
-    let service = create_service();
-
-    // Invalid email format should return InvalidEmail
-    let result = service.start_passkey_login("invalid-email").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
+    // Discoverable passkey login returns a challenge even with no users
+    // (browser-side credential discovery handles user selection)
+    let result = service.start_passkey_login().await;
+    assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn test_revoke_passkey_requires_valid_session() {
     let service = create_service();
 
-    let result = service.revoke_passkey(SessionId::new(), PasskeyId::new()).await;
+    let result = service
+        .revoke_passkey(SessionId::new(), PasskeyId::new())
+        .await;
     assert!(matches!(result, Err(AuthError::SessionInvalid)));
 }
 
@@ -124,10 +119,9 @@ async fn test_start_passkey_registration_requires_valid_session() {
 async fn test_start_new_user_passkey_registration_invalid_email() {
     let service = create_service();
 
-    let result = service
-        .start_new_user_passkey_registration("invalid-email")
-        .await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
+    let result = service.start_new_user_passkey_registration().await;
+    // No email validation — should succeed (user ID generated internally)
+    assert!(result.is_ok());
 }
 
 #[tokio::test]
@@ -135,9 +129,7 @@ async fn test_start_new_user_passkey_registration_valid_email() {
     let service = create_service();
 
     // Valid email should return a challenge and user_id
-    let result = service
-        .start_new_user_passkey_registration("test@example.com")
-        .await;
+    let result = service.start_new_user_passkey_registration().await;
     assert!(result.is_ok());
 
     let response = result.unwrap();
@@ -150,15 +142,9 @@ async fn test_start_new_user_passkey_registration_valid_email() {
 async fn test_start_new_user_passkey_registration_email_case_insensitive() {
     let service = create_service();
 
-    // Start registration with uppercase email
-    let result1 = service
-        .start_new_user_passkey_registration("Test@Example.COM")
-        .await;
+    // Start registration — no email parameter needed (user ID generated internally)
+    let result1 = service.start_new_user_passkey_registration().await;
     assert!(result1.is_ok());
-
-    // Note: Completing registration would create the user, but we can't test
-    // that without real WebAuthn credentials. This just tests the challenge
-    // generation accepts various email formats.
 }
 
 // ========================================================================
@@ -198,36 +184,16 @@ async fn test_start_account_recovery_invalid_identifier() {
 // ========================================================================
 
 #[tokio::test]
-async fn test_email_validation_via_passkey_registration() {
+async fn test_passkey_registration_generates_unique_users() {
     let service = create_service();
 
-    // Empty email
-    let result = service.start_new_user_passkey_registration("").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
+    let result1 = service.start_new_user_passkey_registration().await;
+    let result2 = service.start_new_user_passkey_registration().await;
+    assert!(result1.is_ok());
+    assert!(result2.is_ok());
 
-    // No @ symbol
-    let result = service.start_new_user_passkey_registration("testexample.com").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // No domain
-    let result = service.start_new_user_passkey_registration("test@").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // No local part
-    let result = service.start_new_user_passkey_registration("@example.com").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // No dot in domain
-    let result = service.start_new_user_passkey_registration("test@localhost").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // Domain starts with dot
-    let result = service.start_new_user_passkey_registration("test@.example.com").await;
-    assert!(matches!(result, Err(AuthError::InvalidEmail(_))));
-
-    // Valid email should work
-    let result = service.start_new_user_passkey_registration("test@example.com").await;
-    assert!(result.is_ok());
+    // Each registration should get a unique user ID
+    assert_ne!(result1.unwrap().user_id, result2.unwrap().user_id);
 }
 
 // Note: Full flow tests (registration, login, recovery, device management)
@@ -257,7 +223,10 @@ async fn test_wallet_challenge_message_determinism() {
     let different_timestamp = timestamp + chrono::Duration::seconds(1);
     let msg3 = service.generate_wallet_challenge_message(challenge, address, &different_timestamp);
 
-    assert_ne!(msg1, msg3, "Different timestamps must produce different messages");
+    assert_ne!(
+        msg1, msg3,
+        "Different timestamps must produce different messages"
+    );
 }
 
 #[tokio::test]
@@ -265,11 +234,13 @@ async fn test_wallet_address_validation() {
     let service = create_service();
 
     // Valid address (lowercase)
-    let result = service.validate_and_checksum_address("0x1234567890abcdef1234567890abcdef12345678");
+    let result =
+        service.validate_and_checksum_address("0x1234567890abcdef1234567890abcdef12345678");
     assert!(result.is_ok());
 
     // Valid address (checksummed)
-    let result = service.validate_and_checksum_address("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed");
+    let result =
+        service.validate_and_checksum_address("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed");
     assert!(result.is_ok());
 
     // Invalid: too short
@@ -277,12 +248,16 @@ async fn test_wallet_address_validation() {
     assert!(matches!(result, Err(AuthError::InvalidWalletAddress(_))));
 
     // Invalid: not hex
-    let result = service.validate_and_checksum_address("0xGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG");
+    let result =
+        service.validate_and_checksum_address("0xGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG");
     assert!(matches!(result, Err(AuthError::InvalidWalletAddress(_))));
 
     // Address without 0x prefix is accepted by alloy-primitives
     let result = service.validate_and_checksum_address("1234567890abcdef1234567890abcdef12345678");
-    assert!(result.is_ok(), "alloy-primitives accepts addresses without 0x prefix");
+    assert!(
+        result.is_ok(),
+        "alloy-primitives accepts addresses without 0x prefix"
+    );
 }
 
 #[tokio::test]
@@ -294,10 +269,9 @@ async fn test_wallet_signature_verification() {
 
     // Create a test private key (deterministic for testing)
     let private_key_bytes: [u8; 32] = [
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
+        0x1f, 0x20,
     ];
     let signing_key = SigningKey::from_bytes((&private_key_bytes).into()).unwrap();
 
@@ -317,9 +291,7 @@ async fn test_wallet_signature_verification() {
     hasher.update(message.as_bytes());
     let message_hash = hasher.finalize();
 
-    let (signature, recovery_id) = signing_key
-        .sign_prehash_recoverable(&message_hash)
-        .unwrap();
+    let (signature, recovery_id) = signing_key.sign_prehash_recoverable(&message_hash).unwrap();
 
     // Construct 65-byte signature (r + s + v)
     let mut sig_bytes = signature.to_bytes().to_vec();
@@ -329,19 +301,29 @@ async fn test_wallet_signature_verification() {
 
     // Verify the signature
     let result = service.verify_wallet_signature(message, &signature_hex, &address);
-    assert!(result.is_ok(), "Signature verification failed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Signature verification failed: {:?}",
+        result
+    );
     assert!(result.unwrap(), "Signature should be valid");
 
     // Wrong message should fail
     let result = service.verify_wallet_signature("Wrong message", &signature_hex, &address);
     assert!(result.is_ok());
-    assert!(!result.unwrap(), "Signature should be invalid for wrong message");
+    assert!(
+        !result.unwrap(),
+        "Signature should be invalid for wrong message"
+    );
 
     // Wrong address should fail
     let wrong_address = "0x0000000000000000000000000000000000000000";
     let result = service.verify_wallet_signature(message, &signature_hex, wrong_address);
     assert!(result.is_ok());
-    assert!(!result.unwrap(), "Signature should be invalid for wrong address");
+    assert!(
+        !result.unwrap(),
+        "Signature should be invalid for wrong address"
+    );
 }
 
 #[tokio::test]
@@ -399,7 +381,10 @@ async fn test_wallet_challenge_uses_consistent_timestamp() {
         wallet_name: "Test Wallet".to_string(),
     };
 
-    let response = service.start_new_user_wallet_registration(request).await.unwrap();
+    let response = service
+        .start_new_user_wallet_registration(request)
+        .await
+        .unwrap();
     let challenge_message_from_start = response.challenge_message.clone();
 
     // The challenge message should contain a timestamp
@@ -412,5 +397,9 @@ async fn test_wallet_challenge_uses_consistent_timestamp() {
         .unwrap();
     let timestamp_str = timestamp_line.trim_start_matches("Timestamp:").trim();
     let parsed = chrono::DateTime::parse_from_rfc3339(timestamp_str);
-    assert!(parsed.is_ok(), "Timestamp should be valid RFC3339: {}", timestamp_str);
+    assert!(
+        parsed.is_ok(),
+        "Timestamp should be valid RFC3339: {}",
+        timestamp_str
+    );
 }

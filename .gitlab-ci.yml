@@ -7,7 +7,7 @@ variables:
 lint:
   stage: check
   script:
-    - cargo fmt --workspace -- --check
+    - cargo fmt --all -- --check
     - cargo clippy --workspace --all-targets -- -D warnings
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"

@@ -11,20 +11,15 @@ pub struct User {
 }
 
 /// Authentication state.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum AuthState {
     /// Not authenticated.
     Anonymous,
     /// Authenticated with user info.
     Authenticated(User),
     /// Loading authentication state.
+    #[default]
     Loading,
-}
-
-impl Default for AuthState {
-    fn default() -> Self {
-        Self::Loading
-    }
 }
 
 /// Theme variants.
@@ -161,8 +156,12 @@ fn uuid() -> String {
         (random() << 8) | random() & 0xfff,
         8 | (random() & 3),
         (random() << 8) | random() & 0xfff,
-        ((random() as u64) << 40) | ((random() as u64) << 32) | ((random() as u64) << 24)
-            | ((random() as u64) << 16) | ((random() as u64) << 8) | (random() as u64)
+        ((random() as u64) << 40)
+            | ((random() as u64) << 32)
+            | ((random() as u64) << 24)
+            | ((random() as u64) << 16)
+            | ((random() as u64) << 8)
+            | (random() as u64)
     )
 }
 

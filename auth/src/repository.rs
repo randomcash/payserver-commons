@@ -4,7 +4,9 @@
 //! the database implementation.
 
 use async_trait::async_trait;
-use webauthn_rs::prelude::{DiscoverableAuthentication, PasskeyAuthentication, PasskeyRegistration};
+use webauthn_rs::prelude::{
+    DiscoverableAuthentication, PasskeyAuthentication, PasskeyRegistration,
+};
 
 use crate::error::Result;
 use crate::models::{
@@ -102,10 +104,7 @@ pub trait SessionRepository: Send + Sync {
 
     /// Delete sessions that are expired OR idle-timed-out.
     /// idle_timeout: Duration after last_activity_at when session is considered stale.
-    async fn delete_stale_sessions(
-        &self,
-        idle_timeout: Option<chrono::Duration>,
-    ) -> Result<u64>;
+    async fn delete_stale_sessions(&self, idle_timeout: Option<chrono::Duration>) -> Result<u64>;
 
     /// Get all active sessions for a user.
     async fn get_sessions_for_user(&self, user_id: UserId) -> Result<Vec<Session>>;
@@ -123,7 +122,10 @@ pub trait PasskeyRepository: Send + Sync {
     /// Get a passkey by its WebAuthn credential ID.
     /// The credential_id is the raw bytes from the WebAuthn credential.
     /// This is used for discoverable credential authentication.
-    async fn get_passkey_by_credential_id(&self, credential_id: &[u8]) -> Result<Option<PasskeyCredential>>;
+    async fn get_passkey_by_credential_id(
+        &self,
+        credential_id: &[u8],
+    ) -> Result<Option<PasskeyCredential>>;
 
     /// Get all passkeys for a user.
     async fn get_passkeys_for_user(&self, user_id: UserId) -> Result<Vec<PasskeyCredential>>;
@@ -195,7 +197,10 @@ pub trait ChallengeRepository: Send + Sync {
     /// Retrieve and consume a passkey registration challenge.
     /// Returns None if expired or not found.
     /// Returns (PasskeyRegistration, identifier) to verify identifier consistency.
-    async fn take_registration_challenge(&self, user_id: UserId) -> Result<Option<(PasskeyRegistration, String)>>;
+    async fn take_registration_challenge(
+        &self,
+        user_id: UserId,
+    ) -> Result<Option<(PasskeyRegistration, String)>>;
 
     /// Store a passkey authentication challenge state (for known user).
     async fn store_authentication_challenge(
@@ -206,7 +211,10 @@ pub trait ChallengeRepository: Send + Sync {
 
     /// Retrieve and consume a passkey authentication challenge (for known user).
     /// Returns None if expired or not found.
-    async fn take_authentication_challenge(&self, user_id: UserId) -> Result<Option<PasskeyAuthentication>>;
+    async fn take_authentication_challenge(
+        &self,
+        user_id: UserId,
+    ) -> Result<Option<PasskeyAuthentication>>;
 
     /// Store a discoverable authentication challenge state.
     /// Uses a challenge_id instead of user_id since the user is not known yet.
@@ -225,7 +233,11 @@ pub trait ChallengeRepository: Send + Sync {
     ) -> Result<Option<DiscoverableAuthentication>>;
 
     /// Store a wallet authentication challenge state.
-    async fn store_wallet_challenge(&self, user_id: UserId, challenge: WalletChallenge) -> Result<()>;
+    async fn store_wallet_challenge(
+        &self,
+        user_id: UserId,
+        challenge: WalletChallenge,
+    ) -> Result<()>;
 
     /// Retrieve and consume a wallet authentication challenge.
     /// Returns None if expired or not found.
@@ -267,16 +279,23 @@ pub trait StoreRoleRepository: Send + Sync {
     async fn create_store_role(&self, role: &crate::store::StoreRole) -> Result<()>;
 
     /// Get a store role by ID.
-    async fn get_store_role(&self, id: crate::store::StoreRoleId) -> Result<Option<crate::store::StoreRole>>;
+    async fn get_store_role(
+        &self,
+        id: crate::store::StoreRoleId,
+    ) -> Result<Option<crate::store::StoreRole>>;
 
     /// Get all roles for a store (including global defaults).
-    async fn get_roles_for_store(&self, store_id: crate::store::StoreId) -> Result<Vec<crate::store::StoreRole>>;
+    async fn get_roles_for_store(
+        &self,
+        store_id: crate::store::StoreId,
+    ) -> Result<Vec<crate::store::StoreRole>>;
 
     /// Get global default roles (store_id is NULL).
     async fn get_default_roles(&self) -> Result<Vec<crate::store::StoreRole>>;
 
     /// Get a default role by name.
-    async fn get_default_role_by_name(&self, name: &str) -> Result<Option<crate::store::StoreRole>>;
+    async fn get_default_role_by_name(&self, name: &str)
+    -> Result<Option<crate::store::StoreRole>>;
 
     /// Update a store role.
     async fn update_store_role(&self, role: &crate::store::StoreRole) -> Result<()>;
@@ -302,13 +321,20 @@ pub trait UserStoreRepository: Send + Sync {
     async fn get_user_stores(&self, user_id: UserId) -> Result<Vec<crate::store::UserStore>>;
 
     /// Get all users in a store.
-    async fn get_store_users(&self, store_id: crate::store::StoreId) -> Result<Vec<crate::store::UserStore>>;
+    async fn get_store_users(
+        &self,
+        store_id: crate::store::StoreId,
+    ) -> Result<Vec<crate::store::UserStore>>;
 
     /// Update a user's role in a store.
     async fn update_user_store(&self, user_store: &crate::store::UserStore) -> Result<()>;
 
     /// Remove a user from a store.
-    async fn remove_user_from_store(&self, user_id: UserId, store_id: crate::store::StoreId) -> Result<()>;
+    async fn remove_user_from_store(
+        &self,
+        user_id: UserId,
+        store_id: crate::store::StoreId,
+    ) -> Result<()>;
 
     /// Check if a user has a specific permission in a store.
     /// This resolves the role and checks its permissions.
@@ -327,7 +353,10 @@ pub trait UserStoreRepository: Send + Sync {
     ) -> Result<Option<crate::store::UserStoreInfo>>;
 
     /// Get all store infos for a user.
-    async fn get_user_store_infos(&self, user_id: UserId) -> Result<Vec<crate::store::UserStoreInfo>>;
+    async fn get_user_store_infos(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<crate::store::UserStoreInfo>>;
 }
 
 /// Repository for API key data persistence.
@@ -439,21 +468,27 @@ pub mod inmemory {
         async fn create_user(&self, user: &User) -> Result<()> {
             // Handle poisoned locks gracefully by recovering the data
             let mut users = self.users.write().unwrap_or_else(|e| e.into_inner());
-            let mut by_email = self.users_by_email.write().unwrap_or_else(|e| e.into_inner());
-            let mut by_wallet = self.users_by_wallet.write().unwrap_or_else(|e| e.into_inner());
+            let mut by_email = self
+                .users_by_email
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            let mut by_wallet = self
+                .users_by_wallet
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
 
             // Check for existing user by email
-            if let Some(ref email) = user.email {
-                if by_email.contains_key(email) {
-                    return Err(AuthError::UserExists(email.clone()));
-                }
+            if let Some(ref email) = user.email
+                && by_email.contains_key(email)
+            {
+                return Err(AuthError::UserExists(email.clone()));
             }
 
             // Check for existing user by wallet
-            if let Some(ref wallet) = user.primary_wallet_address {
-                if by_wallet.contains_key(wallet) {
-                    return Err(AuthError::UserExists(wallet.clone()));
-                }
+            if let Some(ref wallet) = user.primary_wallet_address
+                && by_wallet.contains_key(wallet)
+            {
+                return Err(AuthError::UserExists(wallet.clone()));
             }
 
             users.insert(user.id, user.clone());
@@ -472,7 +507,10 @@ pub mod inmemory {
         }
 
         async fn get_user_by_email(&self, email: &str) -> Result<Option<User>> {
-            let by_email = self.users_by_email.read().unwrap_or_else(|e| e.into_inner());
+            let by_email = self
+                .users_by_email
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             let users = self.users.read().unwrap_or_else(|e| e.into_inner());
 
             if let Some(id) = by_email.get(email) {
@@ -483,7 +521,10 @@ pub mod inmemory {
         }
 
         async fn get_user_by_wallet_address(&self, address: &str) -> Result<Option<User>> {
-            let by_wallet = self.users_by_wallet.read().unwrap_or_else(|e| e.into_inner());
+            let by_wallet = self
+                .users_by_wallet
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             let users = self.users.read().unwrap_or_else(|e| e.into_inner());
 
             if let Some(id) = by_wallet.get(address) {
@@ -495,18 +536,21 @@ pub mod inmemory {
 
         async fn update_user(&self, user: &User) -> Result<()> {
             let mut users = self.users.write().unwrap_or_else(|e| e.into_inner());
-            let mut by_wallet = self.users_by_wallet.write().unwrap_or_else(|e| e.into_inner());
+            let mut by_wallet = self
+                .users_by_wallet
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
 
             if users.contains_key(&user.id) {
                 // Update wallet index if primary wallet changed
-                if let Some(old_user) = users.get(&user.id) {
-                    if old_user.primary_wallet_address != user.primary_wallet_address {
-                        if let Some(ref old_wallet) = old_user.primary_wallet_address {
-                            by_wallet.remove(old_wallet);
-                        }
-                        if let Some(ref new_wallet) = user.primary_wallet_address {
-                            by_wallet.insert(new_wallet.clone(), user.id);
-                        }
+                if let Some(old_user) = users.get(&user.id)
+                    && old_user.primary_wallet_address != user.primary_wallet_address
+                {
+                    if let Some(ref old_wallet) = old_user.primary_wallet_address {
+                        by_wallet.remove(old_wallet);
+                    }
+                    if let Some(ref new_wallet) = user.primary_wallet_address {
+                        by_wallet.insert(new_wallet.clone(), user.id);
                     }
                 }
                 users.insert(user.id, user.clone());
@@ -518,8 +562,14 @@ pub mod inmemory {
 
         async fn delete_user(&self, id: UserId) -> Result<()> {
             let mut users = self.users.write().unwrap_or_else(|e| e.into_inner());
-            let mut by_email = self.users_by_email.write().unwrap_or_else(|e| e.into_inner());
-            let mut by_wallet = self.users_by_wallet.write().unwrap_or_else(|e| e.into_inner());
+            let mut by_email = self
+                .users_by_email
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            let mut by_wallet = self
+                .users_by_wallet
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
 
             if let Some(user) = users.remove(&id) {
                 if let Some(ref email) = user.email {
@@ -597,8 +647,8 @@ pub mod inmemory {
 
         async fn update_device(&self, device: &Device) -> Result<()> {
             let mut devices = self.devices.write().unwrap_or_else(|e| e.into_inner());
-            if devices.contains_key(&device.id) {
-                devices.insert(device.id, device.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = devices.entry(device.id) {
+                e.insert(device.clone());
                 Ok(())
             } else {
                 Err(AuthError::DeviceNotFound(device.id.to_string()))
@@ -651,8 +701,8 @@ pub mod inmemory {
 
         async fn update_session(&self, session: &Session) -> Result<()> {
             let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
-            if sessions.contains_key(&session.id) {
-                sessions.insert(session.id, session.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = sessions.entry(session.id) {
+                e.insert(session.clone());
                 Ok(())
             } else {
                 Err(AuthError::SessionInvalid)
@@ -736,7 +786,10 @@ pub mod inmemory {
             Ok(passkeys.get(&id).cloned())
         }
 
-        async fn get_passkey_by_credential_id(&self, credential_id: &[u8]) -> Result<Option<PasskeyCredential>> {
+        async fn get_passkey_by_credential_id(
+            &self,
+            credential_id: &[u8],
+        ) -> Result<Option<PasskeyCredential>> {
             let passkeys = self.passkeys.read().unwrap_or_else(|e| e.into_inner());
             Ok(passkeys
                 .values()
@@ -755,8 +808,10 @@ pub mod inmemory {
 
         async fn update_passkey(&self, credential: &PasskeyCredential) -> Result<()> {
             let mut passkeys = self.passkeys.write().unwrap_or_else(|e| e.into_inner());
-            if passkeys.contains_key(&credential.id) {
-                passkeys.insert(credential.id, credential.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) =
+                passkeys.entry(credential.id)
+            {
+                e.insert(credential.clone());
                 Ok(())
             } else {
                 Err(AuthError::PasskeyNotFound(credential.id.to_string()))
@@ -798,10 +853,16 @@ pub mod inmemory {
     impl WalletRepository for InMemoryRepository {
         async fn create_wallet(&self, credential: &WalletCredential) -> Result<()> {
             let mut wallets = self.wallets.write().unwrap_or_else(|e| e.into_inner());
-            let mut by_wallet = self.users_by_wallet.write().unwrap_or_else(|e| e.into_inner());
+            let mut by_wallet = self
+                .users_by_wallet
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
 
             // Check if wallet address already exists
-            if wallets.values().any(|w| w.address == credential.address && w.is_active) {
+            if wallets
+                .values()
+                .any(|w| w.address == credential.address && w.is_active)
+            {
                 return Err(AuthError::WalletAlreadyRegistered);
             }
 
@@ -821,7 +882,10 @@ pub mod inmemory {
 
         async fn get_wallet_by_address(&self, address: &str) -> Result<Option<WalletCredential>> {
             let wallets = self.wallets.read().unwrap_or_else(|e| e.into_inner());
-            Ok(wallets.values().find(|w| w.address == address && w.is_active).cloned())
+            Ok(wallets
+                .values()
+                .find(|w| w.address == address && w.is_active)
+                .cloned())
         }
 
         async fn get_wallets_for_user(&self, user_id: UserId) -> Result<Vec<WalletCredential>> {
@@ -835,8 +899,9 @@ pub mod inmemory {
 
         async fn update_wallet(&self, credential: &WalletCredential) -> Result<()> {
             let mut wallets = self.wallets.write().unwrap_or_else(|e| e.into_inner());
-            if wallets.contains_key(&credential.id) {
-                wallets.insert(credential.id, credential.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = wallets.entry(credential.id)
+            {
+                e.insert(credential.clone());
                 Ok(())
             } else {
                 Err(AuthError::WalletNotFound(credential.id.to_string()))
@@ -949,7 +1014,11 @@ pub mod inmemory {
             Ok(challenges.remove(&challenge_id))
         }
 
-        async fn store_wallet_challenge(&self, user_id: UserId, challenge: WalletChallenge) -> Result<()> {
+        async fn store_wallet_challenge(
+            &self,
+            user_id: UserId,
+            challenge: WalletChallenge,
+        ) -> Result<()> {
             let mut challenges = self
                 .wallet_challenges
                 .write()
@@ -981,7 +1050,10 @@ pub mod inmemory {
             Ok(())
         }
 
-        async fn get_store(&self, id: crate::store::StoreId) -> Result<Option<crate::store::Store>> {
+        async fn get_store(
+            &self,
+            id: crate::store::StoreId,
+        ) -> Result<Option<crate::store::Store>> {
             let stores = self.stores.read().unwrap_or_else(|e| e.into_inner());
             Ok(stores.get(&id).cloned())
         }
@@ -1014,8 +1086,8 @@ pub mod inmemory {
 
         async fn update_store(&self, store: &crate::store::Store) -> Result<()> {
             let mut stores = self.stores.write().unwrap_or_else(|e| e.into_inner());
-            if stores.contains_key(&store.id) {
-                stores.insert(store.id, store.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = stores.entry(store.id) {
+                e.insert(store.clone());
                 Ok(())
             } else {
                 Err(AuthError::StoreNotFound(store.id.to_string()))
@@ -1047,12 +1119,18 @@ pub mod inmemory {
             Ok(())
         }
 
-        async fn get_store_role(&self, id: crate::store::StoreRoleId) -> Result<Option<crate::store::StoreRole>> {
+        async fn get_store_role(
+            &self,
+            id: crate::store::StoreRoleId,
+        ) -> Result<Option<crate::store::StoreRole>> {
             let roles = self.store_roles.read().unwrap_or_else(|e| e.into_inner());
             Ok(roles.get(&id).cloned())
         }
 
-        async fn get_roles_for_store(&self, store_id: crate::store::StoreId) -> Result<Vec<crate::store::StoreRole>> {
+        async fn get_roles_for_store(
+            &self,
+            store_id: crate::store::StoreId,
+        ) -> Result<Vec<crate::store::StoreRole>> {
             let roles = self.store_roles.read().unwrap_or_else(|e| e.into_inner());
             Ok(roles
                 .values()
@@ -1070,7 +1148,10 @@ pub mod inmemory {
                 .collect())
         }
 
-        async fn get_default_role_by_name(&self, name: &str) -> Result<Option<crate::store::StoreRole>> {
+        async fn get_default_role_by_name(
+            &self,
+            name: &str,
+        ) -> Result<Option<crate::store::StoreRole>> {
             let roles = self.store_roles.read().unwrap_or_else(|e| e.into_inner());
             Ok(roles
                 .values()
@@ -1080,8 +1161,8 @@ pub mod inmemory {
 
         async fn update_store_role(&self, role: &crate::store::StoreRole) -> Result<()> {
             let mut roles = self.store_roles.write().unwrap_or_else(|e| e.into_inner());
-            if roles.contains_key(&role.id) {
-                roles.insert(role.id, role.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = roles.entry(role.id) {
+                e.insert(role.clone());
                 Ok(())
             } else {
                 Err(AuthError::StoreRoleNotFound(role.id.to_string()))
@@ -1099,7 +1180,10 @@ pub mod inmemory {
     impl UserStoreRepository for InMemoryRepository {
         async fn add_user_to_store(&self, user_store: &crate::store::UserStore) -> Result<()> {
             let mut user_stores = self.user_stores.write().unwrap_or_else(|e| e.into_inner());
-            user_stores.insert((user_store.user_id, user_store.store_id), user_store.clone());
+            user_stores.insert(
+                (user_store.user_id, user_store.store_id),
+                user_store.clone(),
+            );
             Ok(())
         }
 
@@ -1121,7 +1205,10 @@ pub mod inmemory {
                 .collect())
         }
 
-        async fn get_store_users(&self, store_id: crate::store::StoreId) -> Result<Vec<crate::store::UserStore>> {
+        async fn get_store_users(
+            &self,
+            store_id: crate::store::StoreId,
+        ) -> Result<Vec<crate::store::UserStore>> {
             let user_stores = self.user_stores.read().unwrap_or_else(|e| e.into_inner());
             Ok(user_stores
                 .values()
@@ -1133,15 +1220,19 @@ pub mod inmemory {
         async fn update_user_store(&self, user_store: &crate::store::UserStore) -> Result<()> {
             let mut user_stores = self.user_stores.write().unwrap_or_else(|e| e.into_inner());
             let key = (user_store.user_id, user_store.store_id);
-            if user_stores.contains_key(&key) {
-                user_stores.insert(key, user_store.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = user_stores.entry(key) {
+                e.insert(user_store.clone());
                 Ok(())
             } else {
                 Err(AuthError::UserNotInStore)
             }
         }
 
-        async fn remove_user_from_store(&self, user_id: UserId, store_id: crate::store::StoreId) -> Result<()> {
+        async fn remove_user_from_store(
+            &self,
+            user_id: UserId,
+            store_id: crate::store::StoreId,
+        ) -> Result<()> {
             let mut user_stores = self.user_stores.write().unwrap_or_else(|e| e.into_inner());
             user_stores.remove(&(user_id, store_id));
             Ok(())
@@ -1156,10 +1247,10 @@ pub mod inmemory {
             let user_stores = self.user_stores.read().unwrap_or_else(|e| e.into_inner());
             let roles = self.store_roles.read().unwrap_or_else(|e| e.into_inner());
 
-            if let Some(user_store) = user_stores.get(&(user_id, store_id)) {
-                if let Some(role) = roles.get(&user_store.store_role_id) {
-                    return Ok(role.has_permission(permission));
-                }
+            if let Some(user_store) = user_stores.get(&(user_id, store_id))
+                && let Some(role) = roles.get(&user_store.store_role_id)
+            {
+                return Ok(role.has_permission(permission));
             }
             Ok(false)
         }
@@ -1173,33 +1264,35 @@ pub mod inmemory {
             let stores = self.stores.read().unwrap_or_else(|e| e.into_inner());
             let roles = self.store_roles.read().unwrap_or_else(|e| e.into_inner());
 
-            if let Some(user_store) = user_stores.get(&(user_id, store_id)) {
-                if let Some(store) = stores.get(&store_id) {
-                    if let Some(role) = roles.get(&user_store.store_role_id) {
-                        return Ok(Some(crate::store::UserStoreInfo {
-                            store: crate::store::StoreInfo::from(store),
-                            role: crate::store::StoreRoleInfo::from(role),
-                        }));
-                    }
-                }
+            if let Some(user_store) = user_stores.get(&(user_id, store_id))
+                && let Some(store) = stores.get(&store_id)
+                && let Some(role) = roles.get(&user_store.store_role_id)
+            {
+                return Ok(Some(crate::store::UserStoreInfo {
+                    store: crate::store::StoreInfo::from(store),
+                    role: crate::store::StoreRoleInfo::from(role),
+                }));
             }
             Ok(None)
         }
 
-        async fn get_user_store_infos(&self, user_id: UserId) -> Result<Vec<crate::store::UserStoreInfo>> {
+        async fn get_user_store_infos(
+            &self,
+            user_id: UserId,
+        ) -> Result<Vec<crate::store::UserStoreInfo>> {
             let user_stores = self.user_stores.read().unwrap_or_else(|e| e.into_inner());
             let stores = self.stores.read().unwrap_or_else(|e| e.into_inner());
             let roles = self.store_roles.read().unwrap_or_else(|e| e.into_inner());
 
             let mut result = Vec::new();
             for user_store in user_stores.values().filter(|us| us.user_id == user_id) {
-                if let Some(store) = stores.get(&user_store.store_id) {
-                    if let Some(role) = roles.get(&user_store.store_role_id) {
-                        result.push(crate::store::UserStoreInfo {
-                            store: crate::store::StoreInfo::from(store),
-                            role: crate::store::StoreRoleInfo::from(role),
-                        });
-                    }
+                if let Some(store) = stores.get(&user_store.store_id)
+                    && let Some(role) = roles.get(&user_store.store_role_id)
+                {
+                    result.push(crate::store::UserStoreInfo {
+                        store: crate::store::StoreInfo::from(store),
+                        role: crate::store::StoreRoleInfo::from(role),
+                    });
                 }
             }
             Ok(result)
@@ -1210,12 +1303,15 @@ pub mod inmemory {
     impl ApiKeyRepository for InMemoryRepository {
         async fn create_api_key(&self, key: &ApiKey) -> Result<()> {
             let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
-            let mut keys_by_hash = self.api_keys_by_hash.write().unwrap_or_else(|e| e.into_inner());
-            
+            let mut keys_by_hash = self
+                .api_keys_by_hash
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+
             if keys.contains_key(&key.id) {
                 return Err(AuthError::ApiKeyExists);
             }
-            
+
             keys_by_hash.insert(key.key_hash.clone(), key.id);
             keys.insert(key.id, key.clone());
             Ok(())
@@ -1228,8 +1324,11 @@ pub mod inmemory {
 
         async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>> {
             let keys = self.api_keys.read().unwrap_or_else(|e| e.into_inner());
-            let keys_by_hash = self.api_keys_by_hash.read().unwrap_or_else(|e| e.into_inner());
-            
+            let keys_by_hash = self
+                .api_keys_by_hash
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+
             if let Some(id) = keys_by_hash.get(key_hash) {
                 Ok(keys.get(id).cloned())
             } else {
@@ -1239,7 +1338,8 @@ pub mod inmemory {
 
         async fn list_user_api_keys(&self, user_id: UserId) -> Result<Vec<ApiKey>> {
             let keys = self.api_keys.read().unwrap_or_else(|e| e.into_inner());
-            Ok(keys.values()
+            Ok(keys
+                .values()
                 .filter(|k| k.user_id == user_id)
                 .cloned()
                 .collect())
@@ -1247,47 +1347,54 @@ pub mod inmemory {
 
         async fn revoke_api_key(&self, id: ApiKeyId) -> Result<()> {
             let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
-            
+
             if let Some(key) = keys.get_mut(&id) {
                 key.is_active = false;
                 Ok(())
             } else {
-                Err(AuthError::ApiKeyNotFound)
+                Err(AuthError::ApiKeyNotFound(id.to_string()))
             }
         }
 
         async fn update_last_used(&self, id: ApiKeyId) -> Result<()> {
             let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
-            
+
             if let Some(key) = keys.get_mut(&id) {
                 key.last_used_at = Some(chrono::Utc::now());
                 Ok(())
             } else {
-                Err(AuthError::ApiKeyNotFound)
+                Err(AuthError::ApiKeyNotFound(id.to_string()))
             }
         }
 
         async fn delete_api_key(&self, id: ApiKeyId) -> Result<()> {
             let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
-            let mut keys_by_hash = self.api_keys_by_hash.write().unwrap_or_else(|e| e.into_inner());
-            
+            let mut keys_by_hash = self
+                .api_keys_by_hash
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+
             if let Some(key) = keys.remove(&id) {
                 keys_by_hash.remove(&key.key_hash);
                 Ok(())
             } else {
-                Err(AuthError::ApiKeyNotFound)
+                Err(AuthError::ApiKeyNotFound(id.to_string()))
             }
         }
 
         async fn delete_api_keys_for_user(&self, user_id: UserId) -> Result<()> {
             let mut keys = self.api_keys.write().unwrap_or_else(|e| e.into_inner());
-            let mut keys_by_hash = self.api_keys_by_hash.write().unwrap_or_else(|e| e.into_inner());
-            
-            let ids_to_remove: Vec<_> = keys.values()
+            let mut keys_by_hash = self
+                .api_keys_by_hash
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+
+            let ids_to_remove: Vec<_> = keys
+                .values()
                 .filter(|k| k.user_id == user_id)
                 .map(|k| (k.id, k.key_hash.clone()))
                 .collect();
-            
+
             for (id, hash) in ids_to_remove {
                 keys.remove(&id);
                 keys_by_hash.remove(&hash);

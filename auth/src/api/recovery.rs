@@ -1,12 +1,12 @@
 //! Account recovery handlers.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
-    AuthenticationService, CompleteRecoveryRequest, LoginResponse, StartPasskeyRegistrationResponse,
-    StartRecoveryRequest,
+    AuthenticationService, CompleteRecoveryRequest, LoginResponse,
+    StartPasskeyRegistrationResponse, StartRecoveryRequest,
 };
 
 use super::AuthState;

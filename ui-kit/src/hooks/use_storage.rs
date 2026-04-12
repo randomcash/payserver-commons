@@ -1,7 +1,7 @@
 //! Local storage utilities.
 
 use gloo_storage::{LocalStorage, SessionStorage, Storage};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 /// Get a value from local storage.
 pub fn get_local<T: DeserializeOwned>(key: &str) -> Option<T> {

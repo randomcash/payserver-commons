@@ -126,7 +126,7 @@ impl MasterPasswordHash {
     /// Encode as base64 for transmission.
     pub fn to_base64(&self) -> String {
         use base64::Engine;
-        base64::engine::general_purpose::STANDARD.encode(&self.0)
+        base64::engine::general_purpose::STANDARD.encode(self.0)
     }
 }
 

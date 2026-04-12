@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 
 use super::RepositoryResult;
-use crate::types::{PaymentMethodId, PaymentOptionData, PaymentOptionId};
 use crate::InvoiceId;
+use crate::types::{PaymentMethodId, PaymentOptionData, PaymentOptionId};
 
 /// Read operations for payment options.
 #[async_trait]
@@ -13,8 +13,10 @@ pub trait PaymentOptionReader: Send + Sync {
     async fn get(&self, id: &PaymentOptionId) -> RepositoryResult<Option<PaymentOptionData>>;
 
     /// Get all payment options for an invoice.
-    async fn get_for_invoice(&self, invoice_id: &InvoiceId)
-        -> RepositoryResult<Vec<PaymentOptionData>>;
+    async fn get_for_invoice(
+        &self,
+        invoice_id: &InvoiceId,
+    ) -> RepositoryResult<Vec<PaymentOptionData>>;
 
     /// Get a payment option by invoice and payment method.
     async fn get_by_payment_method(

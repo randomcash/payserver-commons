@@ -35,7 +35,8 @@ impl From<JsValue> for WebAuthnError {
         let message = if let Some(s) = value.as_string() {
             s
         } else if let Ok(obj) = js_sys::Reflect::get(&value, &"message".into()) {
-            obj.as_string().unwrap_or_else(|| "Unknown error".to_string())
+            obj.as_string()
+                .unwrap_or_else(|| "Unknown error".to_string())
         } else {
             format!("{:?}", value)
         };
@@ -77,11 +78,13 @@ pub async fn is_platform_authenticator_available() -> bool {
         _ => return false,
     };
 
-    let check_fn =
-        match js_sys::Reflect::get(&pkc, &"isUserVerifyingPlatformAuthenticatorAvailable".into()) {
-            Ok(f) if f.is_function() => f.dyn_into::<js_sys::Function>().ok(),
-            _ => return false,
-        };
+    let check_fn = match js_sys::Reflect::get(
+        &pkc,
+        &"isUserVerifyingPlatformAuthenticatorAvailable".into(),
+    ) {
+        Ok(f) if f.is_function() => f.dyn_into::<js_sys::Function>().ok(),
+        _ => return false,
+    };
 
     if let Some(func) = check_fn {
         if let Ok(result) = func.call0(&pkc) {
@@ -102,14 +105,16 @@ pub async fn is_platform_authenticator_available() -> bool {
 /// and returns the credential response as JSON.
 ///
 /// The options should be the JSON-serialized CreationChallengeResponse from the server.
-pub async fn create_credential(options_json: &serde_json::Value) -> Result<serde_json::Value, WebAuthnError> {
+pub async fn create_credential(
+    options_json: &serde_json::Value,
+) -> Result<serde_json::Value, WebAuthnError> {
     let window = window().ok_or_else(|| WebAuthnError {
         message: "No window object".to_string(),
         name: None,
     })?;
 
-    let navigator = js_sys::Reflect::get(&window, &"navigator".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let navigator =
+        js_sys::Reflect::get(&window, &"navigator".into()).map_err(|e| WebAuthnError::from(e))?;
 
     let credentials = js_sys::Reflect::get(&navigator, &"credentials".into())
         .map_err(|e| WebAuthnError::from(e))?;
@@ -135,10 +140,12 @@ pub async fn create_credential(options_json: &serde_json::Value) -> Result<serde
         .call1(&credentials, &create_options)
         .map_err(|e| WebAuthnError::from(e))?;
 
-    let promise = result.dyn_into::<js_sys::Promise>().map_err(|_| WebAuthnError {
-        message: "credentials.create did not return a Promise".to_string(),
-        name: None,
-    })?;
+    let promise = result
+        .dyn_into::<js_sys::Promise>()
+        .map_err(|_| WebAuthnError {
+            message: "credentials.create did not return a Promise".to_string(),
+            name: None,
+        })?;
 
     let credential = JsFuture::from(promise).await.map_err(WebAuthnError::from)?;
 
@@ -150,14 +157,16 @@ pub async fn create_credential(options_json: &serde_json::Value) -> Result<serde
 ///
 /// Takes the server's request options (from webauthn-rs RequestChallengeResponse)
 /// and returns the credential response as JSON.
-pub async fn get_credential(options_json: &serde_json::Value) -> Result<serde_json::Value, WebAuthnError> {
+pub async fn get_credential(
+    options_json: &serde_json::Value,
+) -> Result<serde_json::Value, WebAuthnError> {
     let window = window().ok_or_else(|| WebAuthnError {
         message: "No window object".to_string(),
         name: None,
     })?;
 
-    let navigator = js_sys::Reflect::get(&window, &"navigator".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let navigator =
+        js_sys::Reflect::get(&window, &"navigator".into()).map_err(|e| WebAuthnError::from(e))?;
 
     let credentials = js_sys::Reflect::get(&navigator, &"credentials".into())
         .map_err(|e| WebAuthnError::from(e))?;
@@ -183,10 +192,12 @@ pub async fn get_credential(options_json: &serde_json::Value) -> Result<serde_js
         .call1(&credentials, &get_options)
         .map_err(|e| WebAuthnError::from(e))?;
 
-    let promise = result.dyn_into::<js_sys::Promise>().map_err(|_| WebAuthnError {
-        message: "credentials.get did not return a Promise".to_string(),
-        name: None,
-    })?;
+    let promise = result
+        .dyn_into::<js_sys::Promise>()
+        .map_err(|_| WebAuthnError {
+            message: "credentials.get did not return a Promise".to_string(),
+            name: None,
+        })?;
 
     let credential = JsFuture::from(promise).await.map_err(WebAuthnError::from)?;
 
@@ -288,7 +299,10 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
     }
 
     // pubKeyCredParams
-    if let Some(params) = public_key.get("pubKeyCredParams").and_then(|p| p.as_array()) {
+    if let Some(params) = public_key
+        .get("pubKeyCredParams")
+        .and_then(|p| p.as_array())
+    {
         let js_params = js_sys::Array::new();
         for param in params {
             let js_param = js_sys::Object::new();
@@ -308,16 +322,27 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
 
     // timeout
     if let Some(timeout) = public_key.get("timeout").and_then(|t| t.as_u64()) {
-        js_sys::Reflect::set(&js_options, &"timeout".into(), &JsValue::from(timeout as f64))
-            .map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::set(
+            &js_options,
+            &"timeout".into(),
+            &JsValue::from(timeout as f64),
+        )
+        .map_err(|e| WebAuthnError::from(e))?;
     }
 
     // authenticatorSelection
     if let Some(auth_sel) = public_key.get("authenticatorSelection") {
         let js_auth_sel = js_sys::Object::new();
-        if let Some(attachment) = auth_sel.get("authenticatorAttachment").and_then(|a| a.as_str()) {
-            js_sys::Reflect::set(&js_auth_sel, &"authenticatorAttachment".into(), &attachment.into())
-                .map_err(|e| WebAuthnError::from(e))?;
+        if let Some(attachment) = auth_sel
+            .get("authenticatorAttachment")
+            .and_then(|a| a.as_str())
+        {
+            js_sys::Reflect::set(
+                &js_auth_sel,
+                &"authenticatorAttachment".into(),
+                &attachment.into(),
+            )
+            .map_err(|e| WebAuthnError::from(e))?;
         }
         if let Some(resident) = auth_sel.get("residentKey").and_then(|r| r.as_str()) {
             js_sys::Reflect::set(&js_auth_sel, &"residentKey".into(), &resident.into())
@@ -338,7 +363,10 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
     }
 
     // excludeCredentials - important for preventing duplicate registrations
-    if let Some(exclude) = public_key.get("excludeCredentials").and_then(|e| e.as_array()) {
+    if let Some(exclude) = public_key
+        .get("excludeCredentials")
+        .and_then(|e| e.as_array())
+    {
         let js_exclude = js_sys::Array::new();
         for cred in exclude {
             let js_cred = js_sys::Object::new();
@@ -385,8 +413,12 @@ fn convert_request_options_to_js(options: &serde_json::Value) -> Result<JsValue,
 
     // timeout
     if let Some(timeout) = public_key.get("timeout").and_then(|t| t.as_u64()) {
-        js_sys::Reflect::set(&js_options, &"timeout".into(), &JsValue::from(timeout as f64))
-            .map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::set(
+            &js_options,
+            &"timeout".into(),
+            &JsValue::from(timeout as f64),
+        )
+        .map_err(|e| WebAuthnError::from(e))?;
     }
 
     // rpId
@@ -396,7 +428,10 @@ fn convert_request_options_to_js(options: &serde_json::Value) -> Result<JsValue,
     }
 
     // allowCredentials
-    if let Some(allow) = public_key.get("allowCredentials").and_then(|a| a.as_array()) {
+    if let Some(allow) = public_key
+        .get("allowCredentials")
+        .and_then(|a| a.as_array())
+    {
         let js_allow = js_sys::Array::new();
         for cred in allow {
             let js_cred = js_sys::Object::new();
@@ -435,7 +470,9 @@ fn convert_request_options_to_js(options: &serde_json::Value) -> Result<JsValue,
 }
 
 /// Convert registration credential response to JSON for server.
-fn convert_registration_response_to_json(credential: &JsValue) -> Result<serde_json::Value, WebAuthnError> {
+fn convert_registration_response_to_json(
+    credential: &JsValue,
+) -> Result<serde_json::Value, WebAuthnError> {
     let id = js_sys::Reflect::get(credential, &"id".into())
         .map_err(|e| WebAuthnError::from(e))?
         .as_string()
@@ -444,8 +481,8 @@ fn convert_registration_response_to_json(credential: &JsValue) -> Result<serde_j
             name: None,
         })?;
 
-    let raw_id = js_sys::Reflect::get(credential, &"rawId".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let raw_id =
+        js_sys::Reflect::get(credential, &"rawId".into()).map_err(|e| WebAuthnError::from(e))?;
     let raw_id_b64 = arraybuffer_to_base64url(&raw_id)?;
 
     let type_ = js_sys::Reflect::get(credential, &"type".into())
@@ -453,8 +490,8 @@ fn convert_registration_response_to_json(credential: &JsValue) -> Result<serde_j
         .as_string()
         .unwrap_or_else(|| "public-key".to_string());
 
-    let response = js_sys::Reflect::get(credential, &"response".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let response =
+        js_sys::Reflect::get(credential, &"response".into()).map_err(|e| WebAuthnError::from(e))?;
 
     let attestation_object = js_sys::Reflect::get(&response, &"attestationObject".into())
         .map_err(|e| WebAuthnError::from(e))?;
@@ -465,19 +502,23 @@ fn convert_registration_response_to_json(credential: &JsValue) -> Result<serde_j
     let client_data_json_b64 = arraybuffer_to_base64url(&client_data_json)?;
 
     // Optional: get transports if available
-    let transports = if let Ok(get_transports) = js_sys::Reflect::get(&response, &"getTransports".into()) {
-        if get_transports.is_function() {
-            let func = get_transports.dyn_into::<js_sys::Function>().ok();
-            if let Some(f) = func {
-                if let Ok(result) = f.call0(&response) {
-                    let arr = js_sys::Array::from(&result);
-                    let mut transports_vec = Vec::new();
-                    for i in 0..arr.length() {
-                        if let Some(t) = arr.get(i).as_string() {
-                            transports_vec.push(serde_json::Value::String(t));
+    let transports =
+        if let Ok(get_transports) = js_sys::Reflect::get(&response, &"getTransports".into()) {
+            if get_transports.is_function() {
+                let func = get_transports.dyn_into::<js_sys::Function>().ok();
+                if let Some(f) = func {
+                    if let Ok(result) = f.call0(&response) {
+                        let arr = js_sys::Array::from(&result);
+                        let mut transports_vec = Vec::new();
+                        for i in 0..arr.length() {
+                            if let Some(t) = arr.get(i).as_string() {
+                                transports_vec.push(serde_json::Value::String(t));
+                            }
                         }
+                        Some(serde_json::Value::Array(transports_vec))
+                    } else {
+                        None
                     }
-                    Some(serde_json::Value::Array(transports_vec))
                 } else {
                     None
                 }
@@ -486,10 +527,7 @@ fn convert_registration_response_to_json(credential: &JsValue) -> Result<serde_j
             }
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
     let mut response_obj = serde_json::json!({
         "attestationObject": attestation_object_b64,
@@ -497,7 +535,10 @@ fn convert_registration_response_to_json(credential: &JsValue) -> Result<serde_j
     });
 
     if let Some(t) = transports {
-        response_obj.as_object_mut().unwrap().insert("transports".to_string(), t);
+        response_obj
+            .as_object_mut()
+            .unwrap()
+            .insert("transports".to_string(), t);
     }
 
     Ok(serde_json::json!({
@@ -509,7 +550,9 @@ fn convert_registration_response_to_json(credential: &JsValue) -> Result<serde_j
 }
 
 /// Convert authentication credential response to JSON for server.
-fn convert_authentication_response_to_json(credential: &JsValue) -> Result<serde_json::Value, WebAuthnError> {
+fn convert_authentication_response_to_json(
+    credential: &JsValue,
+) -> Result<serde_json::Value, WebAuthnError> {
     let id = js_sys::Reflect::get(credential, &"id".into())
         .map_err(|e| WebAuthnError::from(e))?
         .as_string()
@@ -518,8 +561,8 @@ fn convert_authentication_response_to_json(credential: &JsValue) -> Result<serde
             name: None,
         })?;
 
-    let raw_id = js_sys::Reflect::get(credential, &"rawId".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let raw_id =
+        js_sys::Reflect::get(credential, &"rawId".into()).map_err(|e| WebAuthnError::from(e))?;
     let raw_id_b64 = arraybuffer_to_base64url(&raw_id)?;
 
     let type_ = js_sys::Reflect::get(credential, &"type".into())
@@ -527,8 +570,8 @@ fn convert_authentication_response_to_json(credential: &JsValue) -> Result<serde
         .as_string()
         .unwrap_or_else(|| "public-key".to_string());
 
-    let response = js_sys::Reflect::get(credential, &"response".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let response =
+        js_sys::Reflect::get(credential, &"response".into()).map_err(|e| WebAuthnError::from(e))?;
 
     let authenticator_data = js_sys::Reflect::get(&response, &"authenticatorData".into())
         .map_err(|e| WebAuthnError::from(e))?;
@@ -538,8 +581,8 @@ fn convert_authentication_response_to_json(credential: &JsValue) -> Result<serde
         .map_err(|e| WebAuthnError::from(e))?;
     let client_data_json_b64 = arraybuffer_to_base64url(&client_data_json)?;
 
-    let signature = js_sys::Reflect::get(&response, &"signature".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let signature =
+        js_sys::Reflect::get(&response, &"signature".into()).map_err(|e| WebAuthnError::from(e))?;
     let signature_b64 = arraybuffer_to_base64url(&signature)?;
 
     // userHandle is optional
@@ -561,7 +604,10 @@ fn convert_authentication_response_to_json(credential: &JsValue) -> Result<serde
     });
 
     if let Some(uh) = user_handle_b64 {
-        response_obj.as_object_mut().unwrap().insert("userHandle".to_string(), serde_json::Value::String(uh));
+        response_obj
+            .as_object_mut()
+            .unwrap()
+            .insert("userHandle".to_string(), serde_json::Value::String(uh));
     }
 
     Ok(serde_json::json!({

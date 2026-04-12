@@ -87,8 +87,12 @@ const DARK_THEME: &str = r#"
 
 /// Apply a theme to the document.
 pub fn apply_theme(theme: Theme) {
-    let Some(window) = web_sys::window() else { return };
-    let Some(document) = window.document() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Some(document) = window.document() else {
+        return;
+    };
 
     let actual_theme = match theme {
         Theme::Light => Theme::Light,
@@ -102,7 +106,11 @@ pub fn apply_theme(theme: Theme) {
                 .map(|mq| mq.matches())
                 .unwrap_or(false);
 
-            if prefers_dark { Theme::Dark } else { Theme::Light }
+            if prefers_dark {
+                Theme::Dark
+            } else {
+                Theme::Light
+            }
         }
     };
 

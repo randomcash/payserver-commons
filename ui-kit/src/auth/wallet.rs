@@ -30,7 +30,8 @@ impl From<JsValue> for WalletError {
         let message = if let Some(s) = value.as_string() {
             s
         } else if let Ok(obj) = js_sys::Reflect::get(&value, &"message".into()) {
-            obj.as_string().unwrap_or_else(|| "Unknown error".to_string())
+            obj.as_string()
+                .unwrap_or_else(|| "Unknown error".to_string())
         } else {
             format!("{:?}", value)
         };
@@ -90,8 +91,8 @@ pub async fn connect_wallet() -> Result<String, WalletError> {
     js_sys::Reflect::set(&request, &"method".into(), &"eth_requestAccounts".into())
         .map_err(|e| WalletError::from(e))?;
 
-    let promise = js_sys::Reflect::get(&ethereum, &"request".into())
-        .map_err(|e| WalletError::from(e))?;
+    let promise =
+        js_sys::Reflect::get(&ethereum, &"request".into()).map_err(|e| WalletError::from(e))?;
 
     let request_fn = promise
         .dyn_ref::<js_sys::Function>()
@@ -179,8 +180,7 @@ pub async fn sign_message(address: &str, message: &str) -> Result<String, Wallet
     let request = js_sys::Object::new();
     js_sys::Reflect::set(&request, &"method".into(), &"personal_sign".into())
         .map_err(|e| WalletError::from(e))?;
-    js_sys::Reflect::set(&request, &"params".into(), &params)
-        .map_err(|e| WalletError::from(e))?;
+    js_sys::Reflect::set(&request, &"params".into(), &params).map_err(|e| WalletError::from(e))?;
 
     let request_fn = js_sys::Reflect::get(&ethereum, &"request".into())
         .map_err(|e| WalletError::from(e))?
