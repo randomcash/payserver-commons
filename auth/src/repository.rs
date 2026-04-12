@@ -478,18 +478,16 @@ pub mod inmemory {
                 .unwrap_or_else(|e| e.into_inner());
 
             // Check for existing user by email
-            if let Some(ref email) = user.email {
-                if by_email.contains_key(email) {
+            if let Some(ref email) = user.email
+                && by_email.contains_key(email) {
                     return Err(AuthError::UserExists(email.clone()));
                 }
-            }
 
             // Check for existing user by wallet
-            if let Some(ref wallet) = user.primary_wallet_address {
-                if by_wallet.contains_key(wallet) {
+            if let Some(ref wallet) = user.primary_wallet_address
+                && by_wallet.contains_key(wallet) {
                     return Err(AuthError::UserExists(wallet.clone()));
                 }
-            }
 
             users.insert(user.id, user.clone());
             if let Some(ref email) = user.email {
@@ -543,8 +541,8 @@ pub mod inmemory {
 
             if users.contains_key(&user.id) {
                 // Update wallet index if primary wallet changed
-                if let Some(old_user) = users.get(&user.id) {
-                    if old_user.primary_wallet_address != user.primary_wallet_address {
+                if let Some(old_user) = users.get(&user.id)
+                    && old_user.primary_wallet_address != user.primary_wallet_address {
                         if let Some(ref old_wallet) = old_user.primary_wallet_address {
                             by_wallet.remove(old_wallet);
                         }
@@ -552,7 +550,6 @@ pub mod inmemory {
                             by_wallet.insert(new_wallet.clone(), user.id);
                         }
                     }
-                }
                 users.insert(user.id, user.clone());
                 Ok(())
             } else {
@@ -647,8 +644,8 @@ pub mod inmemory {
 
         async fn update_device(&self, device: &Device) -> Result<()> {
             let mut devices = self.devices.write().unwrap_or_else(|e| e.into_inner());
-            if devices.contains_key(&device.id) {
-                devices.insert(device.id, device.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = devices.entry(device.id) {
+                e.insert(device.clone());
                 Ok(())
             } else {
                 Err(AuthError::DeviceNotFound(device.id.to_string()))
@@ -701,8 +698,8 @@ pub mod inmemory {
 
         async fn update_session(&self, session: &Session) -> Result<()> {
             let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
-            if sessions.contains_key(&session.id) {
-                sessions.insert(session.id, session.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = sessions.entry(session.id) {
+                e.insert(session.clone());
                 Ok(())
             } else {
                 Err(AuthError::SessionInvalid)
@@ -808,8 +805,8 @@ pub mod inmemory {
 
         async fn update_passkey(&self, credential: &PasskeyCredential) -> Result<()> {
             let mut passkeys = self.passkeys.write().unwrap_or_else(|e| e.into_inner());
-            if passkeys.contains_key(&credential.id) {
-                passkeys.insert(credential.id, credential.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = passkeys.entry(credential.id) {
+                e.insert(credential.clone());
                 Ok(())
             } else {
                 Err(AuthError::PasskeyNotFound(credential.id.to_string()))
@@ -897,8 +894,8 @@ pub mod inmemory {
 
         async fn update_wallet(&self, credential: &WalletCredential) -> Result<()> {
             let mut wallets = self.wallets.write().unwrap_or_else(|e| e.into_inner());
-            if wallets.contains_key(&credential.id) {
-                wallets.insert(credential.id, credential.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = wallets.entry(credential.id) {
+                e.insert(credential.clone());
                 Ok(())
             } else {
                 Err(AuthError::WalletNotFound(credential.id.to_string()))
@@ -1083,8 +1080,8 @@ pub mod inmemory {
 
         async fn update_store(&self, store: &crate::store::Store) -> Result<()> {
             let mut stores = self.stores.write().unwrap_or_else(|e| e.into_inner());
-            if stores.contains_key(&store.id) {
-                stores.insert(store.id, store.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = stores.entry(store.id) {
+                e.insert(store.clone());
                 Ok(())
             } else {
                 Err(AuthError::StoreNotFound(store.id.to_string()))
@@ -1158,8 +1155,8 @@ pub mod inmemory {
 
         async fn update_store_role(&self, role: &crate::store::StoreRole) -> Result<()> {
             let mut roles = self.store_roles.write().unwrap_or_else(|e| e.into_inner());
-            if roles.contains_key(&role.id) {
-                roles.insert(role.id, role.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = roles.entry(role.id) {
+                e.insert(role.clone());
                 Ok(())
             } else {
                 Err(AuthError::StoreRoleNotFound(role.id.to_string()))
@@ -1217,8 +1214,8 @@ pub mod inmemory {
         async fn update_user_store(&self, user_store: &crate::store::UserStore) -> Result<()> {
             let mut user_stores = self.user_stores.write().unwrap_or_else(|e| e.into_inner());
             let key = (user_store.user_id, user_store.store_id);
-            if user_stores.contains_key(&key) {
-                user_stores.insert(key, user_store.clone());
+            if let std::collections::hash_map::Entry::Occupied(mut e) = user_stores.entry(key) {
+                e.insert(user_store.clone());
                 Ok(())
             } else {
                 Err(AuthError::UserNotInStore)
@@ -1244,11 +1241,10 @@ pub mod inmemory {
             let user_stores = self.user_stores.read().unwrap_or_else(|e| e.into_inner());
             let roles = self.store_roles.read().unwrap_or_else(|e| e.into_inner());
 
-            if let Some(user_store) = user_stores.get(&(user_id, store_id)) {
-                if let Some(role) = roles.get(&user_store.store_role_id) {
+            if let Some(user_store) = user_stores.get(&(user_id, store_id))
+                && let Some(role) = roles.get(&user_store.store_role_id) {
                     return Ok(role.has_permission(permission));
                 }
-            }
             Ok(false)
         }
 
@@ -1261,16 +1257,14 @@ pub mod inmemory {
             let stores = self.stores.read().unwrap_or_else(|e| e.into_inner());
             let roles = self.store_roles.read().unwrap_or_else(|e| e.into_inner());
 
-            if let Some(user_store) = user_stores.get(&(user_id, store_id)) {
-                if let Some(store) = stores.get(&store_id) {
-                    if let Some(role) = roles.get(&user_store.store_role_id) {
+            if let Some(user_store) = user_stores.get(&(user_id, store_id))
+                && let Some(store) = stores.get(&store_id)
+                    && let Some(role) = roles.get(&user_store.store_role_id) {
                         return Ok(Some(crate::store::UserStoreInfo {
                             store: crate::store::StoreInfo::from(store),
                             role: crate::store::StoreRoleInfo::from(role),
                         }));
                     }
-                }
-            }
             Ok(None)
         }
 
@@ -1284,14 +1278,13 @@ pub mod inmemory {
 
             let mut result = Vec::new();
             for user_store in user_stores.values().filter(|us| us.user_id == user_id) {
-                if let Some(store) = stores.get(&user_store.store_id) {
-                    if let Some(role) = roles.get(&user_store.store_role_id) {
+                if let Some(store) = stores.get(&user_store.store_id)
+                    && let Some(role) = roles.get(&user_store.store_role_id) {
                         result.push(crate::store::UserStoreInfo {
                             store: crate::store::StoreInfo::from(store),
                             role: crate::store::StoreRoleInfo::from(role),
                         });
                     }
-                }
             }
             Ok(result)
         }

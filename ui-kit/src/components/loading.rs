@@ -50,7 +50,7 @@ pub fn LoadingOverlay(#[prop(optional)] message: Option<&'static str>) -> impl I
 /// Progress bar.
 #[component]
 pub fn Progress(value: f64, #[prop(default = 100.0)] max: f64) -> impl IntoView {
-    let percentage = (value / max * 100.0).min(100.0).max(0.0);
+    let percentage = (value / max * 100.0).clamp(0.0, 100.0);
 
     view! {
         <div class="ps-progress">

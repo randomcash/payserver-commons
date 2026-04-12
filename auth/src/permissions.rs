@@ -398,7 +398,7 @@ impl Role {
     }
 
     /// Parse role from string.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "serveradmin" | "server_admin" | "admin" => Some(Role::ServerAdmin),
             "user" => Some(Role::User),
@@ -425,7 +425,7 @@ impl std::str::FromStr for Role {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Role::from_str(s).ok_or_else(|| format!("unknown role: {}", s))
+        Role::parse(s).ok_or_else(|| format!("unknown role: {}", s))
     }
 }
 
@@ -480,10 +480,10 @@ mod tests {
 
     #[test]
     fn test_role_from_str() {
-        assert_eq!(Role::from_str("admin"), Some(Role::ServerAdmin));
-        assert_eq!(Role::from_str("server_admin"), Some(Role::ServerAdmin));
-        assert_eq!(Role::from_str("user"), Some(Role::User));
-        assert_eq!(Role::from_str("unknown"), None);
+        assert_eq!(Role::parse("admin"), Some(Role::ServerAdmin));
+        assert_eq!(Role::parse("server_admin"), Some(Role::ServerAdmin));
+        assert_eq!(Role::parse("user"), Some(Role::User));
+        assert_eq!(Role::parse("unknown"), None);
     }
 
     #[test]

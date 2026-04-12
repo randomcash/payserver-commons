@@ -3,7 +3,6 @@
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
-use uuid::Uuid;
 
 use crate::error::{AuthError, Result};
 use crate::models::{
@@ -109,7 +108,7 @@ where
         let (ccr, passkey_registration) = self
             .webauthn
             .start_passkey_registration(
-                Uuid::from(user.id.0),
+                user.id.0,
                 &user_identifier,
                 &user_identifier,
                 None, // Don't exclude existing credentials - they'll be deleted on completion

@@ -12,20 +12,17 @@ pub struct User {
 
 /// Authentication state.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum AuthState {
     /// Not authenticated.
     Anonymous,
     /// Authenticated with user info.
     Authenticated(User),
     /// Loading authentication state.
+    #[default]
     Loading,
 }
 
-impl Default for AuthState {
-    fn default() -> Self {
-        Self::Loading
-    }
-}
 
 /// Theme variants.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]

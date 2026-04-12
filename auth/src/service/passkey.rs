@@ -62,7 +62,7 @@ where
         let (mut ccr, passkey_registration) = self
             .webauthn
             .start_passkey_registration(
-                Uuid::from(user_id.0),
+                user_id.0,
                 &user_identifier,
                 &user_identifier,
                 None, // No excluded credentials for new user
@@ -400,7 +400,7 @@ where
         let (ccr, passkey_registration) = self
             .webauthn
             .start_passkey_registration(
-                Uuid::from(user_info.id.0),
+                user_info.id.0,
                 &user_identifier,
                 &user_identifier, // Display name same as identifier
                 Some(excluded_credentials),

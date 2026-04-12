@@ -64,11 +64,10 @@ pub fn Button(
             class=class_name
             disabled=is_disabled
             on:click=move |_| {
-                if !is_disabled {
-                    if let Some(cb) = &on_click {
+                if !is_disabled
+                    && let Some(cb) = &on_click {
                         cb.run(());
                     }
-                }
             }
         >
             {if loading {
@@ -100,11 +99,10 @@ pub fn IconButton(
             disabled=disabled
             title=title
             on:click=move |_| {
-                if !disabled {
-                    if let Some(cb) = &on_click {
+                if !disabled
+                    && let Some(cb) = &on_click {
                         cb.run(());
                     }
-                }
             }
         >
             {children()}

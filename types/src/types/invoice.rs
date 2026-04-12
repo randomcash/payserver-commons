@@ -81,10 +81,11 @@ impl std::str::FromStr for InvoiceStatus {
 }
 
 /// Asset type for payments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetType {
     /// Native network currency (ETH, BTC, POL, etc.)
+    #[default]
     Native,
     /// ERC20 token (for EVM networks)
     ERC20,
@@ -97,12 +98,6 @@ impl AssetType {
             AssetType::Native => "native",
             AssetType::ERC20 => "erc20",
         }
-    }
-}
-
-impl Default for AssetType {
-    fn default() -> Self {
-        AssetType::Native
     }
 }
 
