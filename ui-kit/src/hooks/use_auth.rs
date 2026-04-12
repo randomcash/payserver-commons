@@ -242,7 +242,7 @@ pub fn AuthGuard(
     /// URL to redirect to if not authenticated (default: "/login").
     /// Only used when `auth` feature is enabled.
     #[prop(optional)]
-    _redirect_to: Option<String>,
+    redirect_to: Option<String>,
 ) -> impl IntoView {
     let auth = use_auth();
 
@@ -288,10 +288,10 @@ pub fn AdminGuard(
     children: ChildrenFn,
     /// URL to redirect to if not authenticated (default: "/login").
     #[prop(optional)]
-    _redirect_to: Option<String>,
+    redirect_to: Option<String>,
     /// URL to redirect to if authenticated but not admin (default: "/").
     #[prop(optional)]
-    _forbidden_redirect: Option<String>,
+    forbidden_redirect: Option<String>,
 ) -> impl IntoView {
     let auth = use_auth();
 
