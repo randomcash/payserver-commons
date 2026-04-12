@@ -11,8 +11,7 @@ pub struct User {
 }
 
 /// Authentication state.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum AuthState {
     /// Not authenticated.
     Anonymous,
@@ -22,7 +21,6 @@ pub enum AuthState {
     #[default]
     Loading,
 }
-
 
 /// Theme variants.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]

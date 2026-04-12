@@ -293,7 +293,6 @@ pub enum DeviceType {
     Unknown,
 }
 
-
 /// An active login session.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Session {
