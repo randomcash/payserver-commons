@@ -3,12 +3,16 @@
 //! This crate provides:
 //! - Fiat currency detection
 //! - Exchange rate provider trait
-//! - Kraken rate provider implementation
+//! - Kraken and CoinGecko rate provider implementations
+//! - Caching wrapper with configurable TTL
+//! - Fallback provider for automatic failover
 //!
 //! # Configuration
 //!
-//! - `RATE_PROVIDER` - Rate provider to use: "kraken" (default), "none" (disable)
-//! - `RATE_PROVIDER_URL` - Custom API URL (optional, uses default per provider)
+//! - `RATE_PROVIDER` - Provider: "kraken" (default), "coingecko", "none"
+//! - `RATE_PROVIDER_URL` - Custom API URL (optional)
+//! - `RATE_FALLBACK_PROVIDER` - Fallback: "coingecko" (default), "kraken", "none"
+//! - `RATE_CACHE_TTL_SECS` - Cache TTL in seconds (default: 30, 0 = disabled)
 //!
 //! # Example
 //!
@@ -31,4 +35,7 @@ mod providers;
 
 pub use currency::{FIAT_CURRENCIES, is_crypto_currency, is_fiat_currency};
 pub use provider::{ExchangeRate, RateError, RateProvider, RateProviderConfig};
-pub use providers::{KrakenRateProvider, NoOpRateProvider};
+pub use providers::{
+    CachedRateProvider, CoinGeckoRateProvider, FallbackRateProvider, KrakenRateProvider,
+    NoOpRateProvider,
+};
