@@ -62,6 +62,10 @@ pub use repositories::{
     StoreWebhookReader,
     StoreWebhookRepository,
     StoreWebhookWriter,
+    // Webhook Delivery
+    WebhookDeliveryReader,
+    WebhookDeliveryRepository,
+    WebhookDeliveryWriter,
     // Token
     TokenQueryParams,
     TokenReader,
@@ -80,5 +84,5 @@ pub use traits::{
 pub use types::{
     AssetType, CleanupAddressInfo, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent,
     PaymentMethodId, PaymentOptionData, PaymentOptionId, PendingWatchInfo, StorePaymentMethod,
-    StoreWallet, StoreWebhook, TokenData, UserId,
+    StoreWallet, StoreWebhook, TokenData, UserId, WebhookDelivery,
 };

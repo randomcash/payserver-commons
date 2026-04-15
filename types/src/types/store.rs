@@ -52,3 +52,19 @@ pub struct StoreWebhook {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+/// Record of a single webhook delivery attempt.
+#[derive(Debug, Clone)]
+pub struct WebhookDelivery {
+    pub id: Uuid,
+    pub store_id: Uuid,
+    pub event_type: String,
+    pub payload: serde_json::Value,
+    pub http_status: Option<i16>,
+    pub response_body: Option<String>,
+    pub latency_ms: i32,
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub attempt_number: i32,
+    pub created_at: DateTime<Utc>,
+}
