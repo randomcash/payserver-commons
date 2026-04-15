@@ -1,13 +1,15 @@
 //! Caching wrapper for rate providers.
 //!
 //! Wraps any `RateProvider` with an in-memory cache using configurable TTL.
-//! Returns cached rates when fresh, fetches from the inner provider when stale.
+//! Implements stale-while-revalidate: returns stale cached rates immediately
+//! while triggering a background refresh.
 
 use async_trait::async_trait;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::provider::{ExchangeRate, RateError, RateProvider};
 
@@ -19,12 +21,15 @@ struct CacheEntry {
 
 /// Caching wrapper around any `RateProvider`.
 ///
-/// Caches successful responses keyed by (from, to) pair.
-/// Stale entries are refreshed on next access.
+/// Caches successful responses keyed by normalized (from, to) pair.
+/// Uses stale-while-revalidate: stale entries are served immediately
+/// while a background task refreshes the value.
 pub struct CachedRateProvider {
     inner: Arc<dyn RateProvider>,
-    cache: RwLock<HashMap<(String, String), CacheEntry>>,
+    cache: Arc<RwLock<HashMap<(String, String), CacheEntry>>>,
     ttl: Duration,
+    /// Tracks pairs currently being refreshed to prevent duplicate spawns.
+    refreshing: Mutex<HashSet<(String, String)>>,
 }
 
 impl CachedRateProvider {
@@ -34,8 +39,9 @@ impl CachedRateProvider {
     pub fn new(inner: Arc<dyn RateProvider>, ttl: Duration) -> Self {
         Self {
             inner,
-            cache: RwLock::new(HashMap::new()),
+            cache: Arc::new(RwLock::new(HashMap::new())),
             ttl,
+            refreshing: Mutex::new(HashSet::new()),
         }
     }
 }
@@ -57,10 +63,60 @@ impl RateProvider for CachedRateProvider {
                     );
                     return Ok(entry.rate.clone());
                 }
+
+                // Stale entry — return it but trigger background refresh
+                let stale_rate = entry.rate.clone();
+                drop(cache);
+
+                let mut refreshing = self.refreshing.lock().await;
+                if !refreshing.contains(&key) {
+                    refreshing.insert(key.clone());
+                    drop(refreshing);
+
+                    let inner = Arc::clone(&self.inner);
+                    let cache = Arc::clone(&self.cache);
+                    let from_owned = from.to_string();
+                    let to_owned = to.to_string();
+                    let provider_name = self.inner.name();
+
+                    tokio::spawn(async move {
+                        tracing::debug!(
+                            from = %from_owned, to = %to_owned,
+                            provider = provider_name,
+                            "Stale-while-revalidate: refreshing in background"
+                        );
+                        match inner.get_rate(&from_owned, &to_owned).await {
+                            Ok(fresh_rate) => {
+                                let mut cache = cache.write().await;
+                                cache.insert(
+                                    (from_owned.to_uppercase(), to_owned.to_uppercase()),
+                                    CacheEntry {
+                                        rate: fresh_rate,
+                                        fetched_at: Instant::now(),
+                                    },
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    from = %from_owned, to = %to_owned,
+                                    error = %e,
+                                    "Background refresh failed, keeping stale entry"
+                                );
+                            }
+                        }
+                    });
+                }
+
+                tracing::debug!(
+                    from = %from, to = %to,
+                    provider = self.inner.name(),
+                    "Serving stale cache entry while refreshing"
+                );
+                return Ok(stale_rate);
             }
         }
 
-        // Cache miss or stale — fetch fresh rate
+        // Cache miss — fetch synchronously
         tracing::debug!(
             from = %from, to = %to,
             provider = self.inner.name(),
@@ -164,5 +220,54 @@ mod tests {
         cached.get_rate("eth", "usd").await.unwrap();
         cached.get_rate("ETH", "USD").await.unwrap();
         assert_eq!(inner.call_count(), 1); // same pair, different case
+    }
+
+    #[tokio::test]
+    async fn test_stale_while_revalidate() {
+        let inner = Arc::new(CountingProvider::new());
+        // Use a very short TTL so it expires immediately
+        let cached = CachedRateProvider::new(inner.clone(), Duration::from_millis(1));
+
+        // First call populates cache
+        cached.get_rate("ETH", "USD").await.unwrap();
+        assert_eq!(inner.call_count(), 1);
+
+        // Wait for TTL to expire
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // Second call should return stale value and trigger background refresh
+        let r2 = cached.get_rate("ETH", "USD").await.unwrap();
+        assert_eq!(r2.rate, Decimal::new(350000, 2)); // still the stale value
+
+        // Give the background task time to complete
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Inner provider should have been called again by the background task
+        assert_eq!(inner.call_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_cache_ttl_expiry_miss() {
+        let inner = Arc::new(CountingProvider::new());
+        // Short TTL
+        let cached = CachedRateProvider::new(inner.clone(), Duration::from_millis(1));
+
+        // First call
+        cached.get_rate("ETH", "USD").await.unwrap();
+        assert_eq!(inner.call_count(), 1);
+
+        // Wait for expiry
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // Second call returns stale, triggers refresh
+        cached.get_rate("ETH", "USD").await.unwrap();
+
+        // Let background refresh complete
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(inner.call_count(), 2);
+
+        // Third call within new TTL should be cached
+        cached.get_rate("ETH", "USD").await.unwrap();
+        assert_eq!(inner.call_count(), 2);
     }
 }

@@ -95,31 +95,30 @@ impl RateProvider for CoinGeckoRateProvider {
         }
 
         // Determine which is crypto and which is fiat
-        let (crypto_id, fiat_id, needs_invert) =
-            if let Some(id) = Self::to_coingecko_id(&from_upper) {
-                // from=crypto, to=fiat  (e.g., ETH -> USD)
-                let fiat = Self::to_coingecko_fiat(&to_upper).ok_or_else(|| {
-                    RateError::UnsupportedPair {
-                        from: from.to_string(),
-                        to: to.to_string(),
-                    }
-                })?;
-                (id, fiat, false)
-            } else if let Some(id) = Self::to_coingecko_id(&to_upper) {
-                // from=fiat, to=crypto  (e.g., USD -> ETH)
-                let fiat = Self::to_coingecko_fiat(&from_upper).ok_or_else(|| {
-                    RateError::UnsupportedPair {
-                        from: from.to_string(),
-                        to: to.to_string(),
-                    }
-                })?;
-                (id, fiat, true)
-            } else {
-                return Err(RateError::UnsupportedPair {
+        let (crypto_id, fiat_id, needs_invert) = if let Some(id) =
+            Self::to_coingecko_id(&from_upper)
+        {
+            // from=crypto, to=fiat  (e.g., ETH -> USD)
+            let fiat =
+                Self::to_coingecko_fiat(&to_upper).ok_or_else(|| RateError::UnsupportedPair {
                     from: from.to_string(),
                     to: to.to_string(),
-                });
-            };
+                })?;
+            (id, fiat, false)
+        } else if let Some(id) = Self::to_coingecko_id(&to_upper) {
+            // from=fiat, to=crypto  (e.g., USD -> ETH)
+            let fiat =
+                Self::to_coingecko_fiat(&from_upper).ok_or_else(|| RateError::UnsupportedPair {
+                    from: from.to_string(),
+                    to: to.to_string(),
+                })?;
+            (id, fiat, true)
+        } else {
+            return Err(RateError::UnsupportedPair {
+                from: from.to_string(),
+                to: to.to_string(),
+            });
+        };
 
         let url = format!(
             "{}/simple/price?ids={}&vs_currencies={}",
@@ -179,9 +178,18 @@ mod tests {
 
     #[test]
     fn test_coingecko_id_mapping() {
-        assert_eq!(CoinGeckoRateProvider::to_coingecko_id("ETH"), Some("ethereum"));
-        assert_eq!(CoinGeckoRateProvider::to_coingecko_id("BTC"), Some("bitcoin"));
-        assert_eq!(CoinGeckoRateProvider::to_coingecko_id("USDT"), Some("tether"));
+        assert_eq!(
+            CoinGeckoRateProvider::to_coingecko_id("ETH"),
+            Some("ethereum")
+        );
+        assert_eq!(
+            CoinGeckoRateProvider::to_coingecko_id("BTC"),
+            Some("bitcoin")
+        );
+        assert_eq!(
+            CoinGeckoRateProvider::to_coingecko_id("USDT"),
+            Some("tether")
+        );
         assert_eq!(CoinGeckoRateProvider::to_coingecko_id("XYZ"), None);
     }
 

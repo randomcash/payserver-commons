@@ -34,6 +34,13 @@ pub enum RateError {
     /// Rate is stale or unavailable.
     #[error("Rate unavailable")]
     Unavailable,
+
+    /// Rate is too old to be used safely.
+    #[error("Rate too stale: fetched at {timestamp}, max age {max_age_secs}s")]
+    TooStale {
+        timestamp: DateTime<Utc>,
+        max_age_secs: u64,
+    },
 }
 
 /// An exchange rate between two currencies.
@@ -47,6 +54,13 @@ pub struct ExchangeRate {
     pub rate: Decimal,
     /// When this rate was fetched.
     pub timestamp: DateTime<Utc>,
+}
+
+impl ExchangeRate {
+    /// Check whether this rate is older than `max_age`.
+    pub fn is_stale(&self, max_age: chrono::Duration) -> bool {
+        Utc::now() - self.timestamp > max_age
+    }
 }
 
 /// Trait for exchange rate providers.
@@ -64,13 +78,6 @@ pub trait RateProvider: Send + Sync {
     ///
     /// # Returns
     /// The exchange rate where 1 `from` = `rate` `to`.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let rate = provider.get_rate("USD", "ETH").await?;
-    /// // If rate.rate = 0.0005, then 1 USD = 0.0005 ETH
-    /// let eth_amount = usd_amount * rate.rate;
-    /// ```
     async fn get_rate(&self, from: &str, to: &str) -> Result<ExchangeRate, RateError>;
 
     /// Get the name of this rate provider.
@@ -125,8 +132,8 @@ impl RateProviderConfig {
     /// - `RATE_FALLBACK_PROVIDER` - Fallback provider (default: "coingecko", set "none" to disable)
     /// - `RATE_CACHE_TTL_SECS` - Cache TTL in seconds (default: 30, 0 = disabled)
     pub fn from_env() -> Self {
-        let fallback = env::var("RATE_FALLBACK_PROVIDER")
-            .unwrap_or_else(|_| "coingecko".to_string());
+        let fallback =
+            env::var("RATE_FALLBACK_PROVIDER").unwrap_or_else(|_| "coingecko".to_string());
         Self {
             provider: env::var("RATE_PROVIDER").unwrap_or_else(|_| "kraken".to_string()),
             api_url: env::var("RATE_PROVIDER_URL").ok(),
@@ -197,10 +204,7 @@ mod tests {
         let config = RateProviderConfig::default();
         assert_eq!(config.provider, "kraken");
         assert!(config.api_url.is_none());
-        assert_eq!(
-            config.fallback_provider,
-            Some("coingecko".to_string())
-        );
+        assert_eq!(config.fallback_provider, Some("coingecko".to_string()));
         assert_eq!(config.cache_ttl_secs, 30);
     }
 
@@ -221,7 +225,7 @@ mod tests {
     fn test_create_provider_disabled() {
         let config = RateProviderConfig::new("none");
         let provider = config.create_provider();
-        assert_eq!(provider.name(), "noop");
+        assert_eq!(provider.name(), "none");
     }
 
     #[test]
@@ -231,5 +235,30 @@ mod tests {
         config.cache_ttl_secs = 0;
         let provider = config.create_provider();
         assert_eq!(provider.name(), "coingecko");
+    }
+
+    #[test]
+    fn test_exchange_rate_is_stale() {
+        let rate = ExchangeRate {
+            from: "USD".to_string(),
+            to: "ETH".to_string(),
+            rate: Decimal::new(5, 4), // 0.0005
+            timestamp: Utc::now() - chrono::Duration::seconds(120),
+        };
+        // 120s old, max_age 60s -> stale
+        assert!(rate.is_stale(chrono::Duration::seconds(60)));
+        // 120s old, max_age 300s -> not stale
+        assert!(!rate.is_stale(chrono::Duration::seconds(300)));
+    }
+
+    #[test]
+    fn test_exchange_rate_fresh() {
+        let rate = ExchangeRate {
+            from: "USD".to_string(),
+            to: "ETH".to_string(),
+            rate: Decimal::new(5, 4),
+            timestamp: Utc::now(),
+        };
+        assert!(!rate.is_stale(chrono::Duration::seconds(60)));
     }
 }

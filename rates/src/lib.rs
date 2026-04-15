@@ -4,7 +4,7 @@
 //! - Fiat currency detection
 //! - Exchange rate provider trait
 //! - Kraken and CoinGecko rate provider implementations
-//! - Caching wrapper with configurable TTL
+//! - Caching wrapper with configurable TTL and stale-while-revalidate
 //! - Fallback provider for automatic failover
 //!
 //! # Configuration
@@ -17,14 +17,15 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use rates::{RateProvider, KrakenRateProvider, is_fiat_currency};
+//! use rates::{RateProvider, RateProviderConfig, is_fiat_currency};
 //!
 //! // Check if currency is fiat
 //! assert!(is_fiat_currency("USD"));
 //! assert!(!is_fiat_currency("ETH"));
 //!
-//! // Fetch exchange rate
-//! let provider = KrakenRateProvider::new(None);
+//! // Create a provider with caching and fallback
+//! let config = RateProviderConfig::default();
+//! let provider = config.create_provider();
 //! let rate = provider.get_rate("USD", "ETH").await?;
 //! println!("1 USD = {} ETH", rate.rate);
 //! ```
