@@ -72,6 +72,7 @@ pub use repositories::{
     WatchedAddressRepository,
     WatchedAddressWriter,
     // Webhook Delivery
+    CreateDeliveryParams,
     WebhookDeliveryReader,
     WebhookDeliveryRepository,
     WebhookDeliveryWriter,

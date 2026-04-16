@@ -53,7 +53,8 @@ pub use store_webhook::{StoreWebhookReader, StoreWebhookRepository, StoreWebhook
 pub use token::{TokenQueryParams, TokenReader, TokenRepository, TokenWriter};
 pub use watched_address::{WatchedAddressReader, WatchedAddressRepository, WatchedAddressWriter};
 pub use webhook_delivery::{
-    WebhookDeliveryReader, WebhookDeliveryRepository, WebhookDeliveryWriter,
+    CreateDeliveryParams, WebhookDeliveryReader, WebhookDeliveryRepository,
+    WebhookDeliveryWriter,
 };
 
 /// Combined data service trait with full read/write access to all repositories.

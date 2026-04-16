@@ -6,6 +6,19 @@ use uuid::Uuid;
 use super::RepositoryResult;
 use crate::types::WebhookDelivery;
 
+/// Parameters for creating a webhook delivery record.
+pub struct CreateDeliveryParams {
+    pub store_id: Uuid,
+    pub event_type: String,
+    pub payload: serde_json::Value,
+    pub http_status: Option<i16>,
+    pub response_body: Option<String>,
+    pub latency_ms: i32,
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub attempt_number: i32,
+}
+
 /// Read operations for webhook deliveries.
 #[async_trait]
 pub trait WebhookDeliveryReader: Send + Sync {
@@ -27,18 +40,8 @@ pub trait WebhookDeliveryReader: Send + Sync {
 #[async_trait]
 pub trait WebhookDeliveryWriter: Send + Sync {
     /// Record a webhook delivery attempt.
-    async fn create_delivery(
-        &self,
-        store_id: Uuid,
-        event_type: &str,
-        payload: serde_json::Value,
-        http_status: Option<i16>,
-        response_body: Option<&str>,
-        latency_ms: i32,
-        success: bool,
-        error_message: Option<&str>,
-        attempt_number: i32,
-    ) -> RepositoryResult<WebhookDelivery>;
+    async fn create_delivery(&self, params: CreateDeliveryParams)
+        -> RepositoryResult<WebhookDelivery>;
 }
 
 /// Combined webhook delivery repository.
