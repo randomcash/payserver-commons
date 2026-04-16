@@ -40,8 +40,10 @@ pub trait WebhookDeliveryReader: Send + Sync {
 #[async_trait]
 pub trait WebhookDeliveryWriter: Send + Sync {
     /// Record a webhook delivery attempt.
-    async fn create_delivery(&self, params: CreateDeliveryParams)
-        -> RepositoryResult<WebhookDelivery>;
+    async fn create_delivery(
+        &self,
+        params: CreateDeliveryParams,
+    ) -> RepositoryResult<WebhookDelivery>;
 }
 
 /// Combined webhook delivery repository.
