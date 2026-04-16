@@ -18,6 +18,6 @@ pub use ids::{InvoiceId, UserId};
 pub use invoice::{AssetType, InvoiceStatus};
 pub use network::Network;
 pub use payment_option::{PaymentMethodId, PaymentOptionData, PaymentOptionId};
-pub use store::{StorePaymentMethod, StoreWallet, StoreWebhook};
+pub use store::{StorePaymentMethod, StoreWallet, StoreWebhook, WebhookDelivery};
 pub use token::TokenData;
 pub use watched_address::{CleanupAddressInfo, PendingWatchInfo};
