@@ -62,10 +62,6 @@ pub use repositories::{
     StoreWebhookReader,
     StoreWebhookRepository,
     StoreWebhookWriter,
-    // Webhook Delivery
-    WebhookDeliveryReader,
-    WebhookDeliveryRepository,
-    WebhookDeliveryWriter,
     // Token
     TokenQueryParams,
     TokenReader,
@@ -75,6 +71,10 @@ pub use repositories::{
     WatchedAddressReader,
     WatchedAddressRepository,
     WatchedAddressWriter,
+    // Webhook Delivery
+    WebhookDeliveryReader,
+    WebhookDeliveryRepository,
+    WebhookDeliveryWriter,
 };
 pub use store::{Store, StoreId, StoreInfo};
 pub use traits::{
