@@ -2,6 +2,10 @@ stages:
   - lint
   - check
 
+default:
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq mold >/dev/null 2>&1
+
 variables:
   # sccache — compile cache persisted via runner volume mount
   RUSTC_WRAPPER: "/usr/local/bin/sccache"
@@ -56,6 +60,7 @@ audit:
       fi
       mkdir -p ${CARGO_HOME:-$HOME/.cargo}
       ln -sfn /cargo-advisory-db ${CARGO_HOME:-$HOME/.cargo}/advisory-db
+    - cargo install cargo-audit --locked --quiet
     - cargo audit --no-fetch
   timeout: 10 minutes
   allow_failure: true
