@@ -246,6 +246,9 @@ pub fn AuthGuard(
 ) -> impl IntoView {
     let auth = use_auth();
 
+    // Used only when auth feature is enabled
+    #[cfg(not(feature = "auth"))]
+    let _ = &redirect_to;
     #[cfg(feature = "auth")]
     let redirect_url = redirect_to.unwrap_or_else(|| "/login".to_string());
 
@@ -295,6 +298,9 @@ pub fn AdminGuard(
 ) -> impl IntoView {
     let auth = use_auth();
 
+    // Used only when auth feature is enabled
+    #[cfg(not(feature = "auth"))]
+    let _ = (&redirect_to, &forbidden_redirect);
     #[cfg(feature = "auth")]
     let login_url = redirect_to.unwrap_or_else(|| "/login".to_string());
     // Note: forbidden_url would be used for admin role checking (TODO)
