@@ -7,6 +7,8 @@ variables:
   RUSTC_WRAPPER: "/usr/local/bin/sccache"
   SCCACHE_DIR: "/sccache"
   SCCACHE_CACHE_SIZE: "20G"
+  # mold linker — ~10× faster than default ld for Rust binaries
+  RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
   # CARGO_INCREMENTAL is useless on clean CI runners and only slows things down
   # (do not set it; default is off when RUSTC_WRAPPER is active anyway).
 
@@ -26,7 +28,7 @@ test:
   needs: ["lint"]
   script:
     - sccache --start-server 2>/dev/null || true
-    - cargo test --workspace --lib --no-fail-fast
+    - cargo nextest run --workspace --lib --no-fail-fast
     - sccache --show-stats || true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
