@@ -1,35 +1,66 @@
 stages:
+  - lint
   - check
 
 variables:
-  CARGO_INCREMENTAL: "1"
+  # sccache — compile cache persisted via runner volume mount
+  RUSTC_WRAPPER: "/usr/local/bin/sccache"
+  SCCACHE_DIR: "/sccache"
+  SCCACHE_CACHE_SIZE: "20G"
+  # CARGO_INCREMENTAL is useless on clean CI runners and only slows things down
+  # (do not set it; default is off when RUSTC_WRAPPER is active anyway).
 
 lint:
-  stage: check
+  stage: lint
   script:
+    - sccache --start-server 2>/dev/null || true
     - cargo fmt --all -- --check
     - cargo clippy --workspace --all-targets -- -D warnings
+    - sccache --show-stats || true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
 
 test:
   stage: check
+  needs: ["lint"]
   script:
+    - sccache --start-server 2>/dev/null || true
     - cargo test --workspace --lib --no-fail-fast
+    - sccache --show-stats || true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - "**/*.rs"
+        - "**/Cargo.toml"
+        - "**/Cargo.lock"
+        - .gitlab-ci.yml
     - if: $CI_COMMIT_BRANCH == "main"
 
 audit:
   stage: check
+  needs: ["lint"]
   script:
-    - git config --global --unset-all url."ssh://git@github.com/".insteadOf || true
-    - rm -rf ${CARGO_HOME:-$HOME/.cargo}/advisory-db
-    - git clone --depth 1 https://github.com/RustSec/advisory-db.git ${CARGO_HOME:-$HOME/.cargo}/advisory-db
+    # Use the persistent advisory-db cache from the runner volume, falling
+    # back to a clone if the cache is missing.
+    - |
+      if [ -d /cargo-advisory-db/.git ]; then
+        echo "Refreshing cached advisory-db"
+        git -C /cargo-advisory-db fetch --quiet --depth 1 origin master 2>/dev/null || true
+        git -C /cargo-advisory-db reset --hard origin/master 2>/dev/null || true
+      else
+        echo "Cloning advisory-db to cache"
+        git clone --depth 1 https://github.com/RustSec/advisory-db.git /cargo-advisory-db
+      fi
+      mkdir -p ${CARGO_HOME:-$HOME/.cargo}
+      ln -sfn /cargo-advisory-db ${CARGO_HOME:-$HOME/.cargo}/advisory-db
     - cargo audit --no-fetch
   timeout: 10 minutes
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - "**/Cargo.toml"
+        - "**/Cargo.lock"
+        - .gitlab-ci.yml
     - if: $CI_COMMIT_BRANCH == "main"
