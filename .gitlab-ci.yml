@@ -60,6 +60,7 @@ audit:
       fi
       mkdir -p ${CARGO_HOME:-$HOME/.cargo}
       ln -sfn /cargo-advisory-db ${CARGO_HOME:-$HOME/.cargo}/advisory-db
+    - cargo install cargo-audit --locked --quiet
     - cargo audit --no-fetch
   timeout: 10 minutes
   allow_failure: true
