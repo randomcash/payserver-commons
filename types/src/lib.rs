@@ -48,6 +48,14 @@ pub use repositories::{
     PaymentReader,
     PaymentRepository,
     PaymentWriter,
+    // Payout
+    PayoutReader,
+    PayoutRepository,
+    PayoutWriter,
+    // Refund
+    RefundReader,
+    RefundRepository,
+    RefundWriter,
     // Errors
     RepositoryError,
     RepositoryResult,
@@ -68,14 +76,6 @@ pub use repositories::{
     TokenReader,
     TokenRepository,
     TokenWriter,
-    // Payout
-    PayoutReader,
-    PayoutRepository,
-    PayoutWriter,
-    // Refund
-    RefundReader,
-    RefundRepository,
-    RefundWriter,
     // Watched Address (for PostgreSQL persistence)
     WatchedAddressReader,
     WatchedAddressRepository,
