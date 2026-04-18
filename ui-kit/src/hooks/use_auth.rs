@@ -251,6 +251,8 @@ pub fn AuthGuard(
     let _ = &redirect_to;
     #[cfg(feature = "auth")]
     let redirect_url = redirect_to.unwrap_or_else(|| "/login".to_string());
+    #[cfg(not(feature = "auth"))]
+    let _ = redirect_to;
 
     view! {
         {move || match auth.state.get() {
@@ -306,6 +308,8 @@ pub fn AdminGuard(
     // Note: forbidden_url would be used for admin role checking (TODO)
     #[cfg(feature = "auth")]
     let _forbidden_url = forbidden_redirect.unwrap_or_else(|| "/".to_string());
+    #[cfg(not(feature = "auth"))]
+    let _ = (redirect_to, forbidden_redirect);
 
     view! {
         {move || match auth.state.get() {
