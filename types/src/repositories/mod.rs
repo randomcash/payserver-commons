@@ -35,6 +35,7 @@ mod store_wallet;
 mod store_webhook;
 mod token;
 mod watched_address;
+mod webhook_delivery;
 
 pub use error::{RepositoryError, RepositoryResult};
 pub use invoice::{InvoiceQueryParams, InvoiceReader, InvoiceRepository, InvoiceWriter};
@@ -51,6 +52,9 @@ pub use store_wallet::{StoreWalletReader, StoreWalletRepository, StoreWalletWrit
 pub use store_webhook::{StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter};
 pub use token::{TokenQueryParams, TokenReader, TokenRepository, TokenWriter};
 pub use watched_address::{WatchedAddressReader, WatchedAddressRepository, WatchedAddressWriter};
+pub use webhook_delivery::{
+    CreateDeliveryParams, WebhookDeliveryReader, WebhookDeliveryRepository, WebhookDeliveryWriter,
+};
 
 /// Combined data service trait with full read/write access to all repositories.
 ///

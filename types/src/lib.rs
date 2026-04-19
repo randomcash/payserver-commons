@@ -23,6 +23,7 @@ pub mod types;
 // Re-export commonly used types at the crate root for convenience.
 pub use error::{PayServerError, PayServerResult};
 pub use repositories::{
+    CreateDeliveryParams,
     // Combined traits
     DataService,
     DataServiceReader,
@@ -71,6 +72,10 @@ pub use repositories::{
     WatchedAddressReader,
     WatchedAddressRepository,
     WatchedAddressWriter,
+    // Webhook Delivery
+    WebhookDeliveryReader,
+    WebhookDeliveryRepository,
+    WebhookDeliveryWriter,
 };
 pub use store::{Store, StoreId, StoreInfo};
 pub use traits::{
@@ -80,5 +85,5 @@ pub use traits::{
 pub use types::{
     AssetType, CleanupAddressInfo, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent,
     PaymentMethodId, PaymentOptionData, PaymentOptionId, PendingWatchInfo, StorePaymentMethod,
-    StoreWallet, StoreWebhook, TokenData, UserId,
+    StoreWallet, StoreWebhook, TokenData, UserId, WebhookDelivery,
 };
