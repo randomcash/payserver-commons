@@ -62,6 +62,12 @@ pub fn color_for_network(network: &Network) -> NetworkColor {
 
         // Scroll - orange
         Network::Scroll => NetworkColor::Orange,
+
+        // Fantom - blue (brand color)
+        Network::Fantom => NetworkColor::Blue,
+
+        // Gnosis - green (brand color)
+        Network::Gnosis => NetworkColor::Green,
     }
 }
 
@@ -216,6 +222,8 @@ mod tests {
             NetworkColor::Yellow
         );
         assert_eq!(color_for_network(&Network::Scroll), NetworkColor::Orange);
+        assert_eq!(color_for_network(&Network::Fantom), NetworkColor::Blue);
+        assert_eq!(color_for_network(&Network::Gnosis), NetworkColor::Green);
     }
 
     #[test]
@@ -234,6 +242,8 @@ mod tests {
             Network::ZkSync,
             Network::Linea,
             Network::Scroll,
+            Network::Fantom,
+            Network::Gnosis,
         ];
 
         for network in networks {

@@ -237,6 +237,7 @@ pub fn use_auth() -> AuthContext {
 /// When the `auth` feature is enabled, this will redirect to the login page
 /// if the user is not authenticated.
 #[component]
+#[allow(unused_variables)]
 pub fn AuthGuard(
     children: ChildrenFn,
     /// URL to redirect to if not authenticated (default: "/login").
@@ -289,6 +290,7 @@ pub fn AuthGuard(
 ///
 /// This is similar to AuthGuard but also checks for admin role.
 #[component]
+#[allow(unused_variables)]
 pub fn AdminGuard(
     children: ChildrenFn,
     /// URL to redirect to if not authenticated (default: "/login").

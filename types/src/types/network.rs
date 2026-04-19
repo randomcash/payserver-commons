@@ -41,6 +41,10 @@ pub enum Network {
     Linea,
     /// Scroll
     Scroll,
+    /// Fantom Opera
+    Fantom,
+    /// Gnosis (formerly xDai)
+    Gnosis,
 }
 
 impl Network {
@@ -58,6 +62,8 @@ impl Network {
                 | Network::ZkSync
                 | Network::Linea
                 | Network::Scroll
+                | Network::Fantom
+                | Network::Gnosis
         )
     }
 
@@ -81,6 +87,8 @@ impl Network {
             Network::ZkSync => "zkSync",
             Network::Linea => "Linea",
             Network::Scroll => "Scroll",
+            Network::Fantom => "Fantom",
+            Network::Gnosis => "Gnosis",
         }
     }
 
@@ -98,6 +106,8 @@ impl Network {
             Network::ZkSync => "ETH",
             Network::Linea => "ETH",
             Network::Scroll => "ETH",
+            Network::Fantom => "FTM",
+            Network::Gnosis => "xDAI",
         }
     }
 
@@ -116,6 +126,8 @@ impl Network {
             Self::ZkSync => "zksync",
             Self::Linea => "linea",
             Self::Scroll => "scroll",
+            Self::Fantom => "fantom",
+            Self::Gnosis => "gnosis",
         }
     }
 }
@@ -143,6 +155,8 @@ impl std::str::FromStr for Network {
             "zksync" | "zk_sync" => Ok(Self::ZkSync),
             "linea" => Ok(Self::Linea),
             "scroll" => Ok(Self::Scroll),
+            "fantom" | "ftm" => Ok(Self::Fantom),
+            "gnosis" | "xdai" => Ok(Self::Gnosis),
             _ => Err(format!("unknown network: {}", s)),
         }
     }
@@ -175,6 +189,8 @@ mod tests {
         assert_eq!(Network::Polygon.native_symbol(), "POL");
         assert_eq!(Network::Avalanche.native_symbol(), "AVAX");
         assert_eq!(Network::BinanceSmartChain.native_symbol(), "BNB");
+        assert_eq!(Network::Fantom.native_symbol(), "FTM");
+        assert_eq!(Network::Gnosis.native_symbol(), "xDAI");
     }
 
     #[test]
@@ -196,6 +212,10 @@ mod tests {
             "bsc".parse::<Network>().unwrap(),
             Network::BinanceSmartChain
         );
+        assert_eq!("fantom".parse::<Network>().unwrap(), Network::Fantom);
+        assert_eq!("ftm".parse::<Network>().unwrap(), Network::Fantom);
+        assert_eq!("gnosis".parse::<Network>().unwrap(), Network::Gnosis);
+        assert_eq!("xdai".parse::<Network>().unwrap(), Network::Gnosis);
         assert!("invalid".parse::<Network>().is_err());
     }
 }
