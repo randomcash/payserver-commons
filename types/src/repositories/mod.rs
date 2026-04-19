@@ -30,6 +30,8 @@ mod live_watched_address;
 mod payment;
 mod payment_event;
 mod payment_option;
+mod payout;
+mod refund;
 mod store_payment_method;
 mod store_wallet;
 mod store_webhook;
@@ -45,6 +47,8 @@ pub use live_watched_address::{
 pub use payment::{PaymentQueryParams, PaymentReader, PaymentRepository, PaymentWriter};
 pub use payment_event::PaymentEventWriter;
 pub use payment_option::{PaymentOptionReader, PaymentOptionRepository, PaymentOptionWriter};
+pub use payout::{PayoutReader, PayoutRepository, PayoutWriter};
+pub use refund::{RefundReader, RefundRepository, RefundWriter};
 pub use store_payment_method::{
     StorePaymentMethodReader, StorePaymentMethodRepository, StorePaymentMethodWriter,
 };
