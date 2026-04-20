@@ -4,6 +4,7 @@ stages:
 
 default:
   timeout: 1 hour
+  image: registry.gitlab.com/random.cash/payserver-commons/ci-base:rust-1.94
 
 variables:
   CARGO_BUILD_JOBS: "4"
@@ -13,7 +14,6 @@ variables:
   RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
 
 before_script:
-  - apt-get update -qq && apt-get install -y -qq mold >/dev/null 2>&1 || true
   - sccache --start-server 2>/dev/null || true
 
 # One verify job replaces the old split lint + test. Keeps CARGO_TARGET_DIR
@@ -35,10 +35,6 @@ audit:
   stage: audit
   needs: []
   script:
-    - |
-      if ! command -v cargo-audit >/dev/null 2>&1; then
-        cargo install cargo-audit --locked --quiet
-      fi
     - |
       if [ -d /cargo-advisory-db/.git ]; then
         echo "Refreshing cached advisory-db"
