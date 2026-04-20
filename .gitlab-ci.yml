@@ -1,54 +1,44 @@
 stages:
-  - lint
-  - check
+  - verify
+  - audit
 
 default:
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq mold >/dev/null 2>&1
+  timeout: 1 hour
 
 variables:
-  # sccache — compile cache persisted via runner volume mount
+  CARGO_BUILD_JOBS: "4"
   RUSTC_WRAPPER: "/usr/local/bin/sccache"
   SCCACHE_DIR: "/sccache"
   SCCACHE_CACHE_SIZE: "20G"
-  # mold linker — ~10× faster than default ld for Rust binaries
   RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
-  # CARGO_INCREMENTAL is useless on clean CI runners and only slows things down
-  # (do not set it; default is off when RUSTC_WRAPPER is active anyway).
 
-lint:
-  stage: lint
+before_script:
+  - apt-get update -qq && apt-get install -y -qq mold >/dev/null 2>&1 || true
+  - sccache --start-server 2>/dev/null || true
+
+# One verify job replaces the old split lint + test. Keeps CARGO_TARGET_DIR
+# hot between fmt/clippy/nextest so each cargo invocation reuses rmeta.
+verify:
+  stage: verify
+  resource_group: rust-compile
   script:
-    - sccache --start-server 2>/dev/null || true
     - cargo fmt --all -- --check
     - cargo clippy --workspace --all-targets -- -D warnings
-    - sccache --show-stats || true
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == "main"
-
-test:
-  stage: check
-  needs: ["lint"]
-  script:
-    - sccache --start-server 2>/dev/null || true
     - cargo nextest run --workspace --lib --no-fail-fast
     - sccache --show-stats || true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - "**/*.rs"
-        - "**/Cargo.toml"
-        - "**/Cargo.lock"
-        - .gitlab-ci.yml
     - if: $CI_COMMIT_BRANCH == "main"
 
+# Advisory-only. Runs on main merges — never blocks MRs.
 audit:
-  stage: check
-  needs: ["lint"]
+  stage: audit
+  needs: []
   script:
-    # Use the persistent advisory-db cache from the runner volume, falling
-    # back to a clone if the cache is missing.
+    - |
+      if ! command -v cargo-audit >/dev/null 2>&1; then
+        cargo install cargo-audit --locked --quiet
+      fi
     - |
       if [ -d /cargo-advisory-db/.git ]; then
         echo "Refreshing cached advisory-db"
@@ -60,14 +50,8 @@ audit:
       fi
       mkdir -p ${CARGO_HOME:-$HOME/.cargo}
       ln -sfn /cargo-advisory-db ${CARGO_HOME:-$HOME/.cargo}/advisory-db
-    - cargo install cargo-audit --locked --quiet
     - cargo audit --no-fetch
-  timeout: 10 minutes
+  timeout: 15 minutes
   allow_failure: true
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - "**/Cargo.toml"
-        - "**/Cargo.lock"
-        - .gitlab-ci.yml
     - if: $CI_COMMIT_BRANCH == "main"
