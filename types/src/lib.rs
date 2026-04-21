@@ -63,6 +63,10 @@ pub use repositories::{
     StorePaymentMethodReader,
     StorePaymentMethodRepository,
     StorePaymentMethodWriter,
+    // Store Settings
+    StoreSettingsReader,
+    StoreSettingsRepository,
+    StoreSettingsWriter,
     // Store Wallet (deprecated)
     StoreWalletReader,
     StoreWalletRepository,
@@ -93,6 +97,6 @@ pub use traits::{
 pub use types::{
     AssetType, CleanupAddressInfo, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent,
     PaymentMethodId, PaymentOptionData, PaymentOptionId, PayoutData, PayoutStatus,
-    PendingWatchInfo, RefundData, RefundStatus, StorePaymentMethod, StoreWallet, StoreWebhook,
-    TokenData, UserId, WebhookDelivery,
+    PendingWatchInfo, RefundData, RefundStatus, StorePaymentMethod, StoreSettings, StoreWallet,
+    StoreWebhook, TokenData, UserId, WebhookDelivery,
 };

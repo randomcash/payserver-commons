@@ -53,6 +53,23 @@ pub struct StoreWebhook {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Store-level settings for defaults, branding, and notification preferences.
+#[derive(Debug, Clone)]
+pub struct StoreSettings {
+    pub store_id: Uuid,
+    /// Default chain ID for new invoices (null = no default).
+    pub default_chain_id: Option<i64>,
+    /// Default fiat display currency (e.g. "USD").
+    pub default_display_currency: Option<String>,
+    /// Logo URL for checkout branding.
+    pub logo_url: Option<String>,
+    /// Accent color hex (e.g. "#FF5500").
+    pub accent_color: Option<String>,
+    /// Per-event notification preferences: `{"event_name": {"webhook": bool}}`.
+    pub notification_prefs: serde_json::Value,
+    pub updated_at: DateTime<Utc>,
+}
+
 /// Record of a single webhook delivery attempt.
 #[derive(Debug, Clone)]
 pub struct WebhookDelivery {
