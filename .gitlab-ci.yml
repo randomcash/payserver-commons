@@ -20,7 +20,6 @@ before_script:
 # hot between fmt/clippy/nextest so each cargo invocation reuses rmeta.
 verify:
   stage: verify
-  resource_group: rust-compile
   script:
     - cargo fmt --all -- --check
     - cargo clippy --workspace --all-targets -- -D warnings
