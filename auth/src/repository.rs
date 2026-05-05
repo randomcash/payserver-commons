@@ -645,7 +645,7 @@ pub mod inmemory {
         async fn list_users(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
             let users = self.users.read().unwrap_or_else(|e| e.into_inner());
             let mut all: Vec<User> = users.values().cloned().collect();
-            all.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            all.sort_by_key(|u| std::cmp::Reverse(u.created_at));
             Ok(all
                 .into_iter()
                 .skip(offset as usize)
