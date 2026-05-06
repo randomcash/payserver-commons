@@ -262,6 +262,10 @@ impl StoredSession {
         // js_sys::Date::parse() returns parsed time in milliseconds
         let now = js_sys::Date::now();
         let expires = js_sys::Date::parse(&self.expires_at);
+        // Date::parse returns NaN for unparseable strings; treat as expired
+        if expires.is_nan() {
+            return true;
+        }
         now > expires
     }
 }
