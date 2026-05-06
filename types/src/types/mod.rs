@@ -12,6 +12,7 @@ mod payment_option;
 mod payout;
 mod refund;
 mod store;
+mod store_token_policy;
 mod token;
 mod watched_address;
 
@@ -23,5 +24,8 @@ pub use payment_option::{PaymentMethodId, PaymentOptionData, PaymentOptionId};
 pub use payout::{PayoutData, PayoutStatus};
 pub use refund::{RefundData, RefundStatus};
 pub use store::{StorePaymentMethod, StoreSettings, StoreWallet, StoreWebhook, WebhookDelivery};
+pub use store_token_policy::{
+    StoreTokenPolicy, StoreTokenPolicyEntry, StoreTokenPolicyWithEntries, TokenPolicyMode,
+};
 pub use token::TokenData;
 pub use watched_address::{CleanupAddressInfo, PendingWatchInfo};

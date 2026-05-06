@@ -34,6 +34,7 @@ mod payout;
 mod refund;
 mod store_payment_method;
 mod store_settings;
+mod store_token_policy;
 mod store_wallet;
 mod store_webhook;
 mod token;
@@ -54,6 +55,10 @@ pub use store_payment_method::{
     StorePaymentMethodReader, StorePaymentMethodRepository, StorePaymentMethodWriter,
 };
 pub use store_settings::{StoreSettingsReader, StoreSettingsRepository, StoreSettingsWriter};
+pub use store_token_policy::{
+    StoreTokenPolicyReader, StoreTokenPolicyRepository, StoreTokenPolicyWriter,
+    TokenPolicyEntryInput,
+};
 pub use store_wallet::{StoreWalletReader, StoreWalletRepository, StoreWalletWriter};
 pub use store_webhook::{StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter};
 pub use token::{TokenQueryParams, TokenReader, TokenRepository, TokenWriter};
