@@ -125,6 +125,7 @@ pub use models::{
     PublicKeyCredential,
     RegisterPublicKeyCredential,
     RequestChallengeResponse,
+    ServerSettings,
     Session,
     SessionId,
     StartNewUserPasskeyRegistrationResponse,
@@ -149,8 +150,8 @@ pub use models::{
 pub use permissions::{Permission, Policies, Role};
 pub use repository::{
     ApiKeyRepository, AuthRepository, ChallengeRepository, DeviceRepository, PasskeyRepository,
-    SessionRepository, StoreRepository, StoreRoleRepository, UserRepository, UserStoreRepository,
-    WalletRepository,
+    ServerSettingsRepository, SessionRepository, StoreRepository, StoreRoleRepository,
+    UserRepository, UserStoreRepository, WalletRepository,
 };
 pub use service::{AuthConfig, AuthService, WebAuthnAuthService};
 pub use store::{

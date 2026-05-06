@@ -215,6 +215,38 @@ impl User {
     }
 }
 
+/// Server-wide configuration managed by administrators.
+///
+/// Uses a single-row pattern in the database (id always = 1).
+/// Contains payment defaults, rate limits, and enabled chain IDs.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ServerSettings {
+    /// Default number of block confirmations for payments.
+    pub default_confirmations: i32,
+
+    /// Default invoice expiry time in minutes.
+    pub invoice_expiry_minutes: i32,
+
+    /// Global rate limit in requests per minute.
+    pub rate_limit_rpm: i32,
+
+    /// Chain IDs enabled for payment processing.
+    pub enabled_chain_ids: Vec<i64>,
+}
+
+impl Default for ServerSettings {
+    fn default() -> Self {
+        Self {
+            default_confirmations: 3,
+            invoice_expiry_minutes: 60,
+            rate_limit_rpm: 100,
+            enabled_chain_ids: vec![
+                1, 10, 137, 42161, 8453, 56, 43114, 250, 100, 324, 59144, 534352,
+            ],
+        }
+    }
+}
+
 /// A registered device that can access the user's account.
 ///
 /// Each device stores the user's encrypted symmetric key for offline access.

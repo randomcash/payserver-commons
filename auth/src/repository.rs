@@ -47,6 +47,22 @@ pub trait UserRepository: Send + Sync {
 
     /// Unlock user account.
     async fn unlock_user(&self, id: UserId) -> Result<()>;
+
+    /// List users with pagination, ordered by created_at descending.
+    async fn list_users(&self, offset: i64, limit: i64) -> Result<Vec<User>>;
+
+    /// Count total number of users.
+    async fn count_users(&self) -> Result<i64>;
+}
+
+/// Repository for server settings persistence.
+#[async_trait]
+pub trait ServerSettingsRepository: Send + Sync {
+    /// Get current server settings (None if not yet configured).
+    async fn get_server_settings(&self) -> Result<Option<crate::models::ServerSettings>>;
+
+    /// Create or update server settings (single-row pattern).
+    async fn upsert_server_settings(&self, settings: &crate::models::ServerSettings) -> Result<()>;
 }
 
 /// Repository for device data persistence.
@@ -401,6 +417,7 @@ pub trait AuthRepository:
     + StoreRoleRepository
     + UserStoreRepository
     + ApiKeyRepository
+    + ServerSettingsRepository
 {
 }
 
@@ -416,6 +433,7 @@ impl<T> AuthRepository for T where
         + StoreRoleRepository
         + UserStoreRepository
         + ApiKeyRepository
+        + ServerSettingsRepository
 {
 }
 
@@ -455,6 +473,8 @@ pub mod inmemory {
         // API keys
         api_keys: RwLock<HashMap<ApiKeyId, ApiKey>>,
         api_keys_by_hash: RwLock<HashMap<String, ApiKeyId>>,
+        // Server settings
+        server_settings: RwLock<Option<crate::models::ServerSettings>>,
     }
 
     impl InMemoryRepository {
@@ -620,6 +640,45 @@ pub mod inmemory {
             } else {
                 Err(AuthError::UserNotFound(id.to_string()))
             }
+        }
+
+        async fn list_users(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
+            let users = self.users.read().unwrap_or_else(|e| e.into_inner());
+            let mut all: Vec<User> = users.values().cloned().collect();
+            all.sort_by_key(|u| std::cmp::Reverse(u.created_at));
+            Ok(all
+                .into_iter()
+                .skip(offset as usize)
+                .take(limit as usize)
+                .collect())
+        }
+
+        async fn count_users(&self) -> Result<i64> {
+            let users = self.users.read().unwrap_or_else(|e| e.into_inner());
+            Ok(users.len() as i64)
+        }
+    }
+
+    #[async_trait]
+    impl ServerSettingsRepository for InMemoryRepository {
+        async fn get_server_settings(&self) -> Result<Option<crate::models::ServerSettings>> {
+            let settings = self
+                .server_settings
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+            Ok(settings.clone())
+        }
+
+        async fn upsert_server_settings(
+            &self,
+            settings: &crate::models::ServerSettings,
+        ) -> Result<()> {
+            let mut stored = self
+                .server_settings
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
+            *stored = Some(settings.clone());
+            Ok(())
         }
     }
 
