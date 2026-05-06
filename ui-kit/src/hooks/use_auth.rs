@@ -84,7 +84,7 @@ impl AuthContext {
     /// Load session from localStorage and update state.
     /// Returns true if a valid session was found.
     /// Note: This only checks localStorage, not the server. Use `validate_session`
-    /// for server-side validation.
+    /// for server-side validation. State remains `Loading` until validation completes.
     #[cfg(feature = "auth")]
     pub fn load_session(&self) -> bool {
         web_sys::console::log_1(&"[AuthContext] load_session called".into());
@@ -92,16 +92,12 @@ impl AuthContext {
             web_sys::console::log_1(
                 &format!("[AuthContext] Found session: {:?}", session.session_id).into(),
             );
-            // Create user from stored session
-            let user = User {
-                id: session.session_id.to_string(),
-                email: session.email.clone(),
-                display_name: session.email.or(session.wallet_address),
-            };
-
-            self.set_state.set(AuthState::Authenticated(user));
+            // Set token so validate_session can use it, but keep state as
+            // Loading until the server confirms the session is still valid.
             self.set_token.set(Some(session.session_id.to_string()));
-            web_sys::console::log_1(&"[AuthContext] State set to Authenticated".into());
+            web_sys::console::log_1(
+                &"[AuthContext] Token set, state stays Loading until validation".into(),
+            );
             true
         } else {
             web_sys::console::log_1(&"[AuthContext] No session found, setting Anonymous".into());
@@ -113,13 +109,12 @@ impl AuthContext {
     /// Validate the current session with the server.
     /// If the session is invalid or expired on the server, clears the local session.
     /// This should be called after `load_session` to ensure the session is still valid.
+    /// On success, transitions state from Loading to Authenticated.
     #[cfg(feature = "auth")]
     pub async fn validate_session(&self, api: &crate::hooks::use_api::ApiClient) {
-        // Only validate if we think we're authenticated
-        if !matches!(self.state.get_untracked(), AuthState::Authenticated(_)) {
-            web_sys::console::log_1(
-                &"[AuthContext] validate_session: Not authenticated, skipping".into(),
-            );
+        // Only validate if we have a token (load_session sets token but keeps state Loading)
+        if self.token.get_untracked().is_none() {
+            web_sys::console::log_1(&"[AuthContext] validate_session: No token, skipping".into());
             return;
         }
 
