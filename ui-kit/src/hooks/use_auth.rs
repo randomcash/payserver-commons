@@ -114,9 +114,7 @@ impl AuthContext {
     pub async fn validate_session(&self, api: &crate::hooks::use_api::ApiClient) {
         // Only validate if we have a token (load_session sets token but keeps state Loading)
         if self.token.get_untracked().is_none() {
-            web_sys::console::log_1(
-                &"[AuthContext] validate_session: No token, skipping".into(),
-            );
+            web_sys::console::log_1(&"[AuthContext] validate_session: No token, skipping".into());
             return;
         }
 
