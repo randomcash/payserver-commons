@@ -250,6 +250,20 @@ pub fn AuthGuard(
     #[cfg(not(feature = "auth"))]
     let _ = redirect_to;
 
+    // Drive navigation from an Effect keyed on auth.state, not from the view closure.
+    // Navigating from within render (even via spawn_local) is fragile and can be
+    // dropped on the initial pass, leaving the user stuck on "Redirecting to login...".
+    #[cfg(feature = "auth")]
+    {
+        let navigate = use_navigate();
+        let url = redirect_url.clone();
+        Effect::new(move |_| {
+            if matches!(auth.state.get(), AuthState::Anonymous) {
+                navigate(&url, Default::default());
+            }
+        });
+    }
+
     view! {
         {move || match auth.state.get() {
             AuthState::Authenticated(_) => children().into_any(),
@@ -259,24 +273,11 @@ pub fn AuthGuard(
                     <p>"Loading..."</p>
                 </div>
             }.into_any(),
-            AuthState::Anonymous => {
-                // When auth feature is enabled, redirect to login
-                #[cfg(feature = "auth")]
-                {
-                    let navigate = use_navigate();
-                    let url = redirect_url.clone();
-                    // Use spawn_local to avoid calling navigate during render
-                    leptos::task::spawn_local(async move {
-                        navigate(&url, Default::default());
-                    });
-                }
-
-                view! {
-                    <div class="ps-auth-required">
-                        <p>"Redirecting to login..."</p>
-                    </div>
-                }.into_any()
-            }
+            AuthState::Anonymous => view! {
+                <div class="ps-auth-required">
+                    <p>"Redirecting to login..."</p>
+                </div>
+            }.into_any(),
         }}
     }
 }
@@ -308,6 +309,20 @@ pub fn AdminGuard(
     #[cfg(not(feature = "auth"))]
     let _ = (redirect_to, forbidden_redirect);
 
+    // Drive navigation from an Effect keyed on auth.state, not from the view closure.
+    // Navigating from within render (even via spawn_local) is fragile and can be
+    // dropped on the initial pass, leaving the user stuck on "Redirecting to login...".
+    #[cfg(feature = "auth")]
+    {
+        let navigate = use_navigate();
+        let url = login_url.clone();
+        Effect::new(move |_| {
+            if matches!(auth.state.get(), AuthState::Anonymous) {
+                navigate(&url, Default::default());
+            }
+        });
+    }
+
     view! {
         {move || match auth.state.get() {
             AuthState::Authenticated(ref _user) => {
@@ -321,22 +336,11 @@ pub fn AdminGuard(
                     <p>"Loading..."</p>
                 </div>
             }.into_any(),
-            AuthState::Anonymous => {
-                #[cfg(feature = "auth")]
-                {
-                    let navigate = use_navigate();
-                    let url = login_url.clone();
-                    leptos::task::spawn_local(async move {
-                        navigate(&url, Default::default());
-                    });
-                }
-
-                view! {
-                    <div class="ps-auth-required">
-                        <p>"Redirecting to login..."</p>
-                    </div>
-                }.into_any()
-            }
+            AuthState::Anonymous => view! {
+                <div class="ps-auth-required">
+                    <p>"Redirecting to login..."</p>
+                </div>
+            }.into_any(),
         }}
     }
 }
