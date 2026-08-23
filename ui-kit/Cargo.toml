@@ -13,6 +13,10 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # Shared types from payserver-commons
 types = { path = "../types" }
+# Real recovery-phrase generation and client-side key wrapping (RCS-193).
+# Optional so the base ui-kit (no auth) does not pull in argon2/aes.
+crypto = { path = "../crypto", optional = true }
+sha2 = { version = "0.10", optional = true }
 
 # Leptos framework
 leptos = { version = "0.7", features = ["csr"] }
@@ -62,7 +66,7 @@ default = []
 # Enable wasm_bindgen(start) for standalone use - disable when used as a library
 module-init = []
 # Enable authentication components (login, register, wallet connect, passkey)
-auth = ["dep:uuid", "dep:base64"]
+auth = ["dep:uuid", "dep:base64", "dep:crypto", "dep:sha2"]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

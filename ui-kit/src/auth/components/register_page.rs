@@ -39,7 +39,11 @@ pub enum RegisterStep {
 }
 
 /// Registration state for tracking the flow.
-#[derive(Debug, Clone, Default)]
+///
+/// Deliberately NOT `Debug`: `mnemonic_words` holds the account's real recovery
+/// phrase for the lifetime of the page, and a derived `Debug` means any
+/// `log!("{:?}", state)` added later prints it to the console (RCS-193).
+#[derive(Clone, Default)]
 struct RegistrationState {
     wallet_address: Option<String>,
     user_id: Option<crate::auth::types::UserId>,
@@ -108,14 +112,21 @@ pub fn RegisterPage(
             {
                 Ok(response) => match sign_message(&address, &response.challenge_message).await {
                     Ok(signature) => {
-                        set_reg_state.set(RegistrationState {
-                            wallet_address: Some(response.address),
-                            user_id: Some(response.user_id),
-                            signature: Some(signature),
-                            mnemonic_words: generate_placeholder_mnemonic(),
-                            ..Default::default()
-                        });
-                        set_step.set(RegisterStep::Recovery);
+                        match generate_recovery_mnemonic() {
+                            Ok(mnemonic_words) => {
+                                set_reg_state.set(RegistrationState {
+                                    wallet_address: Some(response.address),
+                                    user_id: Some(response.user_id),
+                                    signature: Some(signature),
+                                    mnemonic_words,
+                                    ..Default::default()
+                                });
+                                set_step.set(RegisterStep::Recovery);
+                            }
+                            // Fail closed: never show a recovery screen we
+                            // cannot back with real entropy.
+                            Err(e) => set_error.set(Some(e)),
+                        }
                         set_loading.set(false);
                     }
                     Err(e) => {
@@ -142,13 +153,18 @@ pub fn RegisterPage(
             match api.start_passkey_register(token.as_deref()).await {
                 Ok(response) => match create_credential(&response.options).await {
                     Ok(credential) => {
-                        set_reg_state.set(RegistrationState {
-                            user_id: Some(response.user_id),
-                            passkey_credential: Some(credential),
-                            mnemonic_words: generate_placeholder_mnemonic(),
-                            ..Default::default()
-                        });
-                        set_step.set(RegisterStep::Recovery);
+                        match generate_recovery_mnemonic() {
+                            Ok(mnemonic_words) => {
+                                set_reg_state.set(RegistrationState {
+                                    user_id: Some(response.user_id),
+                                    passkey_credential: Some(credential),
+                                    mnemonic_words,
+                                    ..Default::default()
+                                });
+                                set_step.set(RegisterStep::Recovery);
+                            }
+                            Err(e) => set_error.set(Some(e)),
+                        }
                         set_passkey_state.set(PasskeyState::Ready);
                     }
                     Err(e) => {
@@ -179,7 +195,24 @@ pub fn RegisterPage(
             set_error.set(None);
 
             leptos::task::spawn_local(async move {
-                let (kdf_params, encrypted_key, recovery_hash) = generate_placeholder_crypto();
+                // Argon2id below is 64 MiB / t=3 and runs synchronously on the
+                // main thread. `spawn_local` schedules on a microtask, so without
+                // an explicit macrotask yield the browser never paints between
+                // `set_loading(true)` and the KDF — the button keeps reading
+                // "Complete Setup" while the tab locks up, for a second on
+                // desktop and far longer on a low-end phone. One frame is enough
+                // to let the loading state render first.
+                gloo_timers::future::TimeoutFuture::new(16).await;
+
+                let (kdf_params, encrypted_key, recovery_hash) =
+                    match derive_recovery_crypto(&state) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            set_error.set(Some(e));
+                            set_loading.set(false);
+                            return;
+                        }
+                    };
 
                 let result = if let (Some(user_id), Some(address), Some(signature)) = (
                     state.user_id,
@@ -389,34 +422,104 @@ pub fn RegisterPage(
     }
 }
 
-// TODO: Replace with real BIP39 mnemonic generation using payserver-commons/crypto crate
-fn generate_placeholder_mnemonic() -> Vec<String> {
-    vec![
-        "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd",
-        "abuse", "access", "accident",
-    ]
-    .into_iter()
-    .map(|s| s.to_string())
-    .collect()
+/// Generate a real 24-word BIP-39 recovery phrase.
+///
+/// Entropy comes from `crypto`'s `RecoveryMnemonic::generate`, which on wasm32
+/// routes `getrandom` to `crypto.getRandomValues` via the `js` feature. That
+/// dependency fails to *compile* for wasm without an explicit entropy source
+/// rather than silently degrading to a weak PRNG, so there is no path here that
+/// produces predictable words.
+///
+/// 24 words, not 12: the crate generates 256 bits of entropy and the recovery
+/// derivation is built around that.
+fn generate_recovery_mnemonic() -> Result<Vec<String>, String> {
+    crypto::mnemonic::RecoveryMnemonic::generate()
+        .map(|m| m.words().into_iter().map(str::to_string).collect())
+        .map_err(|e| format!("Could not generate a recovery phrase: {e}"))
 }
 
-// TODO: Replace with real crypto using payserver-commons/crypto crate
-// This generates real KDF params, encrypts the symmetric key with the recovery phrase,
-// and returns the verification hash for the mnemonic.
-fn generate_placeholder_crypto() -> (KdfParams, EncryptedBlob, String) {
-    (
-        KdfParams {
-            algorithm: "argon2id".to_string(),
-            memory_kb: 65536, // 64 MiB
-            iterations: 3,
-            parallelism: 4,
-            salt: "cGxhY2Vob2xkZXJfc2FsdA==".to_string(),
-        },
+/// The identifier the recovery KDF is salted with.
+///
+/// MUST match `auth::models::User::kdf_salt_identifier` on the server, which
+/// prefers email, then `wallet:{address}`, then `passkey:{user_id}`. Registration
+/// here has no email path, so only the latter two arise. If these ever disagree
+/// the stored verification hash can never be reproduced and the account becomes
+/// unrecoverable, so the two must be changed together.
+fn kdf_salt_identifier(state: &RegistrationState) -> Result<String, String> {
+    if let Some(ref wallet) = state.wallet_address {
+        Ok(format!("wallet:{wallet}"))
+    } else if let Some(user_id) = state.user_id {
+        Ok(format!("passkey:{user_id}"))
+    } else {
+        Err("No wallet address or user id to bind the recovery key to".to_string())
+    }
+}
+
+/// Derive the account's recovery material from the phrase shown to the user.
+///
+/// Replaces the former `generate_placeholder_crypto`, which returned literal
+/// base64 of "placeholder_salt"/"placeholder_ciphertext"/... for every account
+/// (RCS-193). Critically, that function also ignored the displayed phrase
+/// entirely — the words on screen and the stored crypto were independent
+/// placeholders, so even real word generation alone would not have made the
+/// phrase able to decrypt anything.
+///
+/// The shape the server expects (`auth::service::recovery`):
+///   recovery_key  = Argon2id(BIP39-seed(phrase), "payserver-recovery:{identifier}")
+///   recovery_hash = base64(SHA-256(recovery_key))
+///
+/// The user's symmetric key is generated fresh and wrapped with the stretched
+/// recovery key, so the phrase — and only the phrase — can unwrap it. The phrase
+/// is never sent to the server.
+fn derive_recovery_crypto(
+    state: &RegistrationState,
+) -> Result<(KdfParams, EncryptedBlob, String), String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+    use sha2::{Digest, Sha256};
+
+    if state.mnemonic_words.is_empty() {
+        return Err("No recovery phrase was generated for this registration".to_string());
+    }
+    let identifier = kdf_salt_identifier(state)?;
+    let phrase = state.mnemonic_words.join(" ");
+
+    let mnemonic = crypto::mnemonic::RecoveryMnemonic::from_phrase(&phrase)
+        .map_err(|e| format!("Recovery phrase failed validation: {e}"))?;
+
+    // Bound to the account identifier so the same phrase on another account
+    // yields a different key.
+    let recovery_key = mnemonic
+        .derive_recovery_key(&identifier)
+        .map_err(|e| format!("Could not derive the recovery key: {e}"))?;
+
+    // What the server stores and compares against on a recovery attempt. It
+    // reveals nothing about the phrase.
+    let recovery_hash = B64.encode(Sha256::digest(recovery_key.as_bytes()));
+
+    let stretched = crypto::kdf::stretch_master_key(&recovery_key)
+        .map_err(|e| format!("Could not stretch the recovery key: {e}"))?;
+    let symmetric_key = crypto::kdf::generate_symmetric_key();
+    let wrapped = crypto::symmetric::encrypt_key(&symmetric_key, &stretched)
+        .map_err(|e| format!("Could not wrap the account key: {e}"))?;
+
+    // Mirrors the constants inside `derive_recovery_key`. The salt is derived
+    // from the identifier rather than random, so recovery can reproduce it from
+    // the phrase and the identifier alone — there is nothing else to remember.
+    let kdf_params = KdfParams {
+        algorithm: "argon2id".to_string(),
+        memory_kb: 65536,
+        iterations: 3,
+        parallelism: 4,
+        salt: B64.encode(format!("payserver-recovery:{identifier}").as_bytes()),
+    };
+
+    Ok((
+        kdf_params,
         EncryptedBlob {
-            ciphertext: "cGxhY2Vob2xkZXJfY2lwaGVydGV4dA==".to_string(),
-            iv: "cGxhY2Vob2xkZXJfaXY=".to_string(),
-            mac: "cGxhY2Vob2xkZXJfbWFj".to_string(),
+            ciphertext: B64.encode(&wrapped.ciphertext),
+            iv: B64.encode(&wrapped.iv),
+            mac: B64.encode(&wrapped.mac),
         },
-        "cGxhY2Vob2xkZXJfcmVjb3ZlcnlfaGFzaA==".to_string(),
-    )
+        recovery_hash,
+    ))
 }
