@@ -96,6 +96,16 @@ pub struct User {
     #[schema(value_type = Object)]
     pub encrypted_symmetric_key: EncryptedBlob,
 
+    /// Identifier the recovery KDF was salted with **at registration**.
+    ///
+    /// Pinned rather than recomputed. `kdf_salt_identifier()` derives it from
+    /// email → wallet → passkey, all of which can change after the fact, while
+    /// `recovery_verification_hash` never moves. A wallet user who later adds an
+    /// email would otherwise become permanently unrecoverable (RCS-201).
+    ///
+    /// Treat as immutable: changing it invalidates the recovery hash.
+    pub kdf_salt_identifier: String,
+
     /// Hash of the recovery verification key (derived from mnemonic).
     /// Used to verify the user knows the mnemonic during recovery.
     /// This is base64(SHA-256(Argon2id(mnemonic, email))).
@@ -130,6 +140,7 @@ impl User {
     ) -> Self {
         Self {
             id: UserId::new(),
+            kdf_salt_identifier: email.clone(),
             email: Some(email),
             primary_wallet_address: None,
             kdf_params,
@@ -155,6 +166,7 @@ impl User {
     ) -> Self {
         Self {
             id: UserId::new(),
+            kdf_salt_identifier: format!("wallet:{}", wallet_address),
             email: None,
             primary_wallet_address: Some(wallet_address),
             kdf_params,
@@ -180,6 +192,7 @@ impl User {
     ) -> Self {
         Self {
             id: user_id,
+            kdf_salt_identifier: format!("passkey:{}", user_id),
             email: None,
             primary_wallet_address: None,
             kdf_params,
