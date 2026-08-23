@@ -4,10 +4,12 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
+use uuid::Uuid;
+
 use crate::error::{AuthError, Result};
 use crate::models::{
     CompleteRecoveryRequest, Device, LoginResponse, PasskeyCredential, Session,
-    StartPasskeyRegistrationResponse, StartRecoveryRequest,
+    StartPasskeyRegistrationResponse, StartRecoveryRequest, User, UserId,
 };
 use crate::repository::{
     ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository, UserRepository,
@@ -26,13 +28,49 @@ where
         + WalletRepository
         + ChallengeRepository,
 {
+    /// Resolve the user a recovery attempt refers to.
+    ///
+    /// Email, wallet address, or **account id**. The last exists for
+    /// passkey-only accounts (RCS-201): they have no email and no wallet, so
+    /// without it their recovery phrase is bound to `passkey:{user_id}` and no
+    /// endpoint will ever accept it.
+    ///
+    /// NOTE: the registration screen does not yet surface the account id, so a
+    /// passkey-only merchant has no way to learn the value this branch expects.
+    /// The path exists; it is not reachable by a user until that lands.
+    ///
+    /// Returns `None` rather than a distinguishing error so callers keep
+    /// answering `InvalidRecoveryMnemonic` and do not leak which accounts exist.
+    async fn resolve_recovery_user(&self, identifier: &str) -> Result<Option<User>> {
+        let lower = identifier.to_lowercase();
+
+        if lower.contains('@') {
+            validate_email(&lower)?;
+            return self.repo.get_user_by_email(&lower).await;
+        }
+        if lower.starts_with("0x") && lower.len() == 42 {
+            let checksummed = self.validate_and_checksum_address(identifier)?;
+            return self.repo.get_user_by_wallet_address(&checksummed).await;
+        }
+        if let Ok(id) = Uuid::parse_str(&lower) {
+            return self.repo.get_user(UserId(id)).await;
+        }
+
+        // Not recognisable as anything: fall through to email validation so the
+        // caller gets the same error shape as a malformed address would give.
+        validate_email(&lower)?;
+        self.repo.get_user_by_email(&lower).await
+    }
+
     /// Start account recovery using BIP39 mnemonic.
     ///
     /// This is step 1 of the recovery process. After verifying the mnemonic,
     /// returns a passkey registration challenge so the user can register a new passkey.
     ///
     /// The client must:
-    /// 1. Derive recovery key from mnemonic + email using Argon2id
+    /// 1. Derive recovery key from mnemonic + the account's pinned
+    ///    kdf_salt_identifier (email, `wallet:{addr}` or `passkey:{id}`)
+    ///    using Argon2id
     /// 2. Hash recovery key: base64(SHA-256(recovery_key)) for verification
     /// 3. Call this method with the hash
     /// 4. Use the returned challenge to register a new passkey
@@ -45,24 +83,7 @@ where
         &self,
         request: StartRecoveryRequest,
     ) -> Result<StartPasskeyRegistrationResponse> {
-        // The identifier can be an email or a wallet address
-        // Determine which one it is and normalize accordingly
-        let identifier_lower = request.identifier.to_lowercase();
-
-        // Try to find user by email first, then by wallet address
-        let user = if identifier_lower.contains('@') {
-            // Looks like an email
-            validate_email(&identifier_lower)?;
-            self.repo.get_user_by_email(&identifier_lower).await?
-        } else if identifier_lower.starts_with("0x") && identifier_lower.len() == 42 {
-            // Looks like an Ethereum address - normalize to checksummed format
-            let checksummed = self.validate_and_checksum_address(&request.identifier)?;
-            self.repo.get_user_by_wallet_address(&checksummed).await?
-        } else {
-            // Try email anyway
-            validate_email(&identifier_lower)?;
-            self.repo.get_user_by_email(&identifier_lower).await?
-        };
+        let user = self.resolve_recovery_user(&request.identifier).await?;
 
         // Return generic error to prevent user enumeration
         let user = match user {
@@ -102,7 +123,11 @@ where
         // We'll use the user's existing ID for the WebAuthn user handle
 
         // Use the identifier (email or wallet address) for WebAuthn registration
-        let user_identifier = user.kdf_salt_identifier();
+        // The pinned value, not the recomputed one: recomputing prefers email
+        // over wallet, so an account that gained an email after registration
+        // would derive a different salt than the stored hash was built from and
+        // could never be recovered (RCS-201).
+        let user_identifier = user.kdf_salt_identifier.clone();
 
         // Generate WebAuthn registration challenge
         let (ccr, passkey_registration) = self
@@ -141,30 +166,17 @@ where
         identifier: &str,
         request: CompleteRecoveryRequest,
     ) -> Result<LoginResponse> {
-        // The identifier can be an email or a wallet address
-        // Determine which one it is and normalize accordingly
-        let identifier_lower = identifier.to_lowercase();
-
-        // Try to find user by email first, then by wallet address
-        let user = if identifier_lower.contains('@') {
-            // Looks like an email
-            validate_email(&identifier_lower)?;
-            self.repo.get_user_by_email(&identifier_lower).await?
-        } else if identifier_lower.starts_with("0x") && identifier_lower.len() == 42 {
-            // Looks like an Ethereum address - normalize to checksummed format
-            let checksummed = self.validate_and_checksum_address(identifier)?;
-            self.repo.get_user_by_wallet_address(&checksummed).await?
-        } else {
-            // Try email anyway
-            validate_email(&identifier_lower)?;
-            self.repo.get_user_by_email(&identifier_lower).await?
-        };
+        let user = self.resolve_recovery_user(identifier).await?;
 
         // Find user - return generic error to prevent user enumeration
         let user = user.ok_or(AuthError::InvalidRecoveryMnemonic)?;
 
         // Get the user identifier for verification
-        let user_identifier = user.kdf_salt_identifier();
+        // The pinned value, not the recomputed one: recomputing prefers email
+        // over wallet, so an account that gained an email after registration
+        // would derive a different salt than the stored hash was built from and
+        // could never be recovered (RCS-201).
+        let user_identifier = user.kdf_salt_identifier.clone();
 
         // Retrieve the stored challenge state and verify identifier consistency
         let (passkey_registration, stored_identifier) = self

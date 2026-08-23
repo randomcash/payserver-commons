@@ -96,6 +96,16 @@ pub struct User {
     #[schema(value_type = Object)]
     pub encrypted_symmetric_key: EncryptedBlob,
 
+    /// Identifier the recovery KDF was salted with **at registration**.
+    ///
+    /// Pinned rather than recomputed. `kdf_salt_identifier()` derives it from
+    /// email → wallet → passkey, all of which can change after the fact, while
+    /// `recovery_verification_hash` never moves. A wallet user who later adds an
+    /// email would otherwise become permanently unrecoverable (RCS-201).
+    ///
+    /// Treat as immutable: changing it invalidates the recovery hash.
+    pub kdf_salt_identifier: String,
+
     /// Hash of the recovery verification key (derived from mnemonic).
     /// Used to verify the user knows the mnemonic during recovery.
     /// This is base64(SHA-256(Argon2id(mnemonic, email))).
@@ -130,6 +140,9 @@ impl User {
     ) -> Self {
         Self {
             id: UserId::new(),
+            // Lowercased: every lookup path normalises, so pinning the raw
+            // value would freeze a salt no client reproduces.
+            kdf_salt_identifier: email.to_lowercase(),
             email: Some(email),
             primary_wallet_address: None,
             kdf_params,
@@ -155,6 +168,7 @@ impl User {
     ) -> Self {
         Self {
             id: UserId::new(),
+            kdf_salt_identifier: format!("wallet:{}", wallet_address),
             email: None,
             primary_wallet_address: Some(wallet_address),
             kdf_params,
@@ -180,6 +194,7 @@ impl User {
     ) -> Self {
         Self {
             id: user_id,
+            kdf_salt_identifier: format!("passkey:{}", user_id),
             email: None,
             primary_wallet_address: None,
             kdf_params,
@@ -193,10 +208,18 @@ impl User {
         }
     }
 
-    /// Get the identifier used for KDF salt derivation.
+    /// Recompute the KDF salt identifier from current profile fields.
     ///
-    /// Returns the email if set, otherwise returns `wallet:{address}` format,
-    /// or `passkey:{user_id}` for passkey-only users.
+    /// Returns the email if set, otherwise `wallet:{address}`, or
+    /// `passkey:{user_id}`.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use the pinned `kdf_salt_identifier` field. Recomputing derives from \
+                mutable fields, so an account that gains an email after registration \
+                yields a different salt than its recovery_verification_hash was built \
+                from — permanently unrecoverable (RCS-201). Kept only for the \
+                migration backfill's reference semantics."
+    )]
     pub fn kdf_salt_identifier(&self) -> String {
         if let Some(ref email) = self.email {
             email.clone()
