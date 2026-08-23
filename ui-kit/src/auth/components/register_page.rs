@@ -39,7 +39,11 @@ pub enum RegisterStep {
 }
 
 /// Registration state for tracking the flow.
-#[derive(Debug, Clone, Default)]
+///
+/// Deliberately NOT `Debug`: `mnemonic_words` holds the account's real recovery
+/// phrase for the lifetime of the page, and a derived `Debug` means any
+/// `log!("{:?}", state)` added later prints it to the console (RCS-193).
+#[derive(Clone, Default)]
 struct RegistrationState {
     wallet_address: Option<String>,
     user_id: Option<crate::auth::types::UserId>,
@@ -191,6 +195,15 @@ pub fn RegisterPage(
             set_error.set(None);
 
             leptos::task::spawn_local(async move {
+                // Argon2id below is 64 MiB / t=3 and runs synchronously on the
+                // main thread. `spawn_local` schedules on a microtask, so without
+                // an explicit macrotask yield the browser never paints between
+                // `set_loading(true)` and the KDF — the button keeps reading
+                // "Complete Setup" while the tab locks up, for a second on
+                // desktop and far longer on a low-end phone. One frame is enough
+                // to let the loading state render first.
+                gloo_timers::future::TimeoutFuture::new(16).await;
+
                 let (kdf_params, encrypted_key, recovery_hash) =
                     match derive_recovery_crypto(&state) {
                         Ok(v) => v,
