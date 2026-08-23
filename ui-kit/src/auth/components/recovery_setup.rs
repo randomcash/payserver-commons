@@ -66,8 +66,13 @@ pub fn RecoverySetup(
                         <div class="ps-recovery-show">
                             <h3 class="ps-recovery-title">"Save Your Recovery Phrase"</h3>
                             <p class="ps-recovery-description">
-                                "Write down these " {word_count} " words in order. "
-                                "This is the only way to recover your account if you lose access."
+                                // Honest about the current state: the phrase is real and
+                                // bound to the account, but no recovery flow exists yet
+                                // (RCS-205), so promising it "recovers your account" is a
+                                // promise the product cannot keep today.
+                                "Write down these " {word_count} " words in order and keep them safe. "
+                                "Account recovery is not available yet — when it ships, this "
+                                "phrase is what will restore access, and it cannot be reissued."
                             </p>
 
                             <div class="ps-mnemonic-grid">
@@ -85,7 +90,8 @@ pub fn RecoverySetup(
                             <div class="ps-recovery-warning">
                                 <WarningIcon />
                                 <p>
-                                    "Never share your recovery phrase. Anyone with these words can access your account."
+                                    "Never share your recovery phrase. Once recovery ships, "
+                                    "anyone with these words will be able to take over your account."
                                 </p>
                             </div>
 
@@ -163,9 +169,10 @@ pub fn RecoverySetup(
                 RecoveryStep::Complete => view! {
                     <div class="ps-recovery-complete">
                         <SuccessIcon />
-                        <h3 class="ps-recovery-title">"Recovery Setup Complete"</h3>
+                        <h3 class="ps-recovery-title">"Recovery Phrase Saved"</h3>
                         <p class="ps-recovery-description">
-                            "Your account is now protected with a recovery phrase."
+                            "Keep it somewhere safe. Recovery is not available in this "
+                            "release, so it is not yet a way back into your account."
                         </p>
                     </div>
                 }.into_any(),
