@@ -33,8 +33,11 @@ where
     /// Email, wallet address, or **account id**. The last exists for
     /// passkey-only accounts (RCS-201): they have no email and no wallet, so
     /// without it their recovery phrase is bound to `passkey:{user_id}` and no
-    /// endpoint will ever accept it. The registration screen shows the account
-    /// id beside the phrase for exactly this purpose.
+    /// endpoint will ever accept it.
+    ///
+    /// NOTE: the registration screen does not yet surface the account id, so a
+    /// passkey-only merchant has no way to learn the value this branch expects.
+    /// The path exists; it is not reachable by a user until that lands.
     ///
     /// Returns `None` rather than a distinguishing error so callers keep
     /// answering `InvalidRecoveryMnemonic` and do not leak which accounts exist.

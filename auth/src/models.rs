@@ -140,7 +140,9 @@ impl User {
     ) -> Self {
         Self {
             id: UserId::new(),
-            kdf_salt_identifier: email.clone(),
+            // Lowercased: every lookup path normalises, so pinning the raw
+            // value would freeze a salt no client reproduces.
+            kdf_salt_identifier: email.to_lowercase(),
             email: Some(email),
             primary_wallet_address: None,
             kdf_params,
@@ -206,10 +208,18 @@ impl User {
         }
     }
 
-    /// Get the identifier used for KDF salt derivation.
+    /// Recompute the KDF salt identifier from current profile fields.
     ///
-    /// Returns the email if set, otherwise returns `wallet:{address}` format,
-    /// or `passkey:{user_id}` for passkey-only users.
+    /// Returns the email if set, otherwise `wallet:{address}`, or
+    /// `passkey:{user_id}`.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use the pinned `kdf_salt_identifier` field. Recomputing derives from \
+                mutable fields, so an account that gains an email after registration \
+                yields a different salt than its recovery_verification_hash was built \
+                from — permanently unrecoverable (RCS-201). Kept only for the \
+                migration backfill's reference semantics."
+    )]
     pub fn kdf_salt_identifier(&self) -> String {
         if let Some(ref email) = self.email {
             email.clone()

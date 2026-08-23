@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::error::AuthError;
 use crate::models::{
     DeviceId, PasskeyId, SessionId, StartNewUserWalletRegistrationRequest,
-    StartPasskeyRegistrationRequest, StartRecoveryRequest, StartWalletLoginRequest,
+    StartPasskeyRegistrationRequest, StartRecoveryRequest, StartWalletLoginRequest, User, UserId,
 };
 use crate::repository::inmemory::InMemoryRepository;
 
@@ -402,4 +402,92 @@ async fn test_wallet_challenge_uses_consistent_timestamp() {
         "Timestamp should be valid RFC3339: {}",
         timestamp_str
     );
+}
+
+// --- RCS-201 -----------------------------------------------------------------
+// Both halves of the fix, because reverting either one previously passed the
+// entire suite and the regression only surfaces when a user needs recovery.
+
+/// The pinned identifier must survive the account gaining an email.
+///
+/// This is the RCS-201 bug: `kdf_salt_identifier()` prefers email over wallet,
+/// so recomputing after an email is added yields a different salt than the
+/// stored `recovery_verification_hash` was built from, and the account can
+/// never be recovered.
+#[test]
+fn pinned_identifier_survives_adding_an_email() {
+    let mut user = User::new_wallet_only(
+        "0x1111111111111111111111111111111111111111".to_string(),
+        crypto::KdfParams::default(),
+        crypto::EncryptedBlob {
+            ciphertext: vec![1],
+            iv: vec![2],
+            mac: vec![3],
+        },
+        "recovery-hash".to_string(),
+    );
+    let pinned_at_registration = user.kdf_salt_identifier.clone();
+    assert_eq!(
+        pinned_at_registration,
+        "wallet:0x1111111111111111111111111111111111111111"
+    );
+
+    user.email = Some("added.later@example.com".to_string());
+
+    assert_eq!(
+        user.kdf_salt_identifier, pinned_at_registration,
+        "adding an email must not change the pinned identifier"
+    );
+    #[allow(deprecated)]
+    let recomputed = user.kdf_salt_identifier();
+    assert_ne!(
+        recomputed, user.kdf_salt_identifier,
+        "recomputing now disagrees — which is exactly why the field is pinned"
+    );
+}
+
+/// Each constructor pins the identity fixed at that moment.
+#[test]
+fn constructors_pin_the_identifier() {
+    let wallet = User::new_wallet_only(
+        "0xAbCdEf1111111111111111111111111111111111".to_string(),
+        crypto::KdfParams::default(),
+        crypto::EncryptedBlob {
+            ciphertext: vec![1],
+            iv: vec![2],
+            mac: vec![3],
+        },
+        "h".to_string(),
+    );
+    assert_eq!(
+        wallet.kdf_salt_identifier,
+        "wallet:0xAbCdEf1111111111111111111111111111111111"
+    );
+
+    let id = UserId::new();
+    let passkey = User::new_passkey_only(
+        id,
+        crypto::KdfParams::default(),
+        crypto::EncryptedBlob {
+            ciphertext: vec![1],
+            iv: vec![2],
+            mac: vec![3],
+        },
+        "h".to_string(),
+    );
+    assert_eq!(passkey.kdf_salt_identifier, format!("passkey:{id}"));
+
+    // Lowercased: every lookup normalises, so pinning the raw value would
+    // freeze a salt no client reproduces.
+    let email = User::new(
+        "MiXeD@Example.COM".to_string(),
+        crypto::KdfParams::default(),
+        crypto::EncryptedBlob {
+            ciphertext: vec![1],
+            iv: vec![2],
+            mac: vec![3],
+        },
+        "h".to_string(),
+    );
+    assert_eq!(email.kdf_salt_identifier, "mixed@example.com");
 }
