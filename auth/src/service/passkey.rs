@@ -382,19 +382,21 @@ where
             .map(|p| p.passkey.cred_id().clone())
             .collect();
 
-        // Get user identifier (email or wallet address) for WebAuthn registration
-        let user_identifier = user_info
-            .email
-            .clone()
-            .or_else(|| {
-                user_info
-                    .primary_wallet_address
-                    .clone()
-                    .map(|w| format!("wallet:{}", w))
-            })
-            .ok_or_else(|| {
-                AuthError::Repository("User has neither email nor wallet address".into())
-            })?;
+        // The account's pinned identifier, so passkey-only users can add a second
+        // passkey. Recomputing email-or-wallet returned "User has neither email
+        // nor wallet address" for exactly the accounts with no other way back in:
+        // losing their single device meant recovery was the only route, and
+        // recovery had no UI (RCS-205).
+        //
+        // Safe against the recovery flow despite sharing the challenge slot:
+        // `start_account_recovery` namespaces its challenge `recovery:{…}`, so
+        // the two can never satisfy each other's identifier check (RCS-207).
+        let user = self
+            .repo
+            .get_user(user_info.id)
+            .await?
+            .ok_or_else(|| AuthError::UserNotFound(user_info.id.to_string()))?;
+        let user_identifier = user.kdf_salt_identifier.clone();
 
         // Generate WebAuthn registration challenge
         let (ccr, passkey_registration) = self

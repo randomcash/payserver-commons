@@ -138,11 +138,16 @@ impl User {
         encrypted_symmetric_key: EncryptedBlob,
         recovery_verification_hash: String,
     ) -> Self {
+        // Normalised once, here. Pinning the lowercased form while storing the
+        // raw one made the two repository backends disagree: Postgres looks up
+        // with `LOWER(email) = LOWER($1)` while InMemoryRepository is an exact
+        // match over the stored value, so a mixed-case registration was
+        // resolvable in production and invisible in tests. Storing the
+        // normalised form makes the pin, both indexes and the doc agree.
+        let email = email.to_lowercase();
         Self {
             id: UserId::new(),
-            // Lowercased: every lookup path normalises, so pinning the raw
-            // value would freeze a salt no client reproduces.
-            kdf_salt_identifier: email.to_lowercase(),
+            kdf_salt_identifier: email.clone(),
             email: Some(email),
             primary_wallet_address: None,
             kdf_params,
@@ -217,8 +222,10 @@ impl User {
         note = "use the pinned `kdf_salt_identifier` field. Recomputing derives from \
                 mutable fields, so an account that gains an email after registration \
                 yields a different salt than its recovery_verification_hash was built \
-                from — permanently unrecoverable (RCS-201). Kept only for the \
-                migration backfill's reference semantics."
+                from — permanently unrecoverable (RCS-201). NOT a reference for the \
+                migration backfill, which is deliberately wallet-before-email: a row \
+                holding both is by construction a wallet registration that gained an \
+                email later, and pinning the email would freeze the broken salt."
     )]
     pub fn kdf_salt_identifier(&self) -> String {
         if let Some(ref email) = self.email {

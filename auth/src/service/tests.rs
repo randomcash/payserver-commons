@@ -7,6 +7,7 @@ use crate::models::{
     DeviceId, PasskeyId, SessionId, StartNewUserWalletRegistrationRequest,
     StartPasskeyRegistrationRequest, StartRecoveryRequest, StartWalletLoginRequest, User, UserId,
 };
+use crate::repository::UserRepository;
 use crate::repository::inmemory::InMemoryRepository;
 
 use super::AuthService;
@@ -490,4 +491,74 @@ fn constructors_pin_the_identifier() {
         "h".to_string(),
     );
     assert_eq!(email.kdf_salt_identifier, "mixed@example.com");
+}
+
+/// The account-id branch resolves passkey-only accounts, and ONLY those.
+///
+/// Deleting the `Uuid::parse_str` arm previously passed the whole suite. It also
+/// guards the RCS-204 narrowing: user ids are not secret, so accepting one for an
+/// account that has an email or wallet would hand anyone who learns it a free
+/// route to the lockout counter.
+#[tokio::test]
+async fn account_id_resolves_only_passkey_only_accounts() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    let blob = crypto::EncryptedBlob {
+        ciphertext: vec![1],
+        iv: vec![2],
+        mac: vec![3],
+    };
+
+    let passkey_only = User::new_passkey_only(
+        UserId::new(),
+        crypto::KdfParams::default(),
+        blob.clone(),
+        "h".to_string(),
+    );
+    let wallet_user = User::new_wallet_only(
+        "0x3333333333333333333333333333333333333333".to_string(),
+        crypto::KdfParams::default(),
+        blob,
+        "h".to_string(),
+    );
+    repo.create_user(&passkey_only).await.unwrap();
+    repo.create_user(&wallet_user).await.unwrap();
+
+    // Passkey-only: the id resolves, so we reach the hash comparison and fail
+    // there rather than bouncing off identifier validation.
+    let err = service
+        .start_account_recovery(StartRecoveryRequest {
+            identifier: passkey_only.id.to_string(),
+            recovery_verification_hash: "wrong".to_string(),
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, AuthError::InvalidRecoveryMnemonic),
+        "passkey-only id should resolve and fail on the hash, got {err:?}"
+    );
+
+    // Wallet account: the id must NOT resolve, so it cannot be driven to lockout
+    // by anyone who happens to know it.
+    let err = service
+        .start_account_recovery(StartRecoveryRequest {
+            identifier: wallet_user.id.to_string(),
+            recovery_verification_hash: "wrong".to_string(),
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, AuthError::InvalidRecoveryMnemonic),
+        "must stay indistinguishable from a miss, got {err:?}"
+    );
+    assert_eq!(
+        repo.get_user(wallet_user.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .failed_login_attempts,
+        0,
+        "an unresolvable id must not touch the wallet account's lockout counter"
+    );
 }
