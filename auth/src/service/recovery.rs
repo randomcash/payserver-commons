@@ -53,7 +53,14 @@ where
             return self.repo.get_user_by_wallet_address(&checksummed).await;
         }
         if let Ok(id) = Uuid::parse_str(&lower) {
-            return self.repo.get_user(UserId(id)).await;
+            // Only for accounts that genuinely have no other handle. User ids are
+            // not secret — they come back from both registration-start responses
+            // and `UserInfo`, and are the WebAuthn user handle — so accepting them
+            // for every account would let anyone who learns one drive an account
+            // to `max_failed_attempts` and lock it (RCS-204). Passkey-only accounts
+            // have no alternative, so they take that trade; nobody else needs to.
+            let user = self.repo.get_user(UserId(id)).await?;
+            return Ok(user.filter(|u| u.email.is_none() && u.primary_wallet_address.is_none()));
         }
 
         // Not recognisable as anything: fall through to email validation so the
@@ -140,9 +147,18 @@ where
             )
             .map_err(|e| AuthError::WebAuthn(e.to_string()))?;
 
-        // Store the challenge state with identifier for consistency verification
+        // Namespaced. The challenge slot is keyed by user_id alone and is shared
+        // with `start_passkey_registration`, which stores a bare `email` /
+        // `wallet:{addr}` — byte-identical to the pinned identifier. Without a
+        // namespace, a session-authenticated add-passkey challenge satisfies
+        // `complete_account_recovery`'s only gate, and since that method verifies
+        // no recovery secret, any valid session escalates to permanent account
+        // takeover: every passkey and session revoked, recovery material replaced,
+        // real owner locked out with no way back. The prefix makes the two flows'
+        // challenges mutually unusable.
+        let challenge_identifier = format!("recovery:{user_identifier}");
         self.repo
-            .store_registration_challenge(user.id, &user_identifier, passkey_registration)
+            .store_registration_challenge(user.id, &challenge_identifier, passkey_registration)
             .await?;
 
         Ok(StartPasskeyRegistrationResponse { options: ccr })
@@ -185,8 +201,12 @@ where
             .await?
             .ok_or(AuthError::PasskeyChallengeExpired)?;
 
-        // Verify the identifier matches what was used in start_account_recovery
-        if stored_identifier != user_identifier {
+        // Must match the namespaced value written by `start_account_recovery`.
+        // A challenge minted by any other flow — notably the session-authenticated
+        // add-passkey path, which shares this slot — cannot satisfy this, so
+        // reaching here proves `start_account_recovery` verified the recovery hash.
+        let expected_identifier = format!("recovery:{user_identifier}");
+        if stored_identifier != expected_identifier {
             return Err(AuthError::PasskeyChallengeExpired);
         }
 
