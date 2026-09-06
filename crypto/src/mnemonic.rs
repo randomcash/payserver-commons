@@ -78,12 +78,14 @@ impl RecoveryMnemonic {
 
         // Additional strengthening with Argon2id
         // This makes brute-forcing the mnemonic much harder
-        let salt = format!("payserver-recovery:{}", user_id);
+        // Shared definition, so this cannot drift from what registration and
+        // recovery rebuild (RCS-200).
+        let salt = crate::recovery_salt::recovery_salt_for(user_id);
 
         let params = Params::new(
-            65536, // 64 MB memory
-            3,     // 3 iterations
-            4,     // 4 parallelism
+            crate::recovery_salt::RECOVERY_MEMORY_KB,
+            crate::recovery_salt::RECOVERY_ITERATIONS,
+            crate::recovery_salt::RECOVERY_PARALLELISM,
             Some(32),
         )
         .map_err(|e| {

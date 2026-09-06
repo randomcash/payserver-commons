@@ -115,6 +115,31 @@ impl ApiClient {
     }
 
     // ========================================================================
+    // Account Recovery
+    // ========================================================================
+
+    /// Start account recovery: prove possession of the phrase, get a passkey
+    /// challenge plus the material needed to rebuild the account.
+    pub async fn start_recovery(
+        &self,
+        req: StartRecoveryRequest,
+    ) -> Result<StartRecoveryResponse, ApiError> {
+        self.post("/auth/recovery/start", &req).await
+    }
+
+    /// Complete account recovery: register the new passkey and re-wrap the
+    /// account key under the new recovery phrase.
+    ///
+    /// Revokes every existing passkey, device and session server-side, so the
+    /// caller is logged in as the returned session and nothing else survives.
+    pub async fn complete_recovery(
+        &self,
+        req: CompleteRecoveryRequest,
+    ) -> Result<LoginResponse, ApiError> {
+        self.post("/auth/recovery/complete", &req).await
+    }
+
+    // ========================================================================
     // Session Management
     // ========================================================================
 
