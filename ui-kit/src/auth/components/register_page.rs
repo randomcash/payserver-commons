@@ -58,7 +58,21 @@ pub fn RegisterPage(
     #[prop(optional)] api_url: Option<String>,
     #[prop(optional, default = "/".to_string())] redirect_to: String,
     #[prop(optional, default = "/login".to_string())] login_url: String,
-    #[prop(optional, default = false)] require_recovery: bool,
+    /// Whether the recovery step must be completed to finish registration.
+    ///
+    /// Defaults to `true`: skipping binds the account to a phrase the user
+    /// explicitly declined to record, and the phrase is the account recovery
+    /// mechanism - the thing `/auth/recovery/start` redeems - not merely a data
+    /// key. There is no password to fall back on, so a merchant who skips has
+    /// no route back in once they lose their passkey or wallet (RCS-214).
+    ///
+    /// Recovery redemption has no UI yet (RCS-205), so nobody can redeem the
+    /// phrase today either way. That is exactly why the default matters now:
+    /// every account registered before that ships is enrolled either with a
+    /// recorded phrase or without one, and the ones without cannot be fixed
+    /// retroactively.
+    #[prop(optional, default = true)]
+    require_recovery: bool,
 ) -> impl IntoView {
     let (active_tab, set_active_tab) = signal(RegisterTab::Wallet);
     let (step, set_step) = signal(RegisterStep::Connect);
