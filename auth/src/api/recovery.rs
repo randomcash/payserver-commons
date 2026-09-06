@@ -5,8 +5,8 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
-    AuthenticationService, CompleteRecoveryRequest, LoginResponse,
-    StartPasskeyRegistrationResponse, StartRecoveryRequest,
+    AuthenticationService, CompleteRecoveryRequest, LoginResponse, StartRecoveryRequest,
+    StartRecoveryResponse,
 };
 
 use super::AuthState;
@@ -33,14 +33,14 @@ pub struct StartRecoveryRequestBody {
     tag = "recovery",
     request_body = StartRecoveryRequestBody,
     responses(
-        (status = 200, description = "Recovery challenge created", body = StartPasskeyRegistrationResponse),
+        (status = 200, description = "Recovery challenge, KDF params and wrapped account key", body = StartRecoveryResponse),
         (status = 400, description = "Invalid identifier or recovery hash"),
     )
 )]
 pub async fn start_recovery<A: AuthenticationService>(
     State(state): State<AuthState<A>>,
     Json(body): Json<StartRecoveryRequestBody>,
-) -> Result<Json<StartPasskeyRegistrationResponse>, (StatusCode, String)> {
+) -> Result<Json<StartRecoveryResponse>, (StatusCode, String)> {
     // Unauthenticated endpoint reachable with a public identifier, and it no
     // longer defends itself by locking the victim's account (RCS-204). CAPTCHA
     // is what makes automated abuse expensive to the caller instead.

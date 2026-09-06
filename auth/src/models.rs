@@ -740,6 +740,54 @@ pub struct StartPasskeyRegistrationResponse {
     pub options: CreationChallengeResponse,
 }
 
+/// Response to `POST /auth/recovery/start`, after the recovery hash verifies.
+///
+/// Carries more than the WebAuthn challenge because a client cannot rebuild an
+/// account from the phrase alone (RCS-200):
+///
+/// - **`kdf_params`** — the recovery hash depends on the Argon2id cost, not just
+///   the phrase and salt. Without the account's actual parameters the client has
+///   to hardcode a constant and hope it still matches, so raising the cost as
+///   hardware improves would make every existing account unrecoverable.
+/// - **`encrypted_symmetric_key`** — the account's data key, wrapped under the
+///   recovery key. The phrase can already unwrap it; the client was simply never
+///   handed it, so recovery had no choice but to mint a fresh key, and the server
+///   overwrote the old one. That discards the merchant's encrypted data even
+///   though they held the correct phrase and did everything right.
+///
+/// # Why returning these is safe
+///
+/// Both are released **only after** the constant-time hash comparison succeeds,
+/// so the caller has already proven possession of the recovery phrase. The
+/// wrapped key is useless without the recovery key derived from that phrase, and
+/// anyone who can reach this point could complete recovery anyway. Nothing is
+/// disclosed that the caller could not already obtain.
+///
+/// This response is deliberately NOT `StartPasskeyRegistrationResponse`: that
+/// type is also used for ordinary passkey registration, where a caller has not
+/// proven anything and must not receive account key material.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct StartRecoveryResponse {
+    /// WebAuthn credential creation options for the new passkey.
+    #[schema(value_type = Object)]
+    pub options: CreationChallengeResponse,
+
+    /// The account's KDF parameters, as pinned at registration.
+    ///
+    /// Use these to derive; do not assume the current defaults.
+    #[schema(value_type = Object)]
+    pub kdf_params: KdfParams,
+
+    /// The account's symmetric key, wrapped under the recovery key.
+    ///
+    /// Unwrap with the recovery key derived from the phrase, then re-wrap under
+    /// the new recovery key and send it back as
+    /// `CompleteRecoveryRequest::new_encrypted_symmetric_key`. Generating a fresh
+    /// key instead is what silently destroys the account's data.
+    #[schema(value_type = Object)]
+    pub encrypted_symmetric_key: EncryptedBlob,
+}
+
 /// Response for starting NEW USER passkey registration.
 /// Includes the temporary user ID needed to complete registration.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

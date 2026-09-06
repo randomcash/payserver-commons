@@ -15,8 +15,9 @@ use crate::models::{
     StartNewUserPasskeyRegistrationResponse, StartNewUserWalletRegistrationRequest,
     StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse,
     StartPasskeyRegistrationRequest, StartPasskeyRegistrationResponse, StartRecoveryRequest,
-    StartWalletLoginRequest, StartWalletLoginResponse, StartWalletRegistrationRequest,
-    StartWalletRegistrationResponse, UserInfo, WalletCredentialId, WalletInfo,
+    StartRecoveryResponse, StartWalletLoginRequest, StartWalletLoginResponse,
+    StartWalletRegistrationRequest, StartWalletRegistrationResponse, UserInfo, WalletCredentialId,
+    WalletInfo,
 };
 
 /// Session management service.
@@ -200,11 +201,14 @@ pub trait DeviceService: Send + Sync {
 pub trait RecoveryService: Send + Sync {
     /// Start account recovery.
     ///
-    /// Verifies the mnemonic and returns a passkey registration challenge.
+    /// Verifies the mnemonic, then returns a passkey registration challenge
+    /// together with the material the client needs to rebuild the account: the
+    /// account's pinned KDF parameters and its wrapped symmetric key (RCS-200).
+    /// Both are released only after the hash comparison succeeds.
     async fn start_account_recovery(
         &self,
         request: StartRecoveryRequest,
-    ) -> Result<StartPasskeyRegistrationResponse>;
+    ) -> Result<StartRecoveryResponse>;
 
     /// Complete account recovery.
     ///

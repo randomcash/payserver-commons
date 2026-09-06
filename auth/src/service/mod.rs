@@ -18,8 +18,9 @@ use crate::models::{
     StartNewUserPasskeyRegistrationResponse, StartNewUserWalletRegistrationRequest,
     StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse,
     StartPasskeyRegistrationRequest, StartPasskeyRegistrationResponse, StartRecoveryRequest,
-    StartWalletLoginRequest, StartWalletLoginResponse, StartWalletRegistrationRequest,
-    StartWalletRegistrationResponse, UserInfo, WalletCredentialId, WalletInfo,
+    StartRecoveryResponse, StartWalletLoginRequest, StartWalletLoginResponse,
+    StartWalletRegistrationRequest, StartWalletRegistrationResponse, UserInfo, WalletCredentialId,
+    WalletInfo,
 };
 use crate::repository::{
     ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository, UserRepository,
@@ -177,7 +178,7 @@ where
     async fn start_account_recovery(
         &self,
         request: StartRecoveryRequest,
-    ) -> Result<StartPasskeyRegistrationResponse> {
+    ) -> Result<StartRecoveryResponse> {
         WebAuthnAuthService::start_account_recovery(self, request).await
     }
 
