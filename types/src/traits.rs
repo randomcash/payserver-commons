@@ -120,7 +120,24 @@ pub struct InvoiceData {
     /// When the invoice expires.
     pub expires_at: chrono::DateTime<chrono::Utc>,
     /// Optional metadata.
+    ///
+    /// Merchant-supplied and unbounded - order ids, cart contents, notes,
+    /// whatever the integration attaches. Nothing server-side interprets it,
+    /// which is why it is the field slated to become end-to-end encrypted
+    /// (RCS-216). Do not put anything here that the server needs to act on.
     pub metadata: Option<serde_json::Value>,
+    /// Customer contact address, when the merchant supplied one.
+    ///
+    /// A first-class field rather than a key inside `metadata` (RCS-215). The
+    /// server acts on this - it is what receipts are sent to - so it has to
+    /// stay readable once `metadata` becomes ciphertext. It was previously
+    /// derived by Postgres from `metadata->>'customer_email'`, which would have
+    /// silently started returning NULL the moment that blob was encrypted,
+    /// taking receipts with it and reporting nothing.
+    ///
+    /// The rule this encodes: if the server must act on a value, it is a
+    /// declared field; if not, it belongs in `metadata`.
+    pub customer_email: Option<String>,
     /// Optional extra data.
     pub extra: Option<serde_json::Value>,
 }
