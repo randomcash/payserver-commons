@@ -147,7 +147,7 @@ impl User {
         let email = email.to_lowercase();
         Self {
             id: UserId::new(),
-            kdf_salt_identifier: email.clone(),
+            kdf_salt_identifier: crypto::SaltIdentity::Email(email.clone()).as_identifier(),
             email: Some(email),
             primary_wallet_address: None,
             kdf_params,
@@ -173,7 +173,8 @@ impl User {
     ) -> Self {
         Self {
             id: UserId::new(),
-            kdf_salt_identifier: format!("wallet:{}", wallet_address),
+            kdf_salt_identifier: crypto::SaltIdentity::Wallet(wallet_address.clone())
+                .as_identifier(),
             email: None,
             primary_wallet_address: Some(wallet_address),
             kdf_params,
@@ -199,7 +200,7 @@ impl User {
     ) -> Self {
         Self {
             id: user_id,
-            kdf_salt_identifier: format!("passkey:{}", user_id),
+            kdf_salt_identifier: crypto::SaltIdentity::Passkey(user_id.to_string()).as_identifier(),
             email: None,
             primary_wallet_address: None,
             kdf_params,
@@ -229,12 +230,12 @@ impl User {
     )]
     pub fn kdf_salt_identifier(&self) -> String {
         if let Some(ref email) = self.email {
-            email.clone()
+            crypto::SaltIdentity::Email(email.clone()).as_identifier()
         } else if let Some(ref wallet) = self.primary_wallet_address {
-            format!("wallet:{}", wallet)
+            crypto::SaltIdentity::Wallet(wallet.clone()).as_identifier()
         } else {
             // Passkey-only user - use user_id as identifier
-            format!("passkey:{}", self.id)
+            crypto::SaltIdentity::Passkey(self.id.to_string()).as_identifier()
         }
     }
 
@@ -544,14 +545,29 @@ pub struct LoginResponse {
 /// the server returns a passkey registration challenge.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Zeroize, ZeroizeOnDrop)]
 pub struct StartRecoveryRequest {
-    /// User's identifier - either email address or wallet address.
-    /// For email-based accounts: the user's email
-    /// For wallet-only accounts: the primary wallet address (checksummed)
+    /// How the account is identified. One of three shapes, matching how it
+    /// registered:
+    ///
+    /// - email account: the email address
+    /// - wallet-only account: the primary wallet address (EIP-55 checksummed)
+    /// - passkey-only account: the account id (UUID)
+    ///
+    /// The UUID form was added in RCS-201 so passkey-only accounts, which have
+    /// no other handle, are reachable at all. It is accepted **only** for
+    /// accounts that genuinely have neither an email nor a wallet - user ids are
+    /// not secret, so honouring one for any account would hand anyone who learns
+    /// it a way to drive that account's recovery endpoint (RCS-204).
     pub identifier: String,
 
-    /// Recovery verification hash to prove possession of mnemonic.
-    /// Client derives this as: base64(SHA-256(Argon2id(mnemonic, salt))).
-    /// Salt is the email for email accounts, or "wallet:{address}" for wallet-only accounts.
+    /// Recovery verification hash to prove possession of the mnemonic.
+    ///
+    /// Client derives this as `base64(SHA-256(Argon2id(mnemonic, salt)))`, where
+    /// the salt comes from `crypto::SaltIdentity` - the shared definition the
+    /// server pins with at registration (RCS-200). It must reproduce the
+    /// account's **pinned** `kdf_salt_identifier`, not one recomputed from the
+    /// account's current state: an account that gained an email after
+    /// registering with a wallet still salts with the wallet (RCS-201).
+    ///
     /// Must match the hash stored during registration.
     /// SENSITIVE: Zeroized on drop.
     pub recovery_verification_hash: String,

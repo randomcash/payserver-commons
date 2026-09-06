@@ -333,6 +333,18 @@ pub fn RegisterPage(
 
                                 <div class="ps-auth-content">
                                     <RecoverySetup
+                                        // Only for passkey-only accounts: a wallet
+                                        // registration already has an identifier the
+                                        // merchant knows (their address), so showing an
+                                        // account id there is noise. A passkey-only
+                                        // account has nothing else (RCS-201/205).
+                                        account_id={
+                                            let st = reg_state.get();
+                                            st.wallet_address
+                                                .is_none()
+                                                .then(|| st.user_id.map(|id| id.to_string()))
+                                                .flatten()
+                                        }
                                         mnemonic_words=reg_state.get().mnemonic_words.clone()
                                         on_confirm=on_recovery_confirm
                                         on_skip=on_recovery_skip
@@ -454,16 +466,19 @@ fn generate_recovery_mnemonic() -> Result<Vec<String>, String> {
 
 /// The identifier the recovery KDF is salted with.
 ///
-/// MUST match `auth::models::User::kdf_salt_identifier` on the server, which
-/// prefers email, then `wallet:{address}`, then `passkey:{user_id}`. Registration
-/// here has no email path, so only the latter two arise. If these ever disagree
-/// the stored verification hash can never be reproduced and the account becomes
-/// unrecoverable, so the two must be changed together.
+/// Delegates to `crypto::SaltIdentity`, which is the single definition shared
+/// with the server's `auth::models::User` (RCS-200). This used to reimplement
+/// the rule, with a comment warning that the two "must be changed together" -
+/// nothing enforced it, and a divergence would have made accounts permanently
+/// unrecoverable while failing silently as a wrong-phrase error.
+///
+/// Registration here has no email path, so only the wallet and passkey variants
+/// arise.
 fn kdf_salt_identifier(state: &RegistrationState) -> Result<String, String> {
     if let Some(ref wallet) = state.wallet_address {
-        Ok(format!("wallet:{wallet}"))
+        Ok(crypto::SaltIdentity::Wallet(wallet.clone()).as_identifier())
     } else if let Some(user_id) = state.user_id {
-        Ok(format!("passkey:{user_id}"))
+        Ok(crypto::SaltIdentity::Passkey(user_id.to_string()).as_identifier())
     } else {
         Err("No wallet address or user id to bind the recovery key to".to_string())
     }
@@ -524,7 +539,7 @@ fn derive_recovery_crypto(
         memory_kb: 65536,
         iterations: 3,
         parallelism: 4,
-        salt: B64.encode(format!("payserver-recovery:{identifier}").as_bytes()),
+        salt: B64.encode(crypto::recovery_salt_for(&identifier).as_bytes()),
     };
 
     Ok((
