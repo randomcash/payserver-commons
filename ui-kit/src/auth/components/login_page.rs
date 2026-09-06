@@ -108,9 +108,15 @@ pub fn LoginPage(
 
                 match api.complete_wallet_login(complete_request).await {
                     Ok(response) => {
-                        // Update AuthContext (saves to localStorage and updates state)
-                        auth.save_login(&response);
+                        // Signal writes BEFORE save_login (RCS-220). save_login
+                        // flips auth.state to Authenticated, which synchronously
+                        // fires the redirect Effect above and disposes this
+                        // component; a signal written afterwards belongs to a dead
+                        // owner and reactive_graph panics with `unreachable`.
                         set_loading.set(false);
+                        auth.save_login(&response);
+                        // Redundant once the Effect has navigated, harmless if it
+                        // has not. Not a signal write, so safe either way.
                         navigate(&redirect, Default::default());
                     }
                     Err(e) => {
@@ -166,9 +172,10 @@ pub fn LoginPage(
 
                 match api.complete_passkey_login(complete_request).await {
                     Ok(response) => {
-                        // Update AuthContext (saves to localStorage and updates state)
-                        auth.save_login(&response);
+                        // Same ordering requirement as the wallet path above
+                        // (RCS-220): settle local state first, authenticate last.
                         set_passkey_state.set(PasskeyState::Success);
+                        auth.save_login(&response);
                         navigate(&redirect, Default::default());
                     }
                     Err(e) => {
