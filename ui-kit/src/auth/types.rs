@@ -188,6 +188,65 @@ pub struct CompleteNewUserPasskeyRegistrationRequest {
 }
 
 // ============================================================================
+// Account Recovery
+// ============================================================================
+
+/// Request to start account recovery.
+#[derive(Debug, Clone, Serialize)]
+pub struct StartRecoveryRequest {
+    /// How the account is identified, matching how it registered: the email
+    /// address, the checksummed wallet address, or - for passkey-only accounts,
+    /// which have no other handle - the account id.
+    pub identifier: String,
+    /// `base64(SHA-256(recovery_key))`, proving possession of the phrase without
+    /// ever sending it.
+    pub recovery_verification_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub captcha_token: Option<String>,
+}
+
+/// Response to a successful recovery start.
+///
+/// Carries more than the WebAuthn challenge, because the phrase alone is not
+/// enough to rebuild an account (RCS-200):
+///
+/// - `kdf_params` are the account's PINNED cost, returned so a client is not
+///   guessing. Note `RecoveryMnemonic::derive_recovery_key` currently takes only
+///   an identifier and applies the shared `crypto::RECOVERY_*` constants, so
+///   there is not yet an API that honours these per-account. Today that is
+///   harmless - one cost exists, and a test pins `KdfParams::default()` to those
+///   constants - but the moment the cost is raised, derivation must take these
+///   values rather than the constants, or every existing account is stranded.
+/// - `encrypted_symmetric_key` is the account's data key, wrapped under the old
+///   recovery key. Unwrap it and re-wrap under the new one. Generating a fresh
+///   key instead silently destroys everything the merchant had encrypted.
+#[derive(Debug, Clone, Deserialize)]
+pub struct StartRecoveryResponse {
+    /// WebAuthn creation options (JSON-serialized CreationChallengeResponse).
+    pub options: serde_json::Value,
+    pub kdf_params: KdfParams,
+    pub encrypted_symmetric_key: EncryptedBlob,
+}
+
+/// Request to complete account recovery.
+///
+/// Every field is rebuilt under the NEW recovery phrase. The symmetric key
+/// inside `new_encrypted_symmetric_key` must be the one unwrapped from
+/// [`StartRecoveryResponse`], not a fresh one.
+#[derive(Debug, Clone, Serialize)]
+pub struct CompleteRecoveryRequest {
+    pub identifier: String,
+    /// The credential response from the authenticator.
+    pub credential: serde_json::Value,
+    pub passkey_name: String,
+    pub new_kdf_params: KdfParams,
+    pub new_encrypted_symmetric_key: EncryptedBlob,
+    pub new_recovery_verification_hash: String,
+    pub device_name: String,
+    pub device_type: DeviceType,
+}
+
+// ============================================================================
 // Common Response Types
 // ============================================================================
 

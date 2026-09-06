@@ -4,10 +4,10 @@ use crate::hooks::use_api::{ApiClient, ApiError};
 
 use super::types::{
     CaptchaConfigResponse, CompleteNewUserPasskeyRegistrationRequest,
-    CompleteNewUserWalletRegistrationRequest, CompletePasskeyLoginRequest,
+    CompleteNewUserWalletRegistrationRequest, CompletePasskeyLoginRequest, CompleteRecoveryRequest,
     CompleteWalletLoginRequest, LoginResponse, StartNewUserPasskeyRegistrationResponse,
-    StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse, StartWalletLoginRequest,
-    StartWalletLoginResponse, UserInfo,
+    StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse, StartRecoveryRequest,
+    StartRecoveryResponse, StartWalletLoginRequest, StartWalletLoginResponse, UserInfo,
 };
 
 impl ApiClient {
@@ -112,6 +112,31 @@ impl ApiClient {
         req: CompleteNewUserPasskeyRegistrationRequest,
     ) -> Result<LoginResponse, ApiError> {
         self.post("/auth/passkey/new-user/complete", &req).await
+    }
+
+    // ========================================================================
+    // Account Recovery
+    // ========================================================================
+
+    /// Start account recovery: prove possession of the phrase, get a passkey
+    /// challenge plus the material needed to rebuild the account.
+    pub async fn start_recovery(
+        &self,
+        req: StartRecoveryRequest,
+    ) -> Result<StartRecoveryResponse, ApiError> {
+        self.post("/auth/recovery/start", &req).await
+    }
+
+    /// Complete account recovery: register the new passkey and re-wrap the
+    /// account key under the new recovery phrase.
+    ///
+    /// Revokes every existing passkey, device and session server-side, so the
+    /// caller is logged in as the returned session and nothing else survives.
+    pub async fn complete_recovery(
+        &self,
+        req: CompleteRecoveryRequest,
+    ) -> Result<LoginResponse, ApiError> {
+        self.post("/auth/recovery/complete", &req).await
     }
 
     // ========================================================================

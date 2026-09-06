@@ -536,9 +536,9 @@ fn derive_recovery_crypto(
     // the phrase and the identifier alone — there is nothing else to remember.
     let kdf_params = KdfParams {
         algorithm: "argon2id".to_string(),
-        memory_kb: 65536,
-        iterations: 3,
-        parallelism: 4,
+        memory_kb: crypto::RECOVERY_MEMORY_KB,
+        iterations: crypto::RECOVERY_ITERATIONS,
+        parallelism: crypto::RECOVERY_PARALLELISM,
         salt: B64.encode(crypto::recovery_salt_for(&identifier).as_bytes()),
     };
 

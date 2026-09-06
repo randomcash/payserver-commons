@@ -460,9 +460,30 @@ fn constructors_pin_the_identifier() {
         },
         "h".to_string(),
     );
+    // EIP-55 canonical form of that address. The constructor normalises rather
+    // than passing through (RCS-205), so the pinned value is the same one a
+    // recovery form reaches from whatever casing the merchant types. In
+    // production the address arrives already checksummed from
+    // validate_and_checksum_address, where normalising is a no-op.
     assert_eq!(
         wallet.kdf_salt_identifier,
-        "wallet:0xAbCdEf1111111111111111111111111111111111"
+        "wallet:0xabCDEf1111111111111111111111111111111111"
+    );
+
+    // The property that matters: casing of the input cannot change the pin.
+    let same_wallet_lowercased = User::new_wallet_only(
+        "0xabcdef1111111111111111111111111111111111".to_string(),
+        crypto::KdfParams::default(),
+        crypto::EncryptedBlob {
+            ciphertext: vec![1],
+            iv: vec![2],
+            mac: vec![3],
+        },
+        "h".to_string(),
+    );
+    assert_eq!(
+        same_wallet_lowercased.kdf_salt_identifier, wallet.kdf_salt_identifier,
+        "the same address in different casing must pin the same identifier"
     );
 
     let id = UserId::new();
@@ -748,4 +769,42 @@ async fn failed_recovery_start_returns_no_key_material() {
         matches!(err, AuthError::InvalidRecoveryMnemonic),
         "a wrong hash must yield the generic error and no account data, got {err:?}"
     );
+}
+
+/// `crypto::eip55_checksum` must agree with alloy's `Address::to_checksum`,
+/// which is what `validate_and_checksum_address` pins at registration.
+///
+/// The client cannot depend on alloy (it has to run in WASM), so the checksum
+/// exists twice - once here via alloy, once in `crypto` for the recovery form.
+/// That is exactly the duplication that made six copies of the salt convention
+/// dangerous, so the two are pinned against each other rather than trusted to
+/// agree. A divergence would send wallet merchants a salt the server never
+/// stored, and they would be told their recovery phrase is wrong.
+#[test]
+fn crypto_eip55_agrees_with_alloy_checksum() {
+    use alloy_primitives::Address;
+
+    let addresses = [
+        "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
+        "0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359",
+        "0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb",
+        "0xd1220a0cf47c7b9be7a2e6ba89f429762e7b9adb",
+        "0x0000000000000000000000000000000000000000",
+        "0xffffffffffffffffffffffffffffffffffffffff",
+    ];
+
+    for lower in addresses {
+        let alloy_form = lower
+            .parse::<Address>()
+            .expect("valid address")
+            .to_checksum(None);
+        assert_eq!(
+            crypto::eip55_checksum(lower),
+            alloy_form,
+            "crypto and alloy must produce the same checksum for {lower}"
+        );
+        // And on the checksummed input too, since the recovery form may receive
+        // an address already in canonical form.
+        assert_eq!(crypto::eip55_checksum(&alloy_form), alloy_form);
+    }
 }
