@@ -25,8 +25,12 @@ pub fn RecoverySetup(
     on_confirm: Callback<()>,
     /// Callback when user skips recovery setup.
     on_skip: Callback<()>,
-    /// Whether to allow skipping (default: true).
-    #[prop(optional, default = true)]
+    /// Whether to offer a "Skip for Now" button (default: `false`).
+    ///
+    /// Safe by default: this component is exported, so a consumer that says
+    /// nothing should get the flow that cannot strand an account. See
+    /// `RegisterPage::require_recovery` (RCS-214).
+    #[prop(optional, default = false)]
     allow_skip: bool,
     /// Whether a request is in progress (disables buttons).
     #[prop(optional)]
