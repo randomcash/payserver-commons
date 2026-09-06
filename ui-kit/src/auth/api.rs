@@ -4,10 +4,10 @@ use crate::hooks::use_api::{ApiClient, ApiError};
 
 use super::types::{
     CaptchaConfigResponse, CompleteNewUserPasskeyRegistrationRequest,
-    CompleteNewUserWalletRegistrationRequest, CompletePasskeyLoginRequest,
+    CompleteNewUserWalletRegistrationRequest, CompletePasskeyLoginRequest, CompleteRecoveryRequest,
     CompleteWalletLoginRequest, LoginResponse, StartNewUserPasskeyRegistrationResponse,
-    StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse, StartWalletLoginRequest,
-    StartWalletLoginResponse, UserInfo,
+    StartNewUserWalletRegistrationResponse, StartPasskeyLoginResponse, StartRecoveryRequest,
+    StartRecoveryResponse, StartWalletLoginRequest, StartWalletLoginResponse, UserInfo,
 };
 
 impl ApiClient {

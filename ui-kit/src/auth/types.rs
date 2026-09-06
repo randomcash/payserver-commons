@@ -210,9 +210,13 @@ pub struct StartRecoveryRequest {
 /// Carries more than the WebAuthn challenge, because the phrase alone is not
 /// enough to rebuild an account (RCS-200):
 ///
-/// - `kdf_params` are the account's PINNED cost. Derive with these, never with
-///   the current defaults - otherwise raising the cost later would strand every
-///   existing account.
+/// - `kdf_params` are the account's PINNED cost, returned so a client is not
+///   guessing. Note `RecoveryMnemonic::derive_recovery_key` currently takes only
+///   an identifier and applies the shared `crypto::RECOVERY_*` constants, so
+///   there is not yet an API that honours these per-account. Today that is
+///   harmless - one cost exists, and a test pins `KdfParams::default()` to those
+///   constants - but the moment the cost is raised, derivation must take these
+///   values rather than the constants, or every existing account is stranded.
 /// - `encrypted_symmetric_key` is the account's data key, wrapped under the old
 ///   recovery key. Unwrap it and re-wrap under the new one. Generating a fresh
 ///   key instead silently destroys everything the merchant had encrypted.

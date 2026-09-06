@@ -83,7 +83,18 @@ pub fn recovery_salt_for(identifier: &str) -> String {
 pub fn eip55_checksum(address: &str) -> String {
     use sha3::{Digest, Keccak256};
 
-    let body = address.strip_prefix("0x").unwrap_or(address);
+    // Trim and accept either prefix casing before deciding this is an address.
+    // A recovery form receives pasted input: a stray space or "0X" would
+    // otherwise fall through to pass-through, and the resulting salt
+    // ("wallet:0X5aae...") is one the server never stored. Worse, the server
+    // lowercases before resolving, so it FINDS the account and then reports a
+    // hash mismatch - a correct phrase rejected as wrong, which is the exact
+    // failure this normalisation exists to prevent.
+    let trimmed = address.trim();
+    let body = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
     if body.len() != 40 || !body.chars().all(|c| c.is_ascii_hexdigit()) {
         return address.to_string();
     }
@@ -177,10 +188,13 @@ mod tests {
         let expected = format!("wallet:{canonical}");
 
         for typed in [
-            canonical,                                    // already correct
-            "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed", // all lower
-            "0x5AAEB6053F3E94C9B9A09F33669435E7EF1BEAED", // all upper
-            "5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",   // no 0x prefix
+            canonical,                                        // already correct
+            "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",     // all lower
+            "0x5AAEB6053F3E94C9B9A09F33669435E7EF1BEAED",     // all upper
+            "5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",       // no 0x prefix
+            "0X5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",     // capital X prefix
+            "  0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed  ", // pasted whitespace
+            "\t0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed\n", // tab / newline
         ] {
             assert_eq!(
                 SaltIdentity::Wallet(typed.into()).as_identifier(),
