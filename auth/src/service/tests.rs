@@ -562,3 +562,95 @@ async fn account_id_resolves_only_passkey_only_accounts() {
         "an unresolvable id must not touch the wallet account's lockout counter"
     );
 }
+
+/// RCS-204: a wrong recovery hash must not touch the account's lockout state.
+///
+/// `/auth/recovery/start` is unauthenticated and resolves a user from a public
+/// identifier, so incrementing `failed_login_attempts` here let anyone who knew
+/// an email, wallet address or account id lock a merchant out on demand.
+///
+/// The counter is shared with the login paths (`service/wallet.rs`), so this
+/// asserts the counter itself stays at zero, not merely that the account is
+/// unlocked. Dropping only the `lock_user` call would leave the counter
+/// climbing, and the victim's next genuine login typo would trip the lock.
+#[tokio::test]
+async fn failed_recovery_never_touches_the_lockout_counter() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    let blob = crypto::EncryptedBlob {
+        ciphertext: vec![1],
+        iv: vec![2],
+        mac: vec![3],
+    };
+    let user = User::new_passkey_only(
+        UserId::new(),
+        crypto::KdfParams::default(),
+        blob,
+        "correct-hash".to_string(),
+    );
+    repo.create_user(&user).await.unwrap();
+
+    // Well past max_failed_attempts (5) - a real attacker would not stop at one.
+    for attempt in 0..12 {
+        let err = service
+            .start_account_recovery(StartRecoveryRequest {
+                identifier: user.id.to_string(),
+                recovery_verification_hash: "wrong".to_string(),
+            })
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, AuthError::InvalidRecoveryMnemonic),
+            "attempt {attempt} should stay a generic mismatch, got {err:?}"
+        );
+    }
+
+    let after = repo.get_user(user.id).await.unwrap().unwrap();
+    assert_eq!(
+        after.failed_login_attempts, 0,
+        "recovery failures must not increment the shared login counter"
+    );
+    assert!(
+        !after.is_locked(),
+        "an unauthenticated caller must not be able to lock an account"
+    );
+}
+
+/// The other half of RCS-204: removing the lockout must not have made a locked
+/// account recoverable. Lockout still applies to accounts locked by the login
+/// paths, which is where guessing is the actual risk.
+#[tokio::test]
+async fn recovery_still_refuses_an_account_locked_by_login() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    let blob = crypto::EncryptedBlob {
+        ciphertext: vec![1],
+        iv: vec![2],
+        mac: vec![3],
+    };
+    let user = User::new_passkey_only(
+        UserId::new(),
+        crypto::KdfParams::default(),
+        blob,
+        "correct-hash".to_string(),
+    );
+    repo.create_user(&user).await.unwrap();
+    repo.lock_user(user.id, chrono::Utc::now() + chrono::Duration::hours(1))
+        .await
+        .unwrap();
+
+    let err = service
+        .start_account_recovery(StartRecoveryRequest {
+            identifier: user.id.to_string(),
+            recovery_verification_hash: "correct-hash".to_string(),
+        })
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, AuthError::AccountLocked),
+        "a locked account must still be refused even with the right hash, got {err:?}"
+    );
+}
