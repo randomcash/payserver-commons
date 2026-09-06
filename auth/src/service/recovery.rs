@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::error::{AuthError, Result};
 use crate::models::{
     CompleteRecoveryRequest, Device, LoginResponse, PasskeyCredential, Session,
-    StartPasskeyRegistrationResponse, StartRecoveryRequest, StartRecoveryResponse, User, UserId,
+    StartRecoveryRequest, StartRecoveryResponse, User, UserId,
 };
 use crate::repository::{
     ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository, UserRepository,
