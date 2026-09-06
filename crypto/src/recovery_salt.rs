@@ -25,8 +25,14 @@ pub enum SaltIdentity {
     /// Email account. Lowercased — `auth::models` lowercases before pinning, so
     /// anything rebuilding this must too or the salt differs by case alone.
     Email(String),
-    /// Wallet-only account. The address must be EIP-55 checksummed, matching
-    /// what `validate_and_checksum_address` pinned at registration.
+    /// Wallet-only account.
+    ///
+    /// The address is EIP-55 checksummed on use, so **any** casing the caller
+    /// holds produces the identifier the server pinned. This is normalisation
+    /// rather than documentation on purpose: the salt depends on the exact
+    /// checksummed form, and a recovery form receives whatever a merchant typed.
+    /// Requiring callers to remember to checksum is a rule they can break
+    /// silently - the account simply becomes unrecoverable.
     Wallet(String),
     /// Passkey-only account, identified by its user id.
     Passkey(String),
@@ -37,7 +43,7 @@ impl SaltIdentity {
     pub fn as_identifier(&self) -> String {
         match self {
             Self::Email(email) => email.to_lowercase(),
-            Self::Wallet(address) => format!("wallet:{address}"),
+            Self::Wallet(address) => format!("wallet:{}", eip55_checksum(address)),
             Self::Passkey(user_id) => format!("passkey:{user_id}"),
         }
     }
@@ -59,6 +65,49 @@ impl SaltIdentity {
 /// mutable account state.
 pub fn recovery_salt_for(identifier: &str) -> String {
     format!("payserver-recovery:{identifier}")
+}
+
+/// EIP-55 checksum an Ethereum address.
+///
+/// Mirrors alloy's `Address::to_checksum(None)`, which is what the server uses
+/// to pin `kdf_salt_identifier` at registration. Implemented here rather than
+/// pulled in so `crypto` stays free of chain dependencies and works in WASM.
+///
+/// Input that is not a 40-hex-digit address (with or without `0x`) is returned
+/// unchanged: this is a normaliser, not a validator, and rejecting here would
+/// turn a typo into a panic on a path where the caller already handles a
+/// mismatch as "wrong details".
+///
+/// Idempotent - checksumming an already-checksummed address is a no-op, so
+/// existing pinned identifiers are unaffected.
+pub fn eip55_checksum(address: &str) -> String {
+    use sha3::{Digest, Keccak256};
+
+    let body = address.strip_prefix("0x").unwrap_or(address);
+    if body.len() != 40 || !body.chars().all(|c| c.is_ascii_hexdigit()) {
+        return address.to_string();
+    }
+
+    let lower = body.to_ascii_lowercase();
+    let hash = Keccak256::digest(lower.as_bytes());
+
+    let mut out = String::with_capacity(42);
+    out.push_str("0x");
+    for (i, c) in lower.chars().enumerate() {
+        // Each hash BYTE governs two hex digits: high nibble for the even
+        // position, low nibble for the odd one. Uppercase when that nibble >= 8.
+        let nibble = if i % 2 == 0 {
+            hash[i / 2] >> 4
+        } else {
+            hash[i / 2] & 0x0f
+        };
+        if c.is_ascii_alphabetic() && nibble >= 8 {
+            out.push(c.to_ascii_uppercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// The Argon2id cost for recovery-key derivation.
@@ -89,10 +138,12 @@ mod tests {
             SaltIdentity::Email("user@example.com".into()).as_identifier(),
             "user@example.com"
         );
+        // EIP-55 canonical form of this address, so the assertion pins the
+        // shape without also asserting a wrong checksum.
         assert_eq!(
-            SaltIdentity::Wallet("0xAbC0000000000000000000000000000000000001".into())
+            SaltIdentity::Wallet("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed".into())
                 .as_identifier(),
-            "wallet:0xAbC0000000000000000000000000000000000001"
+            "wallet:0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
         );
         assert_eq!(
             SaltIdentity::Passkey("2f1c...".into()).as_identifier(),
@@ -112,20 +163,55 @@ mod tests {
         assert_eq!(typed.recovery_salt(), stored.recovery_salt());
     }
 
-    /// Wallet addresses are NOT case-normalised: the checksum is meaningful and
-    /// the server pins the checksummed form. Lowercasing here would silently
-    /// break every wallet account, so this pins the opposite of the email rule.
+    /// Wallet addresses are EIP-55 normalised, not case-folded and not passed
+    /// through.
+    ///
+    /// This is the opposite of the email rule for a reason: the checksum casing
+    /// is meaningful, so lowercasing would break every wallet account - but the
+    /// server pins the checksummed form and a recovery form receives whatever a
+    /// merchant typed. Normalising means any casing reaches the right salt,
+    /// where merely documenting the requirement left it possible to get wrong.
     #[test]
-    fn wallet_address_case_is_preserved() {
-        let checksummed = "0xAbC0000000000000000000000000000000000001";
-        assert_eq!(
-            SaltIdentity::Wallet(checksummed.into()).as_identifier(),
-            format!("wallet:{checksummed}")
-        );
-        assert_ne!(
-            SaltIdentity::Wallet(checksummed.into()).as_identifier(),
-            SaltIdentity::Wallet(checksummed.to_lowercase()).as_identifier()
-        );
+    fn wallet_address_is_normalised_whatever_the_caller_holds() {
+        let canonical = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+        let expected = format!("wallet:{canonical}");
+
+        for typed in [
+            canonical,                                    // already correct
+            "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed", // all lower
+            "0x5AAEB6053F3E94C9B9A09F33669435E7EF1BEAED", // all upper
+            "5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",   // no 0x prefix
+        ] {
+            assert_eq!(
+                SaltIdentity::Wallet(typed.into()).as_identifier(),
+                expected,
+                "casing/prefix of {typed} must not change the salt"
+            );
+        }
+    }
+
+    /// Official EIP-55 vectors, so this cannot drift from what the server's
+    /// `Address::to_checksum(None)` produces.
+    #[test]
+    fn eip55_matches_the_reference_vectors() {
+        for addr in [
+            "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+            "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+            "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+            "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
+        ] {
+            assert_eq!(eip55_checksum(&addr.to_lowercase()), addr);
+            assert_eq!(eip55_checksum(addr), addr, "must be idempotent");
+        }
+    }
+
+    /// Not a validator: anything that is not an address is returned untouched,
+    /// so a typo cannot panic on a path that already reports a mismatch.
+    #[test]
+    fn non_addresses_pass_through_untouched() {
+        for junk in ["", "0x", "not-an-address", "0x1234"] {
+            assert_eq!(eip55_checksum(junk), junk);
+        }
     }
 
     #[test]

@@ -11,6 +11,8 @@ description = "Cryptographic primitives for PayServer (Bitwarden-style encryptio
 argon2 = "0.5"
 hkdf = "0.12"
 sha2 = "0.10"
+# Keccak256, for EIP-55 address checksumming in recovery_salt
+sha3 = "0.10"
 pbkdf2 = { version = "0.12", features = ["simple"] }
 
 # Symmetric encryption
