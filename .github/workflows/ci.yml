@@ -30,6 +30,18 @@ jobs:
       - name: Format check
         run: cargo fmt --all -- --check
 
+      # ui-kit's `auth` feature is optional, so the default build never compiles
+      # ui-kit/src/auth - login, registration and recovery. A PR adding code
+      # there could be clippy-clean and not build: three E0425s reached a green
+      # PR on 2026-09-06 (RCS-205 review).
+      #
+      # Plain `check`, deliberately not `clippy -D warnings`: that module has 84
+      # pre-existing lint findings, tracked in RCS-199. This catches the compile
+      # break now without dragging those into unrelated PRs. Promote to clippy
+      # once RCS-199 clears them.
+      - name: Compile check (all features)
+        run: cargo check --workspace --all-features
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
