@@ -83,9 +83,12 @@ where
     /// 4. Use the returned challenge to register a new passkey
     /// 5. Call complete_account_recovery with the passkey credential
     ///
-    /// # Rate Limiting
-    /// Failed recovery attempts are tracked and the account is locked after
-    /// too many failures.
+    /// # Abuse resistance
+    /// A failed attempt here deliberately does not touch the account's
+    /// failed-login counter and cannot lock the account (RCS-204) - the
+    /// endpoint is unauthenticated and reachable with a public identifier.
+    /// Abuse is limited by CAPTCHA and by per-IP/identifier rate limiting in
+    /// front of the handler, which cost the caller rather than the victim.
     pub async fn start_account_recovery(
         &self,
         request: StartRecoveryRequest,
@@ -108,16 +111,33 @@ where
         };
 
         if !verification_matches {
-            // Track failed recovery attempts
-            let attempts = self.repo.increment_failed_logins(user.id).await?;
-
-            // Lock account if too many failures
-            if attempts >= self.config.max_failed_attempts {
-                let lock_until = Utc::now() + self.config.lockout_duration;
-                self.repo.lock_user(user.id, lock_until).await?;
-            }
-
-            // Always return InvalidRecoveryMnemonic to prevent user enumeration
+            // Deliberately does NOT touch failed_login_attempts, and does not
+            // lock the account (RCS-204).
+            //
+            // This endpoint is unauthenticated and resolves a user from a
+            // public identifier - an email address, an on-chain address, or an
+            // account id the design asks users to paste into support threads.
+            // Incrementing a lockout counter here let anyone who knew such an
+            // identifier lock a merchant out on demand, repeatably, with no
+            // credential.
+            //
+            // Note the counter is SHARED with the login paths
+            // (service/wallet.rs), so merely dropping the lock_user call would
+            // not have closed this: an attacker could still pump the counter to
+            // max_failed_attempts - 1 from here, and the victim's next genuine
+            // login typo would trip the lock. The increment has to go entirely.
+            //
+            // Removing it costs nothing defensively. Lockout protects a
+            // guessable secret; this compares SHA-256(Argon2id(24-word BIP39
+            // phrase)), which is not brute-forceable. Guess-resistance for the
+            // login paths is unchanged - they keep their own lockout.
+            //
+            // Abuse of this endpoint is handled where it belongs: CAPTCHA in
+            // api/recovery.rs, plus per-IP/identifier rate limiting at the
+            // transport layer, so failures cost the caller and not the victim.
+            //
+            // Enumeration is still prevented - the same generic error is
+            // returned for "no such user" and "wrong hash".
             return Err(AuthError::InvalidRecoveryMnemonic);
         }
 

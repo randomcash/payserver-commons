@@ -106,6 +106,7 @@ impl<A> AuthState<A> {
         wallet::StartRegistrationRequest,
         wallet::CompleteRegistrationRequest,
         recovery::CompleteRecoveryRequestBody,
+        recovery::StartRecoveryRequestBody,
         management::AuthenticatedRequest,
         crate::UserId,
         crate::SessionId,
