@@ -59,6 +59,7 @@ pub mod asymmetric;
 pub mod error;
 pub mod kdf;
 pub mod mnemonic;
+pub mod recovery_salt;
 pub mod symmetric;
 pub mod types;
 
@@ -75,3 +76,7 @@ pub use asymmetric::{Ed25519KeyPair, X25519KeyPair};
 
 // Re-export mnemonic
 pub use mnemonic::RecoveryMnemonic;
+
+// Recovery KDF salt identifier — the single definition of a convention that
+// registration, the server and the recovery flow must all agree on (RCS-200).
+pub use recovery_salt::{SaltIdentity, recovery_salt_for};

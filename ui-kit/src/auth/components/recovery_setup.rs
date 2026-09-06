@@ -25,6 +25,19 @@ pub fn RecoverySetup(
     on_confirm: Callback<()>,
     /// Callback when user skips recovery setup.
     on_skip: Callback<()>,
+    /// The account id, shown alongside the phrase when the account has no other
+    /// handle.
+    ///
+    /// A passkey-only account has no email and no wallet address, so the account
+    /// id is the ONLY thing it can be identified by at recovery (RCS-201). The
+    /// phrase alone is not enough - recovery needs an identifier too, and a
+    /// merchant who saved only the words would have nothing to type (RCS-205).
+    /// Presented as one unit with the phrase so both get saved together.
+    // `optional_no_strip` keeps the Option in the builder: plain `optional`
+    // auto-wraps, so the caller would have to pass a bare String and could not
+    // express "passkey-only accounts only".
+    #[prop(optional_no_strip)]
+    account_id: Option<String>,
     /// Whether to offer a "Skip for Now" button (default: `false`).
     ///
     /// Safe by default: this component is exported, so a consumer that says
@@ -90,6 +103,19 @@ pub fn RecoverySetup(
                                     }
                                 }).collect_view()}
                             </div>
+
+                            {account_id.clone().map(|id| view! {
+                                <div class="ps-recovery-account-id">
+                                    <span class="ps-recovery-account-id-label">
+                                        "Account ID — save this with your phrase"
+                                    </span>
+                                    <code class="ps-recovery-account-id-value">{id}</code>
+                                    <span class="ps-recovery-account-id-hint">
+                                        "Recovery needs both: this identifies the account, "
+                                        "the phrase proves it is yours."
+                                    </span>
+                                </div>
+                            })}
 
                             <div class="ps-recovery-warning">
                                 <WarningIcon />

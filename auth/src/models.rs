@@ -147,7 +147,7 @@ impl User {
         let email = email.to_lowercase();
         Self {
             id: UserId::new(),
-            kdf_salt_identifier: email.clone(),
+            kdf_salt_identifier: crypto::SaltIdentity::Email(email.clone()).as_identifier(),
             email: Some(email),
             primary_wallet_address: None,
             kdf_params,
@@ -173,7 +173,8 @@ impl User {
     ) -> Self {
         Self {
             id: UserId::new(),
-            kdf_salt_identifier: format!("wallet:{}", wallet_address),
+            kdf_salt_identifier: crypto::SaltIdentity::Wallet(wallet_address.clone())
+                .as_identifier(),
             email: None,
             primary_wallet_address: Some(wallet_address),
             kdf_params,
@@ -199,7 +200,7 @@ impl User {
     ) -> Self {
         Self {
             id: user_id,
-            kdf_salt_identifier: format!("passkey:{}", user_id),
+            kdf_salt_identifier: crypto::SaltIdentity::Passkey(user_id.to_string()).as_identifier(),
             email: None,
             primary_wallet_address: None,
             kdf_params,
@@ -229,12 +230,12 @@ impl User {
     )]
     pub fn kdf_salt_identifier(&self) -> String {
         if let Some(ref email) = self.email {
-            email.clone()
+            crypto::SaltIdentity::Email(email.clone()).as_identifier()
         } else if let Some(ref wallet) = self.primary_wallet_address {
-            format!("wallet:{}", wallet)
+            crypto::SaltIdentity::Wallet(wallet.clone()).as_identifier()
         } else {
             // Passkey-only user - use user_id as identifier
-            format!("passkey:{}", self.id)
+            crypto::SaltIdentity::Passkey(self.id.to_string()).as_identifier()
         }
     }
 
@@ -544,14 +545,29 @@ pub struct LoginResponse {
 /// the server returns a passkey registration challenge.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Zeroize, ZeroizeOnDrop)]
 pub struct StartRecoveryRequest {
-    /// User's identifier - either email address or wallet address.
-    /// For email-based accounts: the user's email
-    /// For wallet-only accounts: the primary wallet address (checksummed)
+    /// How the account is identified. One of three shapes, matching how it
+    /// registered:
+    ///
+    /// - email account: the email address
+    /// - wallet-only account: the primary wallet address (EIP-55 checksummed)
+    /// - passkey-only account: the account id (UUID)
+    ///
+    /// The UUID form was added in RCS-201 so passkey-only accounts, which have
+    /// no other handle, are reachable at all. It is accepted **only** for
+    /// accounts that genuinely have neither an email nor a wallet - user ids are
+    /// not secret, so honouring one for any account would hand anyone who learns
+    /// it a way to drive that account's recovery endpoint (RCS-204).
     pub identifier: String,
 
-    /// Recovery verification hash to prove possession of mnemonic.
-    /// Client derives this as: base64(SHA-256(Argon2id(mnemonic, salt))).
-    /// Salt is the email for email accounts, or "wallet:{address}" for wallet-only accounts.
+    /// Recovery verification hash to prove possession of the mnemonic.
+    ///
+    /// Client derives this as `base64(SHA-256(Argon2id(mnemonic, salt)))`, where
+    /// the salt comes from `crypto::SaltIdentity` - the shared definition the
+    /// server pins with at registration (RCS-200). It must reproduce the
+    /// account's **pinned** `kdf_salt_identifier`, not one recomputed from the
+    /// account's current state: an account that gained an email after
+    /// registering with a wallet still salts with the wallet (RCS-201).
+    ///
     /// Must match the hash stored during registration.
     /// SENSITIVE: Zeroized on drop.
     pub recovery_verification_hash: String,
@@ -722,6 +738,54 @@ pub struct StartPasskeyRegistrationResponse {
     /// WebAuthn credential creation options for the client.
     #[schema(value_type = Object)]
     pub options: CreationChallengeResponse,
+}
+
+/// Response to `POST /auth/recovery/start`, after the recovery hash verifies.
+///
+/// Carries more than the WebAuthn challenge because a client cannot rebuild an
+/// account from the phrase alone (RCS-200):
+///
+/// - **`kdf_params`** — the recovery hash depends on the Argon2id cost, not just
+///   the phrase and salt. Without the account's actual parameters the client has
+///   to hardcode a constant and hope it still matches, so raising the cost as
+///   hardware improves would make every existing account unrecoverable.
+/// - **`encrypted_symmetric_key`** — the account's data key, wrapped under the
+///   recovery key. The phrase can already unwrap it; the client was simply never
+///   handed it, so recovery had no choice but to mint a fresh key, and the server
+///   overwrote the old one. That discards the merchant's encrypted data even
+///   though they held the correct phrase and did everything right.
+///
+/// # Why returning these is safe
+///
+/// Both are released **only after** the constant-time hash comparison succeeds,
+/// so the caller has already proven possession of the recovery phrase. The
+/// wrapped key is useless without the recovery key derived from that phrase, and
+/// anyone who can reach this point could complete recovery anyway. Nothing is
+/// disclosed that the caller could not already obtain.
+///
+/// This response is deliberately NOT `StartPasskeyRegistrationResponse`: that
+/// type is also used for ordinary passkey registration, where a caller has not
+/// proven anything and must not receive account key material.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct StartRecoveryResponse {
+    /// WebAuthn credential creation options for the new passkey.
+    #[schema(value_type = Object)]
+    pub options: CreationChallengeResponse,
+
+    /// The account's KDF parameters, as pinned at registration.
+    ///
+    /// Use these to derive; do not assume the current defaults.
+    #[schema(value_type = Object)]
+    pub kdf_params: KdfParams,
+
+    /// The account's symmetric key, wrapped under the recovery key.
+    ///
+    /// Unwrap with the recovery key derived from the phrase, then re-wrap under
+    /// the new recovery key and send it back as
+    /// `CompleteRecoveryRequest::new_encrypted_symmetric_key`. Generating a fresh
+    /// key instead is what silently destroys the account's data.
+    #[schema(value_type = Object)]
+    pub encrypted_symmetric_key: EncryptedBlob,
 }
 
 /// Response for starting NEW USER passkey registration.

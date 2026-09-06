@@ -55,8 +55,9 @@ where
         // Generate a temporary user ID for the registration
         let user_id = UserId::new();
 
-        // Use user_id as the WebAuthn user identifier
-        let user_identifier = format!("passkey:{}", user_id);
+        // Use user_id as the WebAuthn user identifier. Shared definition, so
+        // this cannot drift from what registration pins (RCS-200).
+        let user_identifier = crypto::SaltIdentity::Passkey(user_id.to_string()).as_identifier();
 
         // Generate WebAuthn registration challenge
         let (mut ccr, passkey_registration) = self
@@ -104,8 +105,9 @@ where
     ) -> Result<LoginResponse> {
         use crate::models::User;
 
-        // Expected user identifier format for passkey-only users
-        let user_identifier = format!("passkey:{}", request.user_id);
+        // Expected user identifier format for passkey-only users (RCS-200).
+        let user_identifier =
+            crypto::SaltIdentity::Passkey(request.user_id.to_string()).as_identifier();
 
         // Retrieve the stored challenge state and verify identifier matches
         let (passkey_registration, stored_identifier) = self
@@ -455,7 +457,7 @@ where
                 user_info
                     .primary_wallet_address
                     .clone()
-                    .map(|w| format!("wallet:{}", w))
+                    .map(|w| crypto::SaltIdentity::Wallet(w).as_identifier())
             })
             .ok_or_else(|| {
                 AuthError::Repository("User has neither email nor wallet address".into())

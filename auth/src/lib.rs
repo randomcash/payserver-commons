@@ -135,6 +135,7 @@ pub use models::{
     StartPasskeyRegistrationRequest,
     StartPasskeyRegistrationResponse,
     StartRecoveryRequest,
+    StartRecoveryResponse,
     StartWalletLoginRequest,
     StartWalletLoginResponse,
     StartWalletRegistrationRequest,

@@ -654,3 +654,98 @@ async fn recovery_still_refuses_an_account_locked_by_login() {
         "a locked account must still be refused even with the right hash, got {err:?}"
     );
 }
+
+/// RCS-200: a successful recovery start must hand back what the client needs to
+/// rebuild the account, not just a WebAuthn challenge.
+///
+/// Without `kdf_params` the client has to guess the Argon2id cost, so raising it
+/// as hardware improves would make every existing account unrecoverable. Without
+/// `encrypted_symmetric_key` the client cannot unwrap the account's data key, so
+/// it would generate a fresh one and `complete_account_recovery` would overwrite
+/// the original — destroying the merchant's encrypted data even though they held
+/// the correct phrase and did everything right.
+///
+/// Both are released only after the hash comparison succeeds, so the caller has
+/// already proven possession of the phrase.
+#[tokio::test]
+async fn successful_recovery_start_returns_the_account_key_material() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    // Distinctive values, so the assertions cannot pass on a default or a
+    // freshly generated blob.
+    let stored_blob = crypto::EncryptedBlob {
+        ciphertext: vec![0xAA, 0xBB, 0xCC],
+        iv: vec![0x11, 0x22],
+        mac: vec![0x33, 0x44],
+    };
+    let stored_params = crypto::KdfParams {
+        algorithm: "argon2id".to_string(),
+        memory_kb: 131_072, // deliberately NOT the default 65536
+        iterations: 5,      // deliberately NOT the default 3
+        parallelism: 2,
+        salt: b"pinned-at-registration".to_vec(),
+    };
+    let user = User::new_passkey_only(
+        UserId::new(),
+        stored_params.clone(),
+        stored_blob.clone(),
+        "correct-hash".to_string(),
+    );
+    repo.create_user(&user).await.unwrap();
+
+    let response = service
+        .start_account_recovery(StartRecoveryRequest {
+            identifier: user.id.to_string(),
+            recovery_verification_hash: "correct-hash".to_string(),
+        })
+        .await
+        .expect("the correct hash must be accepted");
+
+    assert_eq!(
+        response.encrypted_symmetric_key.ciphertext, stored_blob.ciphertext,
+        "must return the account's wrapped key, or recovery silently discards the data"
+    );
+    assert_eq!(response.encrypted_symmetric_key.iv, stored_blob.iv);
+    assert_eq!(response.encrypted_symmetric_key.mac, stored_blob.mac);
+
+    assert_eq!(
+        response.kdf_params.memory_kb, stored_params.memory_kb,
+        "must return the account's pinned KDF cost, not the current default"
+    );
+    assert_eq!(response.kdf_params.iterations, stored_params.iterations);
+    assert_eq!(response.kdf_params.salt, stored_params.salt);
+}
+
+/// The material above must NOT be released to a caller who failed the hash
+/// check. It is only safe to return because possession of the phrase was proven.
+#[tokio::test]
+async fn failed_recovery_start_returns_no_key_material() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    let user = User::new_passkey_only(
+        UserId::new(),
+        crypto::KdfParams::default(),
+        crypto::EncryptedBlob {
+            ciphertext: vec![0xAA],
+            iv: vec![0x11],
+            mac: vec![0x33],
+        },
+        "correct-hash".to_string(),
+    );
+    repo.create_user(&user).await.unwrap();
+
+    let err = service
+        .start_account_recovery(StartRecoveryRequest {
+            identifier: user.id.to_string(),
+            recovery_verification_hash: "wrong".to_string(),
+        })
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, AuthError::InvalidRecoveryMnemonic),
+        "a wrong hash must yield the generic error and no account data, got {err:?}"
+    );
+}

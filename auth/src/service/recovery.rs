@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::error::{AuthError, Result};
 use crate::models::{
     CompleteRecoveryRequest, Device, LoginResponse, PasskeyCredential, Session,
-    StartPasskeyRegistrationResponse, StartRecoveryRequest, User, UserId,
+    StartRecoveryRequest, StartRecoveryResponse, User, UserId,
 };
 use crate::repository::{
     ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository, UserRepository,
@@ -92,7 +92,7 @@ where
     pub async fn start_account_recovery(
         &self,
         request: StartRecoveryRequest,
-    ) -> Result<StartPasskeyRegistrationResponse> {
+    ) -> Result<StartRecoveryResponse> {
         let user = self.resolve_recovery_user(&request.identifier).await?;
 
         // Return generic error to prevent user enumeration
@@ -181,7 +181,22 @@ where
             .store_registration_challenge(user.id, &challenge_identifier, passkey_registration)
             .await?;
 
-        Ok(StartPasskeyRegistrationResponse { options: ccr })
+        // Released only now, after the hash comparison above succeeded, so the
+        // caller has proven possession of the phrase (RCS-200).
+        //
+        // kdf_params: the client must derive with the account's ACTUAL Argon2id
+        // cost. Hardcoding a constant works only until someone raises it, at
+        // which point every existing account stops being recoverable.
+        //
+        // encrypted_symmetric_key: without it the client cannot unwrap the
+        // account's data key, so it would have to generate a fresh one and
+        // complete_account_recovery would overwrite the original - destroying
+        // the merchant's encrypted data even though they held the right phrase.
+        Ok(StartRecoveryResponse {
+            options: ccr,
+            kdf_params: user.kdf_params.clone(),
+            encrypted_symmetric_key: user.encrypted_symmetric_key.clone(),
+        })
     }
 
     /// Complete account recovery.
