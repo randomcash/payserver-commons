@@ -107,7 +107,10 @@ impl AuthContext {
     }
 
     /// Validate the current session with the server.
-    /// If the session is invalid or expired on the server, clears the local session.
+    ///
+    /// Clears the local session only when the server actually rejects it - 401,
+    /// 403 - as decided by [`ApiError::invalidates_session`]. Any other failure
+    /// means the server did not answer, so the stored session is kept.
     /// This should be called after `load_session` to ensure the session is still valid.
     /// On success, transitions state from Loading to Authenticated.
     #[cfg(feature = "auth")]
@@ -138,12 +141,46 @@ impl AuthContext {
                 };
                 self.set_state.set(AuthState::Authenticated(user));
             }
-            Err(e) => {
+            Err(e) if e.invalidates_session() => {
                 web_sys::console::log_1(
-                    &format!("[AuthContext] validate_session: Error - {}", e).into(),
+                    &format!("[AuthContext] validate_session: Session rejected - {}", e).into(),
                 );
-                // Session is invalid on server, clear local session
+                // The server said it does not accept this session. Clear it.
                 self.logout();
+            }
+            Err(e) => {
+                // The server did not answer the question - a 429 from the rate
+                // limiter, a 502 mid-deploy, a dropped connection. Signing the
+                // user out here is destructive and almost always wrong: the
+                // session is very likely still valid, and clearing it forces a
+                // fresh passkey or wallet ceremony (RCS-221).
+                //
+                // Trust what we already have. The token is still set, so the
+                // next request carries it; if the session really has gone, that
+                // request comes back 401 and the branch above clears it then.
+                web_sys::console::log_1(
+                    &format!(
+                        "[AuthContext] validate_session: Could not reach the server ({e}) - \
+                         keeping the stored session",
+                    )
+                    .into(),
+                );
+
+                // Leaving state as Loading would strand the UI on a spinner
+                // forever, so promote the stored session to Authenticated with
+                // what it already knows. This is not a security decision: the
+                // server authorises every request regardless of client state.
+                if let Some(session) = crate::auth::session::load_session() {
+                    let user = User {
+                        id: session.session_id.to_string(),
+                        email: session.email.clone(),
+                        display_name: session.email.or(session.wallet_address),
+                    };
+                    self.set_state.set(AuthState::Authenticated(user));
+                } else {
+                    // No stored session to fall back on - nothing to keep.
+                    self.set_state.set(AuthState::Anonymous);
+                }
             }
         }
     }

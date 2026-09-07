@@ -17,6 +17,33 @@ pub enum ApiError {
     Unauthorized,
 }
 
+impl ApiError {
+    /// Whether this error means the session itself is no longer valid.
+    ///
+    /// Only the server saying "I do not accept this session" counts: 401, 403,
+    /// and the explicit `Unauthorized` variant. Everything else - a 429 from the
+    /// rate limiter, a 502 while a deploy cycles, a 500, a dropped connection, a
+    /// body we could not parse - means the server did not answer the question,
+    /// not that it answered "no".
+    ///
+    /// The distinction matters because the caller's response to `true` is to
+    /// delete the stored session, which cannot be undone: the user is signed out
+    /// and has to re-authenticate with their passkey or wallet. Treating every
+    /// error as `true` (RCS-221) meant anyone sharing an IP - corporate NAT, a
+    /// VPN, mobile CGNAT - could trip the 5 req/min auth limit and simply be
+    /// logged out, and a deploy could sign out everyone mid-request.
+    ///
+    /// 404 is deliberately transient: an endpoint that has moved is a routing
+    /// bug, and destroying the user's session is the wrong way to report it.
+    pub fn invalidates_session(&self) -> bool {
+        match self {
+            ApiError::Unauthorized => true,
+            ApiError::Http { status, .. } => matches!(status, 401 | 403),
+            ApiError::Network(_) | ApiError::Parse(_) => false,
+        }
+    }
+}
+
 /// API client for making authenticated requests.
 #[derive(Clone)]
 pub struct ApiClient {
@@ -185,6 +212,29 @@ mod tests {
 
         let unauth_err = ApiError::Unauthorized;
         assert_eq!(unauth_err.to_string(), "Unauthorized");
+    }
+
+    #[test]
+    fn only_401_and_403_invalidate_the_session() {
+        let http = |status| ApiError::Http {
+            status,
+            message: String::new(),
+        };
+
+        // The server rejected the session.
+        assert!(ApiError::Unauthorized.invalidates_session());
+        assert!(http(401).invalidates_session());
+        assert!(http(403).invalidates_session());
+
+        // The server did not answer. The session is untouched.
+        for status in [400, 404, 408, 409, 418, 429, 500, 502, 503, 504] {
+            assert!(
+                !http(status).invalidates_session(),
+                "HTTP {status} must not sign the user out"
+            );
+        }
+        assert!(!ApiError::Network("offline".into()).invalidates_session());
+        assert!(!ApiError::Parse("bad json".into()).invalidates_session());
     }
 
     #[test]
