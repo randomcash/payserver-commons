@@ -89,10 +89,9 @@ pub async fn connect_wallet() -> Result<String, WalletError> {
     // Call eth_requestAccounts to prompt connection
     let request = js_sys::Object::new();
     js_sys::Reflect::set(&request, &"method".into(), &"eth_requestAccounts".into())
-        .map_err(|e| WalletError::from(e))?;
+        .map_err(WalletError::from)?;
 
-    let promise =
-        js_sys::Reflect::get(&ethereum, &"request".into()).map_err(|e| WalletError::from(e))?;
+    let promise = js_sys::Reflect::get(&ethereum, &"request".into()).map_err(WalletError::from)?;
 
     let request_fn = promise
         .dyn_ref::<js_sys::Function>()
@@ -103,7 +102,7 @@ pub async fn connect_wallet() -> Result<String, WalletError> {
 
     let result = request_fn
         .call1(&ethereum, &request)
-        .map_err(|e| WalletError::from(e))?;
+        .map_err(WalletError::from)?;
 
     let promise = js_sys::Promise::from(result);
     let accounts = JsFuture::from(promise).await.map_err(WalletError::from)?;
@@ -136,10 +135,10 @@ pub async fn get_accounts() -> Result<Vec<String>, WalletError> {
 
     let request = js_sys::Object::new();
     js_sys::Reflect::set(&request, &"method".into(), &"eth_accounts".into())
-        .map_err(|e| WalletError::from(e))?;
+        .map_err(WalletError::from)?;
 
     let request_fn = js_sys::Reflect::get(&ethereum, &"request".into())
-        .map_err(|e| WalletError::from(e))?
+        .map_err(WalletError::from)?
         .dyn_into::<js_sys::Function>()
         .map_err(|_| WalletError {
             message: "ethereum.request is not a function".to_string(),
@@ -148,7 +147,7 @@ pub async fn get_accounts() -> Result<Vec<String>, WalletError> {
 
     let result = request_fn
         .call1(&ethereum, &request)
-        .map_err(|e| WalletError::from(e))?;
+        .map_err(WalletError::from)?;
 
     let promise = js_sys::Promise::from(result);
     let accounts = JsFuture::from(promise).await.map_err(WalletError::from)?;
@@ -179,11 +178,11 @@ pub async fn sign_message(address: &str, message: &str) -> Result<String, Wallet
 
     let request = js_sys::Object::new();
     js_sys::Reflect::set(&request, &"method".into(), &"personal_sign".into())
-        .map_err(|e| WalletError::from(e))?;
-    js_sys::Reflect::set(&request, &"params".into(), &params).map_err(|e| WalletError::from(e))?;
+        .map_err(WalletError::from)?;
+    js_sys::Reflect::set(&request, &"params".into(), &params).map_err(WalletError::from)?;
 
     let request_fn = js_sys::Reflect::get(&ethereum, &"request".into())
-        .map_err(|e| WalletError::from(e))?
+        .map_err(WalletError::from)?
         .dyn_into::<js_sys::Function>()
         .map_err(|_| WalletError {
             message: "ethereum.request is not a function".to_string(),
@@ -192,7 +191,7 @@ pub async fn sign_message(address: &str, message: &str) -> Result<String, Wallet
 
     let result = request_fn
         .call1(&ethereum, &request)
-        .map_err(|e| WalletError::from(e))?;
+        .map_err(WalletError::from)?;
 
     let promise = js_sys::Promise::from(result);
     let signature = JsFuture::from(promise).await.map_err(WalletError::from)?;

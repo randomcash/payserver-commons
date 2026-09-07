@@ -60,22 +60,20 @@ pub fn clear_all_auth_data() {
 
 /// Get a human-readable device name from the user agent.
 pub fn get_device_name() -> String {
-    if let Some(window) = web_sys::window() {
-        if let Ok(navigator) = js_sys::Reflect::get(&window, &"navigator".into()) {
-            if let Ok(ua) = js_sys::Reflect::get(&navigator, &"userAgent".into()) {
-                if let Some(ua_str) = ua.as_string() {
-                    // Simple device detection based on user agent
-                    if ua_str.contains("Chrome") && !ua_str.contains("Edge") {
-                        return "Chrome Browser".to_string();
-                    } else if ua_str.contains("Firefox") {
-                        return "Firefox Browser".to_string();
-                    } else if ua_str.contains("Safari") && !ua_str.contains("Chrome") {
-                        return "Safari Browser".to_string();
-                    } else if ua_str.contains("Edge") {
-                        return "Edge Browser".to_string();
-                    }
-                }
-            }
+    if let Some(window) = web_sys::window()
+        && let Ok(navigator) = js_sys::Reflect::get(&window, &"navigator".into())
+        && let Ok(ua) = js_sys::Reflect::get(&navigator, &"userAgent".into())
+        && let Some(ua_str) = ua.as_string()
+    {
+        // Simple device detection based on user agent
+        if ua_str.contains("Chrome") && !ua_str.contains("Edge") {
+            return "Chrome Browser".to_string();
+        } else if ua_str.contains("Firefox") {
+            return "Firefox Browser".to_string();
+        } else if ua_str.contains("Safari") && !ua_str.contains("Chrome") {
+            return "Safari Browser".to_string();
+        } else if ua_str.contains("Edge") {
+            return "Edge Browser".to_string();
         }
     }
     "Web Browser".to_string()

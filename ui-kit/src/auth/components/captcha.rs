@@ -111,13 +111,13 @@ pub fn TurnstileWidget(
         let cb = std::rc::Rc::new(std::cell::RefCell::new(Some(callback)));
         let cb_clone = cb.clone();
         let interval = gloo_timers::callback::Interval::new(100, move || {
-            if let Some(ref callback) = *cb_clone.borrow() {
-                if try_render_turnstile("#captcha-container", &site_key, callback) {
-                    rendered.set_value(true);
-                    // Take and forget the closure so it persists
-                    if let Some(c) = cb_clone.borrow_mut().take() {
-                        c.forget();
-                    }
+            if let Some(ref callback) = *cb_clone.borrow()
+                && try_render_turnstile("#captcha-container", &site_key, callback)
+            {
+                rendered.set_value(true);
+                // Take and forget the closure so it persists
+                if let Some(c) = cb_clone.borrow_mut().take() {
+                    c.forget();
                 }
             }
         });

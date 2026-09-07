@@ -51,12 +51,11 @@ impl From<JsValue> for WebAuthnError {
 
 /// Check if WebAuthn is available in the browser.
 pub fn is_webauthn_available() -> bool {
-    if let Some(window) = window() {
-        if let Ok(navigator) = js_sys::Reflect::get(&window, &"navigator".into()) {
-            if let Ok(credentials) = js_sys::Reflect::get(&navigator, &"credentials".into()) {
-                return !credentials.is_undefined() && !credentials.is_null();
-            }
-        }
+    if let Some(window) = window()
+        && let Ok(navigator) = js_sys::Reflect::get(&window, &"navigator".into())
+        && let Ok(credentials) = js_sys::Reflect::get(&navigator, &"credentials".into())
+    {
+        return !credentials.is_undefined() && !credentials.is_null();
     }
     false
 }
@@ -86,14 +85,12 @@ pub async fn is_platform_authenticator_available() -> bool {
         _ => return false,
     };
 
-    if let Some(func) = check_fn {
-        if let Ok(result) = func.call0(&pkc) {
-            if let Ok(promise) = result.dyn_into::<js_sys::Promise>() {
-                if let Ok(value) = JsFuture::from(promise).await {
-                    return value.as_bool().unwrap_or(false);
-                }
-            }
-        }
+    if let Some(func) = check_fn
+        && let Ok(result) = func.call0(&pkc)
+        && let Ok(promise) = result.dyn_into::<js_sys::Promise>()
+        && let Ok(value) = JsFuture::from(promise).await
+    {
+        return value.as_bool().unwrap_or(false);
     }
 
     false
@@ -114,10 +111,10 @@ pub async fn create_credential(
     })?;
 
     let navigator =
-        js_sys::Reflect::get(&window, &"navigator".into()).map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::get(&window, &"navigator".into()).map_err(WebAuthnError::from)?;
 
-    let credentials = js_sys::Reflect::get(&navigator, &"credentials".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let credentials =
+        js_sys::Reflect::get(&navigator, &"credentials".into()).map_err(WebAuthnError::from)?;
 
     // Convert the server options to the format expected by the Web Credential API
     let public_key = convert_creation_options_to_js(options_json)?;
@@ -125,11 +122,11 @@ pub async fn create_credential(
     // Build the CredentialCreationOptions
     let create_options = js_sys::Object::new();
     js_sys::Reflect::set(&create_options, &"publicKey".into(), &public_key)
-        .map_err(|e| WebAuthnError::from(e))?;
+        .map_err(WebAuthnError::from)?;
 
     // Call navigator.credentials.create()
     let create_fn = js_sys::Reflect::get(&credentials, &"create".into())
-        .map_err(|e| WebAuthnError::from(e))?
+        .map_err(WebAuthnError::from)?
         .dyn_into::<js_sys::Function>()
         .map_err(|_| WebAuthnError {
             message: "credentials.create is not a function".to_string(),
@@ -138,7 +135,7 @@ pub async fn create_credential(
 
     let result = create_fn
         .call1(&credentials, &create_options)
-        .map_err(|e| WebAuthnError::from(e))?;
+        .map_err(WebAuthnError::from)?;
 
     let promise = result
         .dyn_into::<js_sys::Promise>()
@@ -166,10 +163,10 @@ pub async fn get_credential(
     })?;
 
     let navigator =
-        js_sys::Reflect::get(&window, &"navigator".into()).map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::get(&window, &"navigator".into()).map_err(WebAuthnError::from)?;
 
-    let credentials = js_sys::Reflect::get(&navigator, &"credentials".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let credentials =
+        js_sys::Reflect::get(&navigator, &"credentials".into()).map_err(WebAuthnError::from)?;
 
     // Convert the server options to the format expected by the Web Credential API
     let public_key = convert_request_options_to_js(options_json)?;
@@ -177,11 +174,11 @@ pub async fn get_credential(
     // Build the CredentialRequestOptions
     let get_options = js_sys::Object::new();
     js_sys::Reflect::set(&get_options, &"publicKey".into(), &public_key)
-        .map_err(|e| WebAuthnError::from(e))?;
+        .map_err(WebAuthnError::from)?;
 
     // Call navigator.credentials.get()
     let get_fn = js_sys::Reflect::get(&credentials, &"get".into())
-        .map_err(|e| WebAuthnError::from(e))?
+        .map_err(WebAuthnError::from)?
         .dyn_into::<js_sys::Function>()
         .map_err(|_| WebAuthnError {
             message: "credentials.get is not a function".to_string(),
@@ -190,7 +187,7 @@ pub async fn get_credential(
 
     let result = get_fn
         .call1(&credentials, &get_options)
-        .map_err(|e| WebAuthnError::from(e))?;
+        .map_err(WebAuthnError::from)?;
 
     let promise = result
         .dyn_into::<js_sys::Promise>()
@@ -260,7 +257,7 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
     if let Some(challenge) = public_key.get("challenge").and_then(|c| c.as_str()) {
         let challenge_bytes = base64url_to_uint8array(challenge)?;
         js_sys::Reflect::set(&js_options, &"challenge".into(), &challenge_bytes)
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     // rp (relying party)
@@ -268,14 +265,12 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
         let js_rp = js_sys::Object::new();
         if let Some(name) = rp.get("name").and_then(|n| n.as_str()) {
             js_sys::Reflect::set(&js_rp, &"name".into(), &name.into())
-                .map_err(|e| WebAuthnError::from(e))?;
+                .map_err(WebAuthnError::from)?;
         }
         if let Some(id) = rp.get("id").and_then(|i| i.as_str()) {
-            js_sys::Reflect::set(&js_rp, &"id".into(), &id.into())
-                .map_err(|e| WebAuthnError::from(e))?;
+            js_sys::Reflect::set(&js_rp, &"id".into(), &id.into()).map_err(WebAuthnError::from)?;
         }
-        js_sys::Reflect::set(&js_options, &"rp".into(), &js_rp)
-            .map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::set(&js_options, &"rp".into(), &js_rp).map_err(WebAuthnError::from)?;
     }
 
     // user
@@ -283,19 +278,17 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
         let js_user = js_sys::Object::new();
         if let Some(id) = user.get("id").and_then(|i| i.as_str()) {
             let id_bytes = base64url_to_uint8array(id)?;
-            js_sys::Reflect::set(&js_user, &"id".into(), &id_bytes)
-                .map_err(|e| WebAuthnError::from(e))?;
+            js_sys::Reflect::set(&js_user, &"id".into(), &id_bytes).map_err(WebAuthnError::from)?;
         }
         if let Some(name) = user.get("name").and_then(|n| n.as_str()) {
             js_sys::Reflect::set(&js_user, &"name".into(), &name.into())
-                .map_err(|e| WebAuthnError::from(e))?;
+                .map_err(WebAuthnError::from)?;
         }
         if let Some(display_name) = user.get("displayName").and_then(|n| n.as_str()) {
             js_sys::Reflect::set(&js_user, &"displayName".into(), &display_name.into())
-                .map_err(|e| WebAuthnError::from(e))?;
+                .map_err(WebAuthnError::from)?;
         }
-        js_sys::Reflect::set(&js_options, &"user".into(), &js_user)
-            .map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::set(&js_options, &"user".into(), &js_user).map_err(WebAuthnError::from)?;
     }
 
     // pubKeyCredParams
@@ -308,16 +301,16 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
             let js_param = js_sys::Object::new();
             if let Some(alg) = param.get("alg").and_then(|a| a.as_i64()) {
                 js_sys::Reflect::set(&js_param, &"alg".into(), &JsValue::from(alg as f64))
-                    .map_err(|e| WebAuthnError::from(e))?;
+                    .map_err(WebAuthnError::from)?;
             }
             if let Some(type_) = param.get("type").and_then(|t| t.as_str()) {
                 js_sys::Reflect::set(&js_param, &"type".into(), &type_.into())
-                    .map_err(|e| WebAuthnError::from(e))?;
+                    .map_err(WebAuthnError::from)?;
             }
             js_params.push(&js_param);
         }
         js_sys::Reflect::set(&js_options, &"pubKeyCredParams".into(), &js_params)
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     // timeout
@@ -327,7 +320,7 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
             &"timeout".into(),
             &JsValue::from(timeout as f64),
         )
-        .map_err(|e| WebAuthnError::from(e))?;
+        .map_err(WebAuthnError::from)?;
     }
 
     // authenticatorSelection
@@ -342,24 +335,24 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
                 &"authenticatorAttachment".into(),
                 &attachment.into(),
             )
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
         }
         if let Some(resident) = auth_sel.get("residentKey").and_then(|r| r.as_str()) {
             js_sys::Reflect::set(&js_auth_sel, &"residentKey".into(), &resident.into())
-                .map_err(|e| WebAuthnError::from(e))?;
+                .map_err(WebAuthnError::from)?;
         }
         if let Some(uv) = auth_sel.get("userVerification").and_then(|u| u.as_str()) {
             js_sys::Reflect::set(&js_auth_sel, &"userVerification".into(), &uv.into())
-                .map_err(|e| WebAuthnError::from(e))?;
+                .map_err(WebAuthnError::from)?;
         }
         js_sys::Reflect::set(&js_options, &"authenticatorSelection".into(), &js_auth_sel)
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     // attestation
     if let Some(attestation) = public_key.get("attestation").and_then(|a| a.as_str()) {
         js_sys::Reflect::set(&js_options, &"attestation".into(), &attestation.into())
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     // excludeCredentials - important for preventing duplicate registrations
@@ -373,11 +366,11 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
             if let Some(id) = cred.get("id").and_then(|i| i.as_str()) {
                 let id_bytes = base64url_to_uint8array(id)?;
                 js_sys::Reflect::set(&js_cred, &"id".into(), &id_bytes)
-                    .map_err(|e| WebAuthnError::from(e))?;
+                    .map_err(WebAuthnError::from)?;
             }
             if let Some(type_) = cred.get("type").and_then(|t| t.as_str()) {
                 js_sys::Reflect::set(&js_cred, &"type".into(), &type_.into())
-                    .map_err(|e| WebAuthnError::from(e))?;
+                    .map_err(WebAuthnError::from)?;
             }
             if let Some(transports) = cred.get("transports").and_then(|t| t.as_array()) {
                 let js_transports = js_sys::Array::new();
@@ -387,12 +380,12 @@ fn convert_creation_options_to_js(options: &serde_json::Value) -> Result<JsValue
                     }
                 }
                 js_sys::Reflect::set(&js_cred, &"transports".into(), &js_transports)
-                    .map_err(|e| WebAuthnError::from(e))?;
+                    .map_err(WebAuthnError::from)?;
             }
             js_exclude.push(&js_cred);
         }
         js_sys::Reflect::set(&js_options, &"excludeCredentials".into(), &js_exclude)
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     Ok(js_options.into())
@@ -408,7 +401,7 @@ fn convert_request_options_to_js(options: &serde_json::Value) -> Result<JsValue,
     if let Some(challenge) = public_key.get("challenge").and_then(|c| c.as_str()) {
         let challenge_bytes = base64url_to_uint8array(challenge)?;
         js_sys::Reflect::set(&js_options, &"challenge".into(), &challenge_bytes)
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     // timeout
@@ -418,13 +411,13 @@ fn convert_request_options_to_js(options: &serde_json::Value) -> Result<JsValue,
             &"timeout".into(),
             &JsValue::from(timeout as f64),
         )
-        .map_err(|e| WebAuthnError::from(e))?;
+        .map_err(WebAuthnError::from)?;
     }
 
     // rpId
     if let Some(rp_id) = public_key.get("rpId").and_then(|r| r.as_str()) {
         js_sys::Reflect::set(&js_options, &"rpId".into(), &rp_id.into())
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     // allowCredentials
@@ -438,11 +431,11 @@ fn convert_request_options_to_js(options: &serde_json::Value) -> Result<JsValue,
             if let Some(id) = cred.get("id").and_then(|i| i.as_str()) {
                 let id_bytes = base64url_to_uint8array(id)?;
                 js_sys::Reflect::set(&js_cred, &"id".into(), &id_bytes)
-                    .map_err(|e| WebAuthnError::from(e))?;
+                    .map_err(WebAuthnError::from)?;
             }
             if let Some(type_) = cred.get("type").and_then(|t| t.as_str()) {
                 js_sys::Reflect::set(&js_cred, &"type".into(), &type_.into())
-                    .map_err(|e| WebAuthnError::from(e))?;
+                    .map_err(WebAuthnError::from)?;
             }
             if let Some(transports) = cred.get("transports").and_then(|t| t.as_array()) {
                 let js_transports = js_sys::Array::new();
@@ -452,18 +445,18 @@ fn convert_request_options_to_js(options: &serde_json::Value) -> Result<JsValue,
                     }
                 }
                 js_sys::Reflect::set(&js_cred, &"transports".into(), &js_transports)
-                    .map_err(|e| WebAuthnError::from(e))?;
+                    .map_err(WebAuthnError::from)?;
             }
             js_allow.push(&js_cred);
         }
         js_sys::Reflect::set(&js_options, &"allowCredentials".into(), &js_allow)
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     // userVerification
     if let Some(uv) = public_key.get("userVerification").and_then(|u| u.as_str()) {
         js_sys::Reflect::set(&js_options, &"userVerification".into(), &uv.into())
-            .map_err(|e| WebAuthnError::from(e))?;
+            .map_err(WebAuthnError::from)?;
     }
 
     Ok(js_options.into())
@@ -474,31 +467,30 @@ fn convert_registration_response_to_json(
     credential: &JsValue,
 ) -> Result<serde_json::Value, WebAuthnError> {
     let id = js_sys::Reflect::get(credential, &"id".into())
-        .map_err(|e| WebAuthnError::from(e))?
+        .map_err(WebAuthnError::from)?
         .as_string()
         .ok_or_else(|| WebAuthnError {
             message: "Missing credential id".to_string(),
             name: None,
         })?;
 
-    let raw_id =
-        js_sys::Reflect::get(credential, &"rawId".into()).map_err(|e| WebAuthnError::from(e))?;
+    let raw_id = js_sys::Reflect::get(credential, &"rawId".into()).map_err(WebAuthnError::from)?;
     let raw_id_b64 = arraybuffer_to_base64url(&raw_id)?;
 
     let type_ = js_sys::Reflect::get(credential, &"type".into())
-        .map_err(|e| WebAuthnError::from(e))?
+        .map_err(WebAuthnError::from)?
         .as_string()
         .unwrap_or_else(|| "public-key".to_string());
 
     let response =
-        js_sys::Reflect::get(credential, &"response".into()).map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::get(credential, &"response".into()).map_err(WebAuthnError::from)?;
 
     let attestation_object = js_sys::Reflect::get(&response, &"attestationObject".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+        .map_err(WebAuthnError::from)?;
     let attestation_object_b64 = arraybuffer_to_base64url(&attestation_object)?;
 
-    let client_data_json = js_sys::Reflect::get(&response, &"clientDataJSON".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let client_data_json =
+        js_sys::Reflect::get(&response, &"clientDataJSON".into()).map_err(WebAuthnError::from)?;
     let client_data_json_b64 = arraybuffer_to_base64url(&client_data_json)?;
 
     // Optional: get transports if available
@@ -554,35 +546,34 @@ fn convert_authentication_response_to_json(
     credential: &JsValue,
 ) -> Result<serde_json::Value, WebAuthnError> {
     let id = js_sys::Reflect::get(credential, &"id".into())
-        .map_err(|e| WebAuthnError::from(e))?
+        .map_err(WebAuthnError::from)?
         .as_string()
         .ok_or_else(|| WebAuthnError {
             message: "Missing credential id".to_string(),
             name: None,
         })?;
 
-    let raw_id =
-        js_sys::Reflect::get(credential, &"rawId".into()).map_err(|e| WebAuthnError::from(e))?;
+    let raw_id = js_sys::Reflect::get(credential, &"rawId".into()).map_err(WebAuthnError::from)?;
     let raw_id_b64 = arraybuffer_to_base64url(&raw_id)?;
 
     let type_ = js_sys::Reflect::get(credential, &"type".into())
-        .map_err(|e| WebAuthnError::from(e))?
+        .map_err(WebAuthnError::from)?
         .as_string()
         .unwrap_or_else(|| "public-key".to_string());
 
     let response =
-        js_sys::Reflect::get(credential, &"response".into()).map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::get(credential, &"response".into()).map_err(WebAuthnError::from)?;
 
     let authenticator_data = js_sys::Reflect::get(&response, &"authenticatorData".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+        .map_err(WebAuthnError::from)?;
     let authenticator_data_b64 = arraybuffer_to_base64url(&authenticator_data)?;
 
-    let client_data_json = js_sys::Reflect::get(&response, &"clientDataJSON".into())
-        .map_err(|e| WebAuthnError::from(e))?;
+    let client_data_json =
+        js_sys::Reflect::get(&response, &"clientDataJSON".into()).map_err(WebAuthnError::from)?;
     let client_data_json_b64 = arraybuffer_to_base64url(&client_data_json)?;
 
     let signature =
-        js_sys::Reflect::get(&response, &"signature".into()).map_err(|e| WebAuthnError::from(e))?;
+        js_sys::Reflect::get(&response, &"signature".into()).map_err(WebAuthnError::from)?;
     let signature_b64 = arraybuffer_to_base64url(&signature)?;
 
     // userHandle is optional

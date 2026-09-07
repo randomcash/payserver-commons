@@ -44,8 +44,8 @@ pub fn WalletConnectButton(
     });
 
     let handle_connect = move |_| {
-        let on_connect = on_connect.clone();
-        let on_error = on_error.clone();
+        let on_connect = on_connect;
+        let on_error = on_error;
 
         set_state.set(WalletState::Connecting);
 

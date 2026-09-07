@@ -68,7 +68,6 @@ pub fn RecoverySetup(
     };
 
     let handle_skip = {
-        let on_skip = on_skip.clone();
         move |_| {
             on_skip.run(());
         }
@@ -140,13 +139,14 @@ pub fn RecoverySetup(
                                             type="button"
                                             class="ps-button ps-button-ghost"
                                             disabled=is_loading
-                                            on:click=handle_skip.clone()
+                                            on:click=handle_skip
                                         >
                                             {move || if is_loading() { "Processing..." } else { "Skip for Now" }}
                                         </button>
                                     }.into_any()
                                 } else {
-                                    view! { <></> }.into_any()
+                                    let _: () = view! { <></> };
+                                    ().into_any()
                                 }}
                             </div>
                         </div>
