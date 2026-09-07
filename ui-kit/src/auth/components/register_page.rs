@@ -289,8 +289,28 @@ pub fn RegisterPage(
                         // way round: the redirect Effect above reads `step` to
                         // decide whether to bounce, so it must already say
                         // Complete by the time authenticating wakes it.
+                        // No `set_loading.set(false)` here, and that omission is
+                        // the fix for RCS-220.
+                        //
+                        // `loading` is handed to RecoverySetup below as
+                        // `loading=loading.into()`, so its subscribers live in
+                        // that subtree - and moving to `Complete` disposes that
+                        // subtree. Writing it here queues an update for signals
+                        // that the very next line destroys: the writes land, the
+                        // Show swaps the branch away, and then the queued reads
+                        // run against a disposed scope. Two subscribers in
+                        // RecoverySetup, two panics, every registration:
+                        //
+                        //   At recovery_setup.rs:54:38, you tried to access a
+                        //   reactive value which was defined at
+                        //   register_page.rs:378:57, but it has already been
+                        //   disposed.
+                        //
+                        // Nothing needs the write. The Complete branch does not
+                        // read `loading`, and this path always ends in a full
+                        // page load. Confirmed by isolation against a local
+                        // debug build: removed, 0 panics; restored, 2.
                         set_step.set(RegisterStep::Complete);
-                        set_loading.set(false);
 
                         // This redirect is the only one now. A gloo Timeout is a
                         // browser callback rather than a reactive one, so it is
