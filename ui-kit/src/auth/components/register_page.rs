@@ -100,12 +100,29 @@ pub fn RegisterPage(
         });
     }
 
-    // Redirect to dashboard if already authenticated
+    // Bounce a visitor who is ALREADY authenticated off the register page.
+    //
+    // The `step` guard is the fix for RCS-220, and it is not incidental. On the
+    // success path below, `save_login` makes this true while the writes to
+    // `step` and `loading` are still queued: signal writes mark subscribers
+    // dirty and their effects run on the next tick, not inline. Without the
+    // guard this Effect navigated first, disposal tore the component down, and
+    // then those two queued view updates ran and read signals that no longer
+    // existed - "Tried to access a reactive value that has already been
+    // disposed", twice on every registration, one per pending write.
+    //
+    // Ordering the writes around `save_login` cannot fix that, which is why the
+    // earlier attempt at this (#15) changed nothing: the reads that panic are
+    // the queued effects, and they flush after this Effect either way.
+    //
+    // It was also silently eating the success screen. Reaching `Complete` is
+    // meant to show it for 1500ms before the Timeout redirects; this Effect
+    // navigated away immediately instead, so nobody ever saw it.
     {
         let navigate = navigate.clone();
         let redirect = redirect.clone();
         Effect::new(move || {
-            if auth.is_authenticated() {
+            if auth.is_authenticated() && step.get() != RegisterStep::Complete {
                 let url = redirect.get_value();
                 navigate(&url, Default::default());
             }
@@ -268,24 +285,18 @@ pub fn RegisterPage(
 
                 match result {
                     Ok(response) => {
-                        // Order matters, and it is the fix for RCS-220.
-                        //
-                        // `save_login` makes `auth.is_authenticated()` true, which
-                        // synchronously fires the "redirect if already
-                        // authenticated" Effect above - and that navigate()
-                        // DISPOSES this component. Any signal written afterwards
-                        // belongs to a dead owner, and reactive_graph panics with
-                        // `unreachable`. Two writes followed it, which is exactly
-                        // the two panics seen on the live client during every
-                        // registration.
-                        //
-                        // So: settle local UI state first, then authenticate.
+                        // `Complete` before `save_login`, and it has to be this
+                        // way round: the redirect Effect above reads `step` to
+                        // decide whether to bounce, so it must already say
+                        // Complete by the time authenticating wakes it.
                         set_step.set(RegisterStep::Complete);
                         set_loading.set(false);
 
-                        // Schedule the redirect BEFORE save_login too. Timeout is
-                        // a browser callback rather than a reactive one, so it
-                        // survives disposal and still fires.
+                        // This redirect is the only one now. A gloo Timeout is a
+                        // browser callback rather than a reactive one, so it is
+                        // unaffected by the reactive graph, and set_href is a
+                        // full navigation - the freshly stored session is read
+                        // back from localStorage on load.
                         gloo_timers::callback::Timeout::new(1500, move || {
                             if let Some(window) = web_sys::window() {
                                 let _ = window.location().set_href(&redirect);
@@ -293,7 +304,6 @@ pub fn RegisterPage(
                         })
                         .forget();
 
-                        // Last: this may dispose the component via the Effect.
                         auth.save_login(&response);
                     }
                     Err(e) => {
