@@ -13,6 +13,16 @@ pub enum AuthError {
     #[error("User not found: {0}")]
     UserNotFound(String),
 
+    /// An update tried to change a field that is immutable after registration.
+    ///
+    /// `kdf_salt_identifier` is the only such field today: the stored
+    /// `recovery_verification_hash` was derived from it, so changing it makes
+    /// the account permanently unrecoverable. Both repositories reject the
+    /// write rather than silently discarding it, so a caller that gets this
+    /// wrong fails its tests instead of no-opping in production (RCS-203).
+    #[error("{0} is immutable and cannot be changed after registration")]
+    ImmutableField(String),
+
     /// Invalid credentials (user not found or passkey verification failed).
     /// Used as a generic error to prevent user enumeration.
     #[error("Invalid credentials")]

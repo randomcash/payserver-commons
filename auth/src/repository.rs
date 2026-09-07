@@ -561,23 +561,34 @@ pub mod inmemory {
                 .write()
                 .unwrap_or_else(|e| e.into_inner());
 
-            if users.contains_key(&user.id) {
-                // Update wallet index if primary wallet changed
-                if let Some(old_user) = users.get(&user.id)
-                    && old_user.primary_wallet_address != user.primary_wallet_address
-                {
-                    if let Some(ref old_wallet) = old_user.primary_wallet_address {
-                        by_wallet.remove(old_wallet);
-                    }
-                    if let Some(ref new_wallet) = user.primary_wallet_address {
-                        by_wallet.insert(new_wallet.clone(), user.id);
-                    }
-                }
-                users.insert(user.id, user.clone());
-                Ok(())
-            } else {
-                Err(AuthError::UserNotFound(user.id.to_string()))
+            let Some(old_user) = users.get(&user.id) else {
+                return Err(AuthError::UserNotFound(user.id.to_string()));
+            };
+            let old_wallet = old_user.primary_wallet_address.clone();
+            let old_salt_identifier = old_user.kdf_salt_identifier.clone();
+
+            // Reject rather than persist, because this mock has to disagree
+            // with nothing. The Postgres statement omits kdf_salt_identifier
+            // from its SET clause - the stored recovery_verification_hash was
+            // derived from it, so changing it strands the account - which means
+            // a `users.insert` here would happily persist a value production
+            // drops on the floor. Service code that assigned the field would
+            // then pass its tests and silently no-op live (RCS-203).
+            if old_salt_identifier != user.kdf_salt_identifier {
+                return Err(AuthError::ImmutableField("kdf_salt_identifier".to_string()));
             }
+
+            // Update wallet index if primary wallet changed
+            if old_wallet != user.primary_wallet_address {
+                if let Some(ref old_wallet) = old_wallet {
+                    by_wallet.remove(old_wallet);
+                }
+                if let Some(ref new_wallet) = user.primary_wallet_address {
+                    by_wallet.insert(new_wallet.clone(), user.id);
+                }
+            }
+            users.insert(user.id, user.clone());
+            Ok(())
         }
 
         async fn delete_user(&self, id: UserId) -> Result<()> {
@@ -1460,5 +1471,85 @@ pub mod inmemory {
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod immutability_tests {
+    use super::UserRepository;
+    use super::inmemory::InMemoryRepository;
+    use crate::error::AuthError;
+    use crate::models::{User, UserId};
+
+    fn wallet_user() -> User {
+        User::new_wallet_only(
+            "0x1111111111111111111111111111111111111111".to_string(),
+            crypto::KdfParams::default(),
+            crypto::EncryptedBlob {
+                ciphertext: vec![1],
+                iv: vec![2],
+                mac: vec![3],
+            },
+            "recovery-hash".to_string(),
+        )
+    }
+
+    /// The invariant the Postgres statement enforces by omission, asserted here
+    /// so the mock cannot disagree with it. Before RCS-203 this write was
+    /// accepted and persisted, so a caller that mutated the field passed its
+    /// tests and then silently no-opped against Postgres.
+    #[tokio::test]
+    async fn update_user_rejects_a_changed_salt_identifier() {
+        let repo = InMemoryRepository::new();
+        let user = wallet_user();
+        repo.create_user(&user).await.unwrap();
+
+        let mut tampered = user.clone();
+        tampered.kdf_salt_identifier =
+            "wallet:0x2222222222222222222222222222222222222222".to_string();
+
+        let err = repo.update_user(&tampered).await.unwrap_err();
+        assert!(
+            matches!(&err, AuthError::ImmutableField(f) if f == "kdf_salt_identifier"),
+            "expected ImmutableField, got {err:?}"
+        );
+
+        // And the rejection is total: nothing else from that update landed.
+        let stored = repo.get_user(user.id).await.unwrap().unwrap();
+        assert_eq!(stored.kdf_salt_identifier, user.kdf_salt_identifier);
+    }
+
+    /// The guard must not make `update_user` useless for everything else.
+    #[tokio::test]
+    async fn update_user_still_applies_other_changes() {
+        let repo = InMemoryRepository::new();
+        let user = wallet_user();
+        repo.create_user(&user).await.unwrap();
+
+        let mut updated = user.clone();
+        updated.email = Some("someone@example.com".to_string());
+        updated.failed_login_attempts = 3;
+        repo.update_user(&updated).await.unwrap();
+
+        let stored = repo.get_user(user.id).await.unwrap().unwrap();
+        assert_eq!(stored.email.as_deref(), Some("someone@example.com"));
+        assert_eq!(stored.failed_login_attempts, 3);
+        // Adding an email must not re-derive the salt identifier (RCS-201).
+        assert_eq!(stored.kdf_salt_identifier, user.kdf_salt_identifier);
+    }
+
+    /// A missing user is still UserNotFound, not ImmutableField - the identifier
+    /// check must not shadow the existence check.
+    #[tokio::test]
+    async fn update_user_reports_a_missing_user_as_not_found() {
+        let repo = InMemoryRepository::new();
+        let mut ghost = wallet_user();
+        ghost.id = UserId::new();
+
+        let err = repo.update_user(&ghost).await.unwrap_err();
+        assert!(
+            matches!(err, AuthError::UserNotFound(_)),
+            "expected UserNotFound, got {err:?}"
+        );
     }
 }
