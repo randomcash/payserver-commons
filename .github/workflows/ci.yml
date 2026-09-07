@@ -35,22 +35,22 @@ jobs:
       # there could be clippy-clean and not build: three E0425s reached a green
       # PR on 2026-09-06 (RCS-205 review).
       #
-      # `check`, deliberately not `clippy -D warnings`: that module has 84
-      # pre-existing CLIPPY findings, tracked in RCS-199. This catches the
-      # compile break now without dragging those into unrelated PRs. Promote to
-      # clippy once RCS-199 clears them.
+      # --all-features matters here, and is the point of RCS-199. ui-kit's
+      # `auth` feature is optional, so a default build never compiles
+      # ui-kit/src/auth - login, registration, recovery. That module was
+      # therefore never linted at all, and had accumulated 83 findings; three
+      # E0425s once reached a green PR (2026-09-06, RCS-205 review), and a dead
+      # binding shipped green in #15. Both were invisible to a clippy step that
+      # did not build the code.
       #
-      # RUSTC warnings are a different set and there are currently none, so they
-      # are denied here. Without this the step only failed on hard errors, and a
-      # dead `let navigate = navigate.clone();` shipped green in #15 - invisible
-      # to the clippy step below, which does not build this feature at all.
-      - name: Compile check (all features)
+      # RCS-199 cleared the backlog - 78 auto-fixed, 5 redundant locals by hand
+      # - so this is now one step that denies rustc AND clippy warnings across
+      # every feature, instead of a lenient `check` beside a clippy run that
+      # skipped half the crate.
+      - name: Clippy (all features)
         env:
           RUSTFLAGS: -D warnings
-        run: cargo check --workspace --all-features
-
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Tests
         run: cargo nextest run --workspace --lib --no-fail-fast

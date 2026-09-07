@@ -76,19 +76,19 @@ pub fn PasskeyAuthForm(
                 _ => view! {
                     <div class="ps-passkey-form">
                         {move || {
-                            if let Some(error_signal) = error {
-                                if let Some(err) = error_signal.get() {
+                            if let Some(error_signal) = error
+                                && let Some(err) = error_signal.get() {
                                     return view! {
                                         <p class="ps-passkey-error">{err}</p>
                                     }.into_any();
                                 }
-                            }
                             if let PasskeyState::Error(ref msg) = current_state.get() {
                                 return view! {
                                     <p class="ps-passkey-error">{msg.clone()}</p>
                                 }.into_any();
                             }
-                            view! { <></> }.into_any()
+                            let _: () = view! { <></> };
+                            ().into_any()
                         }}
 
                         <button

@@ -50,7 +50,6 @@ pub fn LoginPage(
     // Redirect to dashboard if already authenticated
     {
         let navigate = navigate.clone();
-        let redirect = redirect.clone();
         Effect::new(move || {
             let state = auth.state.get();
             web_sys::console::log_1(&format!("[LoginPage] Auth state: {:?}", state).into());
@@ -252,7 +251,8 @@ pub fn LoginPage(
                                         </div>
                                     }.into_any()
                                 } else {
-                                    view! { <></> }.into_any()
+                                    let _: () = view! { <></> };
+                                    ().into_any()
                                 }}
                             </div>
                         }.into_any(),

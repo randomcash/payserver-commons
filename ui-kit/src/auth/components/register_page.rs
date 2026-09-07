@@ -120,7 +120,6 @@ pub fn RegisterPage(
     // navigated away immediately instead, so nobody ever saw it.
     {
         let navigate = navigate.clone();
-        let redirect = redirect.clone();
         Effect::new(move || {
             if auth.is_authenticated() && step.get() != RegisterStep::Complete {
                 let url = redirect.get_value();
@@ -213,8 +212,6 @@ pub fn RegisterPage(
 
     // Complete registration helper - wrapped in Arc for sharing
     let do_complete_registration = {
-        let api = api;
-        let redirect = redirect;
         Arc::new(move || {
             let api = api.get_value();
             // No `navigate` here on purpose: the redirect is a gloo Timeout
