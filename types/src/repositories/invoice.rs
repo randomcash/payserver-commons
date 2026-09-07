@@ -13,6 +13,15 @@ use crate::types::{InvoiceId, InvoiceStatus};
 #[derive(Debug, Clone, Default)]
 pub struct InvoiceQueryParams {
     pub store_id: Option<StoreId>,
+
+    /// Restrict to a set of stores, for a caller listing everything they can
+    /// see rather than one store or the whole server.
+    ///
+    /// An EMPTY vec means "no stores", and must filter every row out. It is not
+    /// the same as `None`, which means "do not filter at all" - collapsing the
+    /// two would turn a user who belongs to no store into a caller who sees
+    /// every store on the server (RCS-222, and RCS-211 before it).
+    pub store_ids: Option<Vec<StoreId>>,
     pub status: Option<InvoiceStatus>,
     pub currency: Option<String>,
     pub created_after: Option<DateTime<Utc>>,
@@ -25,6 +34,7 @@ impl InvoiceQueryParams {
     pub fn new() -> Self {
         Self {
             store_id: None,
+            store_ids: None,
             status: None,
             currency: None,
             created_after: None,
@@ -36,6 +46,12 @@ impl InvoiceQueryParams {
 
     pub fn with_store_id(mut self, store_id: StoreId) -> Self {
         self.store_id = Some(store_id);
+        self
+    }
+
+    /// See [`Self::store_ids`]. An empty vec is meaningful: it matches nothing.
+    pub fn with_store_ids(mut self, store_ids: Vec<StoreId>) -> Self {
+        self.store_ids = Some(store_ids);
         self
     }
 
