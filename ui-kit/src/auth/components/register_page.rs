@@ -197,11 +197,11 @@ pub fn RegisterPage(
     // Complete registration helper - wrapped in Arc for sharing
     let do_complete_registration = {
         let api = api;
-        let navigate = navigate.clone();
         let redirect = redirect;
         Arc::new(move || {
             let api = api.get_value();
-            let navigate = navigate.clone();
+            // No `navigate` here on purpose: the redirect is a gloo Timeout
+            // below, because save_login disposes this component (RCS-220).
             let redirect = redirect.get_value();
             let state = reg_state.get();
 

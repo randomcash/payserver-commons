@@ -35,11 +35,18 @@ jobs:
       # there could be clippy-clean and not build: three E0425s reached a green
       # PR on 2026-09-06 (RCS-205 review).
       #
-      # Plain `check`, deliberately not `clippy -D warnings`: that module has 84
-      # pre-existing lint findings, tracked in RCS-199. This catches the compile
-      # break now without dragging those into unrelated PRs. Promote to clippy
-      # once RCS-199 clears them.
+      # `check`, deliberately not `clippy -D warnings`: that module has 84
+      # pre-existing CLIPPY findings, tracked in RCS-199. This catches the
+      # compile break now without dragging those into unrelated PRs. Promote to
+      # clippy once RCS-199 clears them.
+      #
+      # RUSTC warnings are a different set and there are currently none, so they
+      # are denied here. Without this the step only failed on hard errors, and a
+      # dead `let navigate = navigate.clone();` shipped green in #15 - invisible
+      # to the clippy step below, which does not build this feature at all.
       - name: Compile check (all features)
+        env:
+          RUSTFLAGS: -D warnings
         run: cargo check --workspace --all-features
 
       - name: Clippy
