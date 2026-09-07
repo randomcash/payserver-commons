@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::RepositoryResult;
+use super::{RepositoryResult, normalize_search};
 use crate::store::StoreId;
 use crate::traits::PaymentData;
 use crate::types::InvoiceId;
@@ -24,6 +24,12 @@ pub struct PaymentQueryParams {
     pub store_ids: Option<Vec<StoreId>>,
     pub invoice_id: Option<InvoiceId>,
     pub confirmed: Option<bool>,
+
+    /// Free-text search over the columns the payment list shows (RCS-231).
+    ///
+    /// Read it through [`Self::search_term`] rather than directly: blank means
+    /// "no filter", and the backends have to agree on that.
+    pub search: Option<String>,
     pub limit: i64,
     pub offset: i64,
 }
@@ -35,6 +41,7 @@ impl PaymentQueryParams {
             store_ids: None,
             invoice_id: None,
             confirmed: None,
+            search: None,
             limit: 50,
             offset: 0,
         }
@@ -59,6 +66,23 @@ impl PaymentQueryParams {
     pub fn with_confirmed(mut self, confirmed: bool) -> Self {
         self.confirmed = Some(confirmed);
         self
+    }
+
+    /// Free-text search. A blank term is no filter at all - see
+    /// [`Self::search_term`].
+    pub fn with_search(mut self, search: impl Into<String>) -> Self {
+        self.search = Some(search.into());
+        self
+    }
+
+    /// The search term to actually filter on, trimmed, or `None` when the
+    /// caller supplied nothing usable.
+    ///
+    /// Every backend must filter through this and no other reading of
+    /// [`Self::search`], or Postgres and the in-memory double end up
+    /// disagreeing about what an empty box means.
+    pub fn search_term(&self) -> Option<&str> {
+        normalize_search(self.search.as_deref())
     }
 
     pub fn with_limit(mut self, limit: i64) -> Self {

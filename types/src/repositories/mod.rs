@@ -67,6 +67,21 @@ pub use webhook_delivery::{
     CreateDeliveryParams, WebhookDeliveryReader, WebhookDeliveryRepository, WebhookDeliveryWriter,
 };
 
+/// Normalize a free-text list search term (RCS-231).
+///
+/// Trims, and treats a blank term as absent. The distinction matters: an empty
+/// search box must mean "no filter", never "match nothing" - a user who clears
+/// the box, or whose client sends `?search=`, is asking to see everything
+/// again, not to be shown an empty list.
+///
+/// Both `InvoiceQueryParams::search_term` and `PaymentQueryParams::search_term`
+/// go through here, and so does every backend that reads the field, so the rule
+/// cannot drift between the SQL store and the in-memory double (RCS-203 is what
+/// that drift costs).
+pub fn normalize_search(search: Option<&str>) -> Option<&str> {
+    search.map(str::trim).filter(|term| !term.is_empty())
+}
+
 /// Combined data service trait with full read/write access to all repositories.
 ///
 /// This supertrait combines all repository traits for convenience when you need
@@ -117,4 +132,47 @@ pub trait DataServiceWriter:
 impl<T> DataServiceWriter for T where
     T: InvoiceWriter + PaymentWriter + PaymentOptionWriter + WatchedAddressWriter + TokenWriter
 {
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InvoiceQueryParams, PaymentQueryParams, normalize_search};
+
+    #[test]
+    fn blank_search_is_no_filter_not_an_impossible_one() {
+        assert_eq!(normalize_search(None), None);
+        assert_eq!(normalize_search(Some("")), None);
+        assert_eq!(normalize_search(Some("   ")), None);
+        assert_eq!(normalize_search(Some("\t\n")), None);
+    }
+
+    #[test]
+    fn search_is_trimmed_so_a_pasted_hash_still_matches() {
+        assert_eq!(normalize_search(Some("  0xdead ")), Some("0xdead"));
+        assert_eq!(normalize_search(Some("usd")), Some("usd"));
+    }
+
+    #[test]
+    fn both_query_params_read_the_field_through_the_same_rule() {
+        assert_eq!(
+            InvoiceQueryParams::new()
+                .with_search("  USD ")
+                .search_term(),
+            Some("USD")
+        );
+        assert_eq!(
+            InvoiceQueryParams::new().with_search("  ").search_term(),
+            None
+        );
+        assert_eq!(
+            PaymentQueryParams::new()
+                .with_search(" 0xabc ")
+                .search_term(),
+            Some("0xabc")
+        );
+        assert_eq!(
+            PaymentQueryParams::new().with_search("").search_term(),
+            None
+        );
+    }
 }
