@@ -6,7 +6,7 @@
 //!
 //! # Architecture
 //!
-//! - `Network`: Enum of all supported blockchain networks
+//! - `ChainId`: CAIP-2 identifier for any chain, in any family
 //! - `PayServer` trait: Core interface all payment servers implement
 //! - `InvoiceData`, `PaymentData`: Generic data structures for invoices and payments
 //! - Repository traits: `InvoiceRepository`, `PaymentRepository`, `WatchedAddressRepository`
@@ -101,9 +101,8 @@ pub use traits::{
 };
 pub use types::{
     AssetType, ChainId, ChainIdError, CleanupAddressInfo, DerivationAllocation, HealthStatus,
-    InvoiceId, InvoiceStatus, Network, PaymentEvent, PaymentMethodId, PaymentOptionData,
-    PaymentOptionId, PayoutData, PayoutStatus, PendingWatchInfo, RefundData, RefundStatus,
-    StorePaymentMethod, StoreSettings, StoreTokenPolicy, StoreTokenPolicyEntry,
-    StoreTokenPolicyWithEntries, StoreWebhook, TokenData, TokenPolicyMode, UserId, Wallet,
-    WebhookDelivery,
+    InvoiceId, InvoiceStatus, PaymentEvent, PaymentMethodId, PaymentOptionData, PaymentOptionId,
+    PayoutData, PayoutStatus, PendingWatchInfo, RefundData, RefundStatus, StorePaymentMethod,
+    StoreSettings, StoreTokenPolicy, StoreTokenPolicyEntry, StoreTokenPolicyWithEntries,
+    StoreWebhook, TokenData, TokenPolicyMode, UserId, Wallet, WebhookDelivery,
 };

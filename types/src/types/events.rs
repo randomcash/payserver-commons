@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{InvoiceId, InvoiceStatus, Network};
+use super::{ChainId, InvoiceId, InvoiceStatus};
 
 /// Health status of a PayServer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,10 +11,10 @@ pub struct HealthStatus {
     pub healthy: bool,
     /// Service version.
     pub version: String,
-    /// Networks this server supports.
-    pub supported_networks: Vec<Network>,
-    /// Current block heights per network (if applicable).
-    pub block_heights: Option<std::collections::HashMap<Network, u64>>,
+    /// Chains this server supports, as CAIP-2 identifiers.
+    pub supported_chains: Vec<ChainId>,
+    /// Current block heights per chain (if applicable).
+    pub block_heights: Option<std::collections::HashMap<ChainId, u64>>,
     /// Number of pending invoices.
     pub pending_invoices: Option<u64>,
     /// Additional details.
@@ -31,13 +31,13 @@ pub enum PaymentEvent {
     /// Invoice was created.
     InvoiceCreated {
         invoice_id: InvoiceId,
-        network: Network,
+        chain_id: ChainId,
     },
     /// Payment was detected (unconfirmed).
     PaymentDetected {
         invoice_id: InvoiceId,
         tx_hash: String,
-        network: Network,
+        chain_id: ChainId,
     },
     /// Payment was confirmed.
     PaymentConfirmed {

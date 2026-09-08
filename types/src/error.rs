@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::types::{InvoiceId, InvoiceStatus, Network};
+use crate::types::{ChainId, InvoiceId, InvoiceStatus};
 
 /// Main error type for PayServer operations.
 #[derive(Debug, Error)]
@@ -25,13 +25,13 @@ pub enum PayServerError {
         expected: Vec<InvoiceStatus>,
     },
 
-    /// Network not supported by this PayServer.
-    #[error("unsupported network: {0}")]
-    UnsupportedNetwork(Network),
+    /// Chain not supported by this PayServer.
+    #[error("unsupported chain: {0}")]
+    UnsupportedChain(ChainId),
 
-    /// Asset not supported on this network.
-    #[error("unsupported asset: {asset} on {network}")]
-    UnsupportedAsset { network: Network, asset: String },
+    /// Asset not supported on this chain.
+    #[error("unsupported asset: {asset} on {chain_id}")]
+    UnsupportedAsset { chain_id: ChainId, asset: String },
 
     /// Invalid amount.
     #[error("invalid amount: {0}")]
@@ -92,7 +92,7 @@ impl PayServerError {
             PayServerError::InvoiceNotFound(_) => 404,
             PayServerError::InvoiceExpired(_) => 410,
             PayServerError::InvalidInvoiceState { .. } => 409,
-            PayServerError::UnsupportedNetwork(_) => 400,
+            PayServerError::UnsupportedChain(_) => 400,
             PayServerError::UnsupportedAsset { .. } => 400,
             PayServerError::InvalidAmount(_) => 400,
             PayServerError::Validation(_) => 400,
@@ -134,7 +134,7 @@ mod tests {
             400
         );
         assert_eq!(
-            PayServerError::UnsupportedNetwork(Network::BitcoinLightning).http_status_code(),
+            PayServerError::UnsupportedChain(ChainId::evm(1)).http_status_code(),
             400
         );
     }

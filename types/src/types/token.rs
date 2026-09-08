@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::Network;
+use super::ChainId;
 
 /// Token data for persistence.
 ///
@@ -23,8 +23,8 @@ pub struct TokenData {
     /// Format depends on the network (e.g., "0x..." for EVM, inscription ID for ordinals).
     pub address: String,
 
-    /// Network this token is on.
-    pub network: Network,
+    /// Chain this token is on, as a CAIP-2 identifier.
+    pub chain_id: ChainId,
 
     /// Whether this token is enabled for payments.
     #[serde(default = "default_token_enabled")]
@@ -59,13 +59,13 @@ impl TokenData {
     pub fn new(
         token_type: impl Into<String>,
         address: impl Into<String>,
-        network: Network,
+        chain_id: ChainId,
     ) -> Self {
         Self {
             id: None,
             token_type: token_type.into(),
             address: address.into(),
-            network,
+            chain_id,
             enabled: true,
             name: None,
             symbol: None,

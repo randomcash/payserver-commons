@@ -7,13 +7,13 @@
 use async_trait::async_trait;
 
 use super::RepositoryResult;
-use crate::types::{Network, TokenData};
+use crate::types::{ChainId, TokenData};
 
 /// Query parameters for listing tokens.
 #[derive(Debug, Clone)]
 pub struct TokenQueryParams {
     pub token_type: Option<String>,
-    pub network: Option<Network>,
+    pub chain_id: Option<ChainId>,
     pub enabled: Option<bool>,
     pub symbol: Option<String>,
     pub limit: i64,
@@ -24,7 +24,7 @@ impl Default for TokenQueryParams {
     fn default() -> Self {
         Self {
             token_type: None,
-            network: None,
+            chain_id: None,
             enabled: None,
             symbol: None,
             limit: 100,
@@ -39,8 +39,8 @@ impl TokenQueryParams {
         self
     }
 
-    pub fn with_network(mut self, network: Network) -> Self {
-        self.network = Some(network);
+    pub fn with_chain(mut self, chain_id: ChainId) -> Self {
+        self.chain_id = Some(chain_id);
         self
     }
 
@@ -74,7 +74,7 @@ pub trait TokenReader: Send + Sync {
     /// Get a token by network and contract address.
     async fn get_by_address(
         &self,
-        network: Network,
+        chain_id: &ChainId,
         address: &str,
     ) -> RepositoryResult<Option<TokenData>>;
 
@@ -82,7 +82,7 @@ pub trait TokenReader: Send + Sync {
     /// Note: If multiple tokens have the same symbol on a network, returns the first match.
     async fn find_by_symbol(
         &self,
-        network: Network,
+        chain_id: &ChainId,
         symbol: &str,
     ) -> RepositoryResult<Option<TokenData>>;
 
@@ -91,7 +91,7 @@ pub trait TokenReader: Send + Sync {
     async fn query(&self, params: &TokenQueryParams) -> RepositoryResult<(i64, Vec<TokenData>)>;
 
     /// Get all enabled tokens for a specific network.
-    async fn get_enabled_for_network(&self, network: Network) -> RepositoryResult<Vec<TokenData>>;
+    async fn get_enabled_for_chain(&self, chain_id: &ChainId) -> RepositoryResult<Vec<TokenData>>;
 }
 
 /// Write operations for tokens.

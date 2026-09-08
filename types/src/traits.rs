@@ -10,7 +10,7 @@ use std::pin::Pin;
 use crate::error::PayServerResult;
 use crate::store::StoreId;
 use crate::types::ChainId;
-use crate::types::{AssetType, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent};
+use crate::types::{AssetType, HealthStatus, InvoiceId, InvoiceStatus, PaymentEvent};
 
 /// Configuration for creating an invoice.
 ///
@@ -260,8 +260,8 @@ pub struct PaymentData {
 
 /// Core trait that all payment servers must implement.
 pub trait PayServer: Send + Sync {
-    /// Returns the networks this PayServer supports.
-    fn supported_networks(&self) -> Vec<Network>;
+    /// Returns the chains this PayServer supports.
+    fn supported_chains(&self) -> Vec<ChainId>;
 
     /// Create a new invoice.
     fn create_invoice(
@@ -308,10 +308,10 @@ pub trait PaymentMonitor: Send + Sync {
     /// Check if the monitor is running.
     fn is_running(&self) -> bool;
 
-    /// Get the current block height being monitored for a network.
+    /// Get the current block height being monitored for a chain.
     fn current_block_height(
         &self,
-        network: Network,
+        chain_id: &ChainId,
     ) -> Pin<Box<dyn Future<Output = PayServerResult<u64>> + Send + '_>>;
 }
 
