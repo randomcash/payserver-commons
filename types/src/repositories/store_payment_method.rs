@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::RepositoryResult;
-use crate::types::StorePaymentMethod;
+use crate::types::{DerivationAllocation, StorePaymentMethod};
 
 /// Read operations for store payment methods.
 #[async_trait]
@@ -65,10 +65,22 @@ pub trait StorePaymentMethodWriter: Send + Sync {
     /// Delete a payment method.
     async fn delete_payment_method(&self, id: Uuid) -> RepositoryResult<()>;
 
-    /// Get and increment the derivation index for a payment method.
+    /// Take the next derivation slot for a payment method.
     ///
-    /// Returns the current index before incrementing.
-    async fn next_derivation_index(&self, id: Uuid) -> RepositoryResult<i32>;
+    /// Resolves the wallet the method actually derives from - its own pin, its
+    /// store's override, or the account primary - advances that wallet's
+    /// counter and returns the key and index together.
+    ///
+    /// Replaces the old `next_derivation_index`, which returned an index alone
+    /// and left the caller to pair it with an xpub it had read earlier. That
+    /// pairing was only safe while the counter lived on the same row as the
+    /// key; once it moved to the wallet, a rotation between the read and the
+    /// allocation could combine two different wallets and re-issue an address
+    /// (RCS-234).
+    ///
+    /// Must be atomic: two invoices allocating at once on one wallet have to
+    /// receive different indices.
+    async fn allocate_derivation(&self, id: Uuid) -> RepositoryResult<DerivationAllocation>;
 }
 
 /// Combined store payment method repository.

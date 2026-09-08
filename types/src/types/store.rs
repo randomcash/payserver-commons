@@ -51,19 +51,48 @@ pub struct StorePaymentMethod {
     pub asset_symbol: String,
     /// Number of decimals for this asset (18 for ETH, 6 for USDC/USDT).
     pub decimals: u8,
-    /// The account wallet this method derives from (RCS-234).
-    pub wallet_id: Uuid,
-    /// The wallet's xpub, joined in for convenience. Read-only here: the
-    /// column lives on `wallets`, so several methods pointing at one wallet
-    /// cannot drift apart (RCS-234).
-    pub xpub: String,
-    /// The wallet's next derivation index, joined in the same way. Shared with
-    /// every other method on the same wallet, which is what stops two of them
-    /// issuing the same address.
-    pub derivation_index: i32,
+    /// The wallet this method actually derives from, after resolution
+    /// (RCS-234).
+    ///
+    /// Resolved, not stored: a method may be pinned to a wallet, and otherwise
+    /// follows its store's override, and otherwise the account primary. What
+    /// is reported here is the answer that derivation will reach, so a caller
+    /// cannot render one key while payments are collected on another.
+    ///
+    /// `None` means the chain runs out - no pin, no store override, no account
+    /// primary. The method exists but cannot be paid until a wallet does.
+    pub wallet_id: Option<Uuid>,
+    /// The resolved wallet's xpub. `None` for the same reason as `wallet_id`.
+    ///
+    /// Read-only: the column lives on `wallets`, so methods sharing a wallet
+    /// cannot drift apart. Do not snapshot this and then allocate an index
+    /// separately - a rotation landing in between pairs one wallet's key with
+    /// another's index. Use `allocate_derivation`, which returns both from one
+    /// statement.
+    pub xpub: Option<String>,
+    /// The resolved wallet's next derivation index, shared with every other
+    /// method resolving to the same wallet.
+    pub derivation_index: Option<i32>,
     /// Whether this payment method is enabled.
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
+}
+
+/// One derivation slot, taken atomically (RCS-234).
+///
+/// The key and the index come out of the same statement against the same
+/// wallet row. Fetching them separately is a duplicate-address bug: a rotation
+/// committing between the two pairs the old wallet's xpub with an index
+/// consumed from the new one, and the old wallet never advances past it, so it
+/// hands that address out again later.
+#[derive(Debug, Clone)]
+pub struct DerivationAllocation {
+    /// The wallet the index was taken from.
+    pub wallet_id: Uuid,
+    /// That wallet's xpub - the one to derive with, not a snapshot.
+    pub xpub: String,
+    /// The index to derive at. Already consumed; nobody else will get it.
+    pub index: i32,
 }
 
 /// Store webhook configuration for invoice notifications.
