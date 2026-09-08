@@ -36,7 +36,7 @@ pub trait LiveWatchedAddressReader: Send + Sync {
     /// Returns tuples of (address, invoice_id, chain_id, token_address).
     async fn get_all_watched(
         &self,
-    ) -> RepositoryResult<Vec<(String, InvoiceId, u64, Option<String>)>>;
+    ) -> RepositoryResult<Vec<(String, InvoiceId, ChainId, Option<String>)>>;
 }
 
 /// Write operations for live watched addresses.
