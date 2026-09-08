@@ -134,6 +134,19 @@ pub struct PaymentOptionData {
     pub decimals: u8,
     /// Payment destination address.
     pub payment_address: String,
+    /// The account wallet whose xpub produced `payment_address` (RCS-234).
+    ///
+    /// `None` on options created before RCS-234, whose originating method
+    /// could not be matched back. Provenance only - `payment_address` is
+    /// authoritative and has always been recorded literally, so nothing here
+    /// is needed to know where an old invoice was to be paid.
+    pub wallet_id: Option<Uuid>,
+    /// The index used within `wallet_id`.
+    ///
+    /// `None` means pre-RCS-234 and genuinely unknown. Do not read it as 0:
+    /// index 0 is a real address, and conflating the two would report a
+    /// customer's address as belonging to an invoice that never used it.
+    pub derivation_index: Option<i32>,
     /// Amount to pay in this asset (smallest unit as string).
     /// This is the invoice amount converted to this asset.
     pub amount: String,
@@ -166,6 +179,8 @@ impl PaymentOptionData {
             token_address: None,
             decimals: 18,
             payment_address: payment_address.to_string(),
+            wallet_id: None,
+            derivation_index: None,
             amount: amount.to_string(),
             rate: None,
             rate_at: None,
@@ -193,6 +208,8 @@ impl PaymentOptionData {
             token_address: Some(token_address.to_string()),
             decimals,
             payment_address: payment_address.to_string(),
+            wallet_id: None,
+            derivation_index: None,
             amount: amount.to_string(),
             rate: None,
             rate_at: None,

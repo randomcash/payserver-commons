@@ -71,10 +71,6 @@ pub use repositories::{
     StoreTokenPolicyReader,
     StoreTokenPolicyRepository,
     StoreTokenPolicyWriter,
-    // Store Wallet (deprecated)
-    StoreWalletReader,
-    StoreWalletRepository,
-    StoreWalletWriter,
     // Store Webhook
     StoreWebhookReader,
     StoreWebhookRepository,
@@ -86,6 +82,10 @@ pub use repositories::{
     TokenRepository,
     TokenWriter,
     // Watched Address (for PostgreSQL persistence)
+    // Account Wallet (RCS-234)
+    WalletReader,
+    WalletRepository,
+    WalletWriter,
     WatchedAddressReader,
     WatchedAddressRepository,
     WatchedAddressWriter,
@@ -103,6 +103,6 @@ pub use types::{
     AssetType, CleanupAddressInfo, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent,
     PaymentMethodId, PaymentOptionData, PaymentOptionId, PayoutData, PayoutStatus,
     PendingWatchInfo, RefundData, RefundStatus, StorePaymentMethod, StoreSettings,
-    StoreTokenPolicy, StoreTokenPolicyEntry, StoreTokenPolicyWithEntries, StoreWallet,
-    StoreWebhook, TokenData, TokenPolicyMode, UserId, WebhookDelivery,
+    StoreTokenPolicy, StoreTokenPolicyEntry, StoreTokenPolicyWithEntries, StoreWebhook, TokenData,
+    TokenPolicyMode, UserId, Wallet, WebhookDelivery,
 };
