@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::InvoiceId;
+use super::{ChainId, InvoiceId};
 
 /// Unique identifier for a payment option.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -52,30 +52,45 @@ impl std::str::FromStr for PaymentOptionId {
 
 /// Payment method identifier.
 ///
-/// Format: `{ASSET}-{CHAIN_ID}`
+/// Format: `{ASSET}@{CHAIN}`, where the chain is a CAIP-2 identifier.
+///
 /// Examples:
-/// - `ETH-1` (ETH on Ethereum mainnet)
-/// - `ETH-11155111` (ETH on Sepolia testnet)
-/// - `USDC-137` (USDC on Polygon)
-/// - `USDT-42161` (USDT on Arbitrum)
+/// - `ETH@eip155:1` (ETH on Ethereum mainnet)
+/// - `ETH@eip155:11155111` (ETH on Sepolia)
+/// - `USDC@eip155:137` (USDC on Polygon)
+/// - `USDT@tron:728126428` (USDT on Tron)
+///
+/// The separator is `@`, not the `-` this used to use. A CAIP-2 reference may
+/// contain hyphens (`[-_a-zA-Z0-9]`, e.g. `cosmos:cosmoshub-3`), so splitting
+/// on the last `-` would have taken the chain apart in the middle. `@` is in
+/// neither the CAIP-2 charset nor any asset symbol, so the split is
+/// unambiguous in both directions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PaymentMethodId(pub String);
 
+/// Separates asset from chain. See the note above on why it is not `-`.
+const METHOD_ID_SEPARATOR: char = '@';
+
 impl PaymentMethodId {
     /// Create a new payment method ID.
-    pub fn new(asset_symbol: &str, chain_id: u64) -> Self {
-        Self(format!("{}-{}", asset_symbol.to_uppercase(), chain_id))
+    pub fn new(asset_symbol: &str, chain_id: &ChainId) -> Self {
+        Self(format!(
+            "{}{METHOD_ID_SEPARATOR}{chain_id}",
+            asset_symbol.to_uppercase()
+        ))
     }
 
     /// Parse a payment method ID string.
-    pub fn parse(s: &str) -> Option<(String, u64)> {
-        let parts: Vec<&str> = s.rsplitn(2, '-').collect();
-        if parts.len() != 2 {
+    ///
+    /// Splits on the FIRST separator: an asset symbol cannot contain one, and
+    /// the remainder is handed to `ChainId` to validate rather than assumed
+    /// well-formed.
+    pub fn parse(s: &str) -> Option<(String, ChainId)> {
+        let (asset, chain) = s.split_once(METHOD_ID_SEPARATOR)?;
+        if asset.is_empty() {
             return None;
         }
-        let chain_id: u64 = parts[0].parse().ok()?;
-        let asset = parts[1].to_string();
-        Some((asset, chain_id))
+        Some((asset.to_string(), ChainId::parse(chain).ok()?))
     }
 
     /// Get the asset symbol.
@@ -83,8 +98,8 @@ impl PaymentMethodId {
         Self::parse(&self.0).map(|(asset, _)| asset)
     }
 
-    /// Get the chain ID.
-    pub fn chain_id(&self) -> Option<u64> {
+    /// Get the chain.
+    pub fn chain_id(&self) -> Option<ChainId> {
         Self::parse(&self.0).map(|(_, chain_id)| chain_id)
     }
 
@@ -125,7 +140,7 @@ pub struct PaymentOptionData {
     /// Payment method identifier (e.g., "ETH-1", "USDC-137").
     pub payment_method_id: PaymentMethodId,
     /// EIP-155 chain ID.
-    pub chain_id: u64,
+    pub chain_id: ChainId,
     /// Asset symbol (e.g., "ETH", "USDC").
     pub asset_symbol: String,
     /// Token contract address (None for native assets).
@@ -165,7 +180,7 @@ impl PaymentOptionData {
     /// Create a new payment option for a native asset (ETH, POL, etc.).
     pub fn native(
         invoice_id: InvoiceId,
-        chain_id: u64,
+        chain_id: ChainId,
         asset_symbol: &str,
         payment_address: &str,
         amount: &str,
@@ -173,7 +188,7 @@ impl PaymentOptionData {
         Self {
             id: PaymentOptionId::new(),
             invoice_id,
-            payment_method_id: PaymentMethodId::new(asset_symbol, chain_id),
+            payment_method_id: PaymentMethodId::new(asset_symbol, &chain_id),
             chain_id,
             asset_symbol: asset_symbol.to_string(),
             token_address: None,
@@ -192,7 +207,7 @@ impl PaymentOptionData {
     /// Create a new payment option for an ERC20 token.
     pub fn erc20(
         invoice_id: InvoiceId,
-        chain_id: u64,
+        chain_id: ChainId,
         asset_symbol: &str,
         token_address: &str,
         decimals: u8,
@@ -202,7 +217,7 @@ impl PaymentOptionData {
         Self {
             id: PaymentOptionId::new(),
             invoice_id,
-            payment_method_id: PaymentMethodId::new(asset_symbol, chain_id),
+            payment_method_id: PaymentMethodId::new(asset_symbol, &chain_id),
             chain_id,
             asset_symbol: asset_symbol.to_string(),
             token_address: Some(token_address.to_string()),
@@ -230,35 +245,61 @@ mod tests {
 
     #[test]
     fn test_payment_method_id() {
-        let id = PaymentMethodId::new("ETH", 1);
-        assert_eq!(id.as_str(), "ETH-1");
+        let id = PaymentMethodId::new("ETH", &ChainId::evm(1));
+        assert_eq!(id.as_str(), "ETH@eip155:1");
         assert_eq!(id.asset_symbol(), Some("ETH".to_string()));
-        assert_eq!(id.chain_id(), Some(1));
+        assert_eq!(id.chain_id(), Some(ChainId::evm(1)));
 
-        let id = PaymentMethodId::new("USDC", 137);
-        assert_eq!(id.as_str(), "USDC-137");
+        let id = PaymentMethodId::new("USDC", &ChainId::evm(137));
+        assert_eq!(id.as_str(), "USDC@eip155:137");
 
-        let id = PaymentMethodId::new("ETH", 11155111);
-        assert_eq!(id.as_str(), "ETH-11155111");
-        assert_eq!(id.chain_id(), Some(11155111));
+        let id = PaymentMethodId::new("ETH", &ChainId::evm(11_155_111));
+        assert_eq!(id.as_str(), "ETH@eip155:11155111");
+        assert_eq!(id.chain_id(), Some(ChainId::evm(11_155_111)));
+    }
+
+    #[test]
+    fn method_id_carries_non_evm_chains() {
+        let tron = ChainId::parse("tron:728126428").unwrap();
+        let id = PaymentMethodId::new("USDT", &tron);
+        assert_eq!(id.as_str(), "USDT@tron:728126428");
+        assert_eq!(id.chain_id(), Some(tron));
     }
 
     #[test]
     fn test_payment_method_id_parse() {
-        let (asset, chain_id) = PaymentMethodId::parse("ETH-1").unwrap();
+        let (asset, chain_id) = PaymentMethodId::parse("ETH@eip155:1").unwrap();
         assert_eq!(asset, "ETH");
-        assert_eq!(chain_id, 1);
+        assert_eq!(chain_id, ChainId::evm(1));
 
-        let (asset, chain_id) = PaymentMethodId::parse("USDC-137").unwrap();
+        let (asset, chain_id) = PaymentMethodId::parse("USDC@eip155:137").unwrap();
         assert_eq!(asset, "USDC");
-        assert_eq!(chain_id, 137);
+        assert_eq!(chain_id, ChainId::evm(137));
 
-        // Edge case: asset with hyphen
-        let (asset, chain_id) = PaymentMethodId::parse("WETH-USDC-1").unwrap();
+        // An asset symbol may contain a hyphen; it no longer collides with the
+        // separator, which is why the separator changed.
+        let (asset, chain_id) = PaymentMethodId::parse("WETH-USDC@eip155:1").unwrap();
         assert_eq!(asset, "WETH-USDC");
-        assert_eq!(chain_id, 1);
+        assert_eq!(chain_id, ChainId::evm(1));
+    }
 
+    /// A CAIP-2 reference may contain hyphens, which is precisely what the old
+    /// `{ASSET}-{CHAIN}` format could not survive: splitting `ATOM-cosmos:cosmoshub-3`
+    /// on the last hyphen yields the chain `3`.
+    #[test]
+    fn a_hyphenated_chain_reference_survives() {
+        let cosmos = ChainId::parse("cosmos:cosmoshub-3").unwrap();
+        let id = PaymentMethodId::new("ATOM", &cosmos);
+        assert_eq!(id.chain_id(), Some(cosmos));
+    }
+
+    #[test]
+    fn malformed_method_ids_are_rejected() {
         assert!(PaymentMethodId::parse("invalid").is_none());
-        assert!(PaymentMethodId::parse("ETH-abc").is_none());
+        // The old format must not parse: it would yield a chain nothing can
+        // resolve, and the migration converts these explicitly.
+        assert!(PaymentMethodId::parse("ETH-1").is_none());
+        assert!(PaymentMethodId::parse("ETH@abc").is_none());
+        assert!(PaymentMethodId::parse("@eip155:1").is_none());
     }
 }

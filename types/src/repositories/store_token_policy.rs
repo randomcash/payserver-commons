@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::RepositoryResult;
+use crate::types::ChainId;
 use crate::types::{StoreTokenPolicyWithEntries, TokenPolicyMode};
 
 /// Read operations for store token policies.
@@ -19,7 +20,7 @@ pub trait StoreTokenPolicyReader: Send + Sync {
 
 /// Input entry for creating/updating a token policy.
 pub struct TokenPolicyEntryInput {
-    pub chain_id: i64,
+    pub chain_id: ChainId,
     pub token_address: Option<String>,
     pub asset_symbol: String,
 }

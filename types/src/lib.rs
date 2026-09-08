@@ -100,9 +100,10 @@ pub use traits::{
     PaymentEventSubscriber, PaymentMonitor,
 };
 pub use types::{
-    AssetType, CleanupAddressInfo, DerivationAllocation, HealthStatus, InvoiceId, InvoiceStatus,
-    Network, PaymentEvent, PaymentMethodId, PaymentOptionData, PaymentOptionId, PayoutData,
-    PayoutStatus, PendingWatchInfo, RefundData, RefundStatus, StorePaymentMethod, StoreSettings,
-    StoreTokenPolicy, StoreTokenPolicyEntry, StoreTokenPolicyWithEntries, StoreWebhook, TokenData,
-    TokenPolicyMode, UserId, Wallet, WebhookDelivery,
+    AssetType, ChainId, ChainIdError, CleanupAddressInfo, DerivationAllocation, HealthStatus,
+    InvoiceId, InvoiceStatus, Network, PaymentEvent, PaymentMethodId, PaymentOptionData,
+    PaymentOptionId, PayoutData, PayoutStatus, PendingWatchInfo, RefundData, RefundStatus,
+    StorePaymentMethod, StoreSettings, StoreTokenPolicy, StoreTokenPolicyEntry,
+    StoreTokenPolicyWithEntries, StoreWebhook, TokenData, TokenPolicyMode, UserId, Wallet,
+    WebhookDelivery,
 };

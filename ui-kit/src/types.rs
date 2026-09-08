@@ -1,6 +1,7 @@
 //! Shared types for frontend modules.
 
 use serde::{Deserialize, Serialize};
+use types::ChainId;
 
 /// User information shared across modules.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -128,7 +129,7 @@ pub struct InvoiceInfo {
     pub status: String,
     pub expires_at: Option<String>,
     pub network: Option<String>,
-    pub chain_id: Option<u64>,
+    pub chain_id: Option<ChainId>,
 }
 
 /// Configuration for a server module.
@@ -286,12 +287,12 @@ mod tests {
             status: "pending".to_string(),
             expires_at: Some("2024-12-31T23:59:59Z".to_string()),
             network: Some("ethereum".to_string()),
-            chain_id: Some(1),
+            chain_id: Some(ChainId::evm(1)),
         };
 
         assert_eq!(invoice.id, "inv_123");
         assert_eq!(invoice.status, "pending");
-        assert_eq!(invoice.chain_id, Some(1));
+        assert_eq!(invoice.chain_id, Some(ChainId::evm(1)));
     }
 
     #[test]

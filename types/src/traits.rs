@@ -9,6 +9,7 @@ use std::pin::Pin;
 
 use crate::error::PayServerResult;
 use crate::store::StoreId;
+use crate::types::ChainId;
 use crate::types::{AssetType, HealthStatus, InvoiceId, InvoiceStatus, Network, PaymentEvent};
 
 /// Configuration for creating an invoice.
@@ -158,7 +159,7 @@ pub struct PaymentData {
     /// The payment option this payment was for (if known).
     pub payment_option_id: Option<uuid::Uuid>,
     /// EIP-155 chain ID where this payment was received.
-    pub chain_id: u64,
+    pub chain_id: ChainId,
     /// Asset type (native or ERC20).
     #[serde(default)]
     pub asset_type: AssetType,

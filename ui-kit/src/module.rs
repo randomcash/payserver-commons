@@ -72,18 +72,19 @@ impl ModuleRegistry {
 /// Each server implements these slots for the checkout page.
 pub mod checkout_slots {
     use leptos::prelude::*;
+    use types::ChainId;
 
     /// Render a network badge.
-    pub type NetworkBadgeFn = fn(chain_id: u64, network_name: &str) -> AnyView;
+    pub type NetworkBadgeFn = fn(chain_id: &ChainId, network_name: &str) -> AnyView;
 
     /// Render amount details (gas, fees, etc.).
-    pub type AmountDetailsFn = fn(chain_id: u64, amount: &str) -> Option<AnyView>;
+    pub type AmountDetailsFn = fn(chain_id: &ChainId, amount: &str) -> Option<AnyView>;
 
     /// Render a QR code for payment.
     pub type QrCodeFn = fn(payment_request: &str) -> AnyView;
 
     /// Render wallet action buttons.
-    pub type WalletActionsFn = fn(payment_address: &str, chain_id: u64) -> Option<AnyView>;
+    pub type WalletActionsFn = fn(payment_address: &str, chain_id: &ChainId) -> Option<AnyView>;
 }
 
 /// Configuration for a checkout plugin.

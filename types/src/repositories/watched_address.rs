@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 
 use super::RepositoryResult;
+use crate::types::ChainId;
 use crate::types::{CleanupAddressInfo, InvoiceId, PaymentOptionId, PendingWatchInfo};
 
 /// Read operations for watched addresses.
@@ -12,7 +13,7 @@ pub trait WatchedAddressReader: Send + Sync {
     async fn get_invoice_id(
         &self,
         address: &str,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<Option<InvoiceId>>;
 
@@ -20,7 +21,7 @@ pub trait WatchedAddressReader: Send + Sync {
     async fn get_payment_option_id(
         &self,
         address: &str,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<Option<PaymentOptionId>>;
 
@@ -59,7 +60,7 @@ pub trait WatchedAddressWriter: Send + Sync {
         &self,
         address: &str,
         payment_option_id: &PaymentOptionId,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<()>;
 
@@ -67,7 +68,7 @@ pub trait WatchedAddressWriter: Send + Sync {
     async fn mark_notified(
         &self,
         address: &str,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<()>;
 
@@ -77,7 +78,7 @@ pub trait WatchedAddressWriter: Send + Sync {
     async fn deactivate(
         &self,
         address: &str,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<bool>;
 

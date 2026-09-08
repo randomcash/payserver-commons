@@ -1,5 +1,6 @@
 //! Store token policy types.
 
+use super::ChainId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -57,7 +58,7 @@ pub struct StoreTokenPolicyEntry {
     pub id: Uuid,
     pub policy_id: Uuid,
     /// EIP-155 chain ID.
-    pub chain_id: i64,
+    pub chain_id: ChainId,
     /// ERC20 token contract address, None for native asset.
     pub token_address: Option<String>,
     /// Asset symbol for display (ETH, USDC, etc.)

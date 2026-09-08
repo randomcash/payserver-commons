@@ -1,5 +1,6 @@
 //! Store-related types.
 
+use super::ChainId;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -44,7 +45,7 @@ pub struct StorePaymentMethod {
     pub id: Uuid,
     pub store_id: Uuid,
     /// EIP-155 chain ID (1=Ethereum, 137=Polygon, 11155111=Sepolia, etc.)
-    pub chain_id: u64,
+    pub chain_id: ChainId,
     /// ERC20 token contract address, None for native asset.
     pub token_address: Option<String>,
     /// Asset symbol for display (ETH, USDC, etc.)

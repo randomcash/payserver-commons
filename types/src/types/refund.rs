@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::ChainId;
 use crate::store::StoreId;
 use crate::types::InvoiceId;
 
@@ -68,7 +69,7 @@ pub struct RefundData {
     /// Destination address (original payer's from_address).
     pub to_address: String,
     /// EIP-155 chain ID.
-    pub chain_id: u64,
+    pub chain_id: ChainId,
     /// Asset type (native or erc20).
     pub asset_type: String,
     /// Asset symbol (e.g., "ETH", "USDC").

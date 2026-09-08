@@ -1,5 +1,6 @@
 //! Watched address types.
 
+use super::ChainId;
 use super::PaymentOptionId;
 
 /// Information about a watched address pending notification to the monitor.
@@ -12,7 +13,7 @@ pub struct PendingWatchInfo {
     /// Invoice ID for logging/tracking.
     pub invoice_id: String,
     /// EIP-155 chain ID.
-    pub chain_id: u64,
+    pub chain_id: ChainId,
     /// Expected amount in the asset's smallest unit.
     pub expected_amount: Option<String>,
     /// Token contract address (for ERC20, None for native).
@@ -29,7 +30,7 @@ pub struct CleanupAddressInfo {
     /// Invoice ID for logging/tracking.
     pub invoice_id: String,
     /// EIP-155 chain ID.
-    pub chain_id: u64,
+    pub chain_id: ChainId,
     /// Token contract address (for ERC20, None for native).
     pub token_address: Option<String>,
 }
