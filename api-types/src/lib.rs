@@ -22,6 +22,23 @@
 //! promise to every integrator. Keeping them apart is what stops "commons" from
 //! meaning "everything".
 //!
+//! # What may be absent, and what may not
+//!
+//! Client and server deploy separately, so a response from an older server has
+//! to keep rendering rather than failing the whole parse over one field. Where
+//! a sensible default exists it is applied: `enabled` and `archived`,
+//! `payment_options`, `decimals` (18), `reorged`, `amount_received` ("0"), and
+//! the health fields.
+//!
+//! Three are deliberately **required**, because defaulting them would be worse
+//! than failing:
+//!
+//! * `InvoiceResponse::status` - defaulting to `Pending` would tell a merchant
+//!   an invoice is unpaid when the field simply did not arrive.
+//! * `InvoiceResponse::store_id` and `StoreResponse::owner_id` - a nil UUID is
+//!   a valid-looking value pointing at nothing, and both are used to scope
+//!   what a caller is allowed to see.
+//!
 //! # Constraints
 //!
 //! Compiled into the browser bundle, so: no sqlx, no tokio, nothing that will
@@ -104,6 +121,63 @@ mod tests {
             "reorged": false, "store_id": null, "store_name": null
         });
         assert!(serde_json::from_value::<PaymentResponse>(json).is_err());
+    }
+
+    /// A create-invoice request omits every absent optional field, not some of
+    /// them.
+    ///
+    /// Three of the five carried `skip_serializing_if` and two did not, so the
+    /// browser sent `"customer_email": null, "redirect_url": null` while
+    /// omitting the rest. Harmless against this server, but a silent
+    /// request-shape change - and the guard test only checked two of the five,
+    /// which is why nobody noticed.
+    #[test]
+    fn a_create_invoice_request_omits_all_absent_optionals() {
+        let req = CreateInvoiceRequest {
+            store_id: uuid::Uuid::nil(),
+            amount: "10".into(),
+            currency: "USD".into(),
+            expiration_seconds: None,
+            metadata: None,
+            customer_email: None,
+            webhook_url: None,
+            redirect_url: None,
+        };
+
+        let json = serde_json::to_value(&req).unwrap();
+        for absent in [
+            "expiration_seconds",
+            "metadata",
+            "customer_email",
+            "webhook_url",
+            "redirect_url",
+        ] {
+            assert!(
+                json.get(absent).is_none(),
+                "`{absent}` was serialised as null instead of being omitted"
+            );
+        }
+    }
+
+    /// A rotation entry represents both of its lookup-derived labels the same
+    /// way.
+    #[test]
+    fn rotation_entry_labels_are_both_optional() {
+        let entry = RotationEntry {
+            id: uuid::Uuid::nil(),
+            payment_method_id: uuid::Uuid::nil(),
+            chain_id: None,
+            asset_symbol: None,
+            previous_xpub_masked: "xpub…".into(),
+            previous_derivation_index: 0,
+            rotated_at: chrono::Utc::now(),
+        };
+        let json = serde_json::to_value(&entry).unwrap();
+        assert!(json["chain_id"].is_null());
+        assert!(
+            json["asset_symbol"].is_null(),
+            "one label as null and the other as \"\" is two answers to one question"
+        );
     }
 
     /// Requests deserialise as well as serialise, and responses both ways.

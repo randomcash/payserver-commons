@@ -146,7 +146,13 @@ pub struct RotationEntry {
     /// missing.
     pub chain_id: Option<ChainId>,
     /// Asset symbol of the rotated payment method.
-    pub asset_symbol: String,
+    /// Asset the rotated method was for.
+    ///
+    /// Optional for the same reason as `chain_id` above: both are labels looked
+    /// up from a snapshot of the store's methods, and both are absent for the
+    /// same method. Representing one as `null` and the other as `""` would be
+    /// two answers to one question in a single payload.
+    pub asset_symbol: Option<String>,
     /// Previous xpub (masked).
     pub previous_xpub_masked: String,
     /// Derivation index at time of rotation.
