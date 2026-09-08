@@ -35,9 +35,9 @@ mod refund;
 mod store_payment_method;
 mod store_settings;
 mod store_token_policy;
-mod store_wallet;
 mod store_webhook;
 mod token;
+mod wallet;
 mod watched_address;
 mod webhook_delivery;
 
@@ -59,9 +59,9 @@ pub use store_token_policy::{
     StoreTokenPolicyReader, StoreTokenPolicyRepository, StoreTokenPolicyWriter,
     TokenPolicyEntryInput,
 };
-pub use store_wallet::{StoreWalletReader, StoreWalletRepository, StoreWalletWriter};
 pub use store_webhook::{StoreWebhookReader, StoreWebhookRepository, StoreWebhookWriter};
 pub use token::{TokenQueryParams, TokenReader, TokenRepository, TokenWriter};
+pub use wallet::{WalletReader, WalletRepository, WalletWriter};
 pub use watched_address::{WatchedAddressReader, WatchedAddressRepository, WatchedAddressWriter};
 pub use webhook_delivery::{
     CreateDeliveryParams, WebhookDeliveryReader, WebhookDeliveryRepository, WebhookDeliveryWriter,

@@ -23,7 +23,9 @@ pub use network::Network;
 pub use payment_option::{PaymentMethodId, PaymentOptionData, PaymentOptionId};
 pub use payout::{PayoutData, PayoutStatus};
 pub use refund::{RefundData, RefundStatus};
-pub use store::{StorePaymentMethod, StoreSettings, StoreWallet, StoreWebhook, WebhookDelivery};
+pub use store::{
+    DerivationAllocation, StorePaymentMethod, StoreSettings, StoreWebhook, Wallet, WebhookDelivery,
+};
 pub use store_token_policy::{
     StoreTokenPolicy, StoreTokenPolicyEntry, StoreTokenPolicyWithEntries, TokenPolicyMode,
 };
