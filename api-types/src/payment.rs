@@ -41,8 +41,10 @@ pub struct PaymentResponse {
     /// When the payment was confirmed (None = awaiting confirmation).
     pub confirmed_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Whether this payment was invalidated by a chain reorg.
+    #[serde(default)]
     pub reorged: bool,
     /// Token decimals (for display formatting).
+    #[serde(default = "default_decimals")]
     pub decimals: u8,
 }
 
@@ -229,4 +231,13 @@ pub(crate) fn token_decimals(symbol: &str, token_address: Option<&str>) -> u8 {
             18 // default to 18 for unknown tokens
         }
     }
+}
+
+/// Most assets this system handles are 18-decimal.
+///
+/// A default at all is deliberate: client and server deploy separately, so a
+/// response from an older server that omits this must still render rather than
+/// failing the whole list parse.
+fn default_decimals() -> u8 {
+    18
 }

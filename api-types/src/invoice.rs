@@ -36,6 +36,7 @@ pub struct InvoiceResponse {
     /// Requested amount in the invoice currency.
     pub amount: String,
     /// Amount received so far (in invoice currency terms).
+    #[serde(default = "zero_amount")]
     pub amount_received: String,
     /// Creation timestamp.
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -141,11 +142,13 @@ pub struct CreateInvoiceRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
     /// Optional customer email for payment receipt.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub customer_email: Option<String>,
     /// Optional webhook URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub webhook_url: Option<String>,
     /// Optional redirect URL after payment.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub redirect_url: Option<String>,
 }
 
@@ -164,4 +167,9 @@ impl From<PaymentOptionData> for PaymentOptionResponse {
             is_active: po.is_active,
         }
     }
+}
+
+/// Nothing received yet.
+fn zero_amount() -> String {
+    "0".to_string()
 }

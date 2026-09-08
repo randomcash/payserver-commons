@@ -30,14 +30,18 @@ pub struct ChainHealthInfo {
     pub status: String,
     /// Current block number on chain. Admin only.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub current_block: Option<u64>,
     /// Last block processed by the monitor. Admin only.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub last_processed_block: Option<u64>,
     /// Number of addresses being watched. Admin only.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub watched_addresses: Option<usize>,
     /// Overall health status.
+    #[serde(default)]
     pub is_healthy: bool,
 }
 
@@ -48,8 +52,10 @@ pub struct ChainsHealthResponse {
     /// Health information for each monitored chain.
     pub chains: Vec<ChainHealthInfo>,
     /// Whether all chains are healthy.
+    #[serde(default)]
     pub all_healthy: bool,
     /// Data freshness - whether health data is recent (updated within 60s).
+    #[serde(default)]
     pub data_fresh: bool,
 }
 
@@ -124,6 +130,7 @@ pub struct MonitorHealth {
     /// "ok" or "error".
     pub status: String,
     /// Whether chain health data in Redis is fresh (updated within 60 s).
+    #[serde(default)]
     pub data_fresh: bool,
 }
 
