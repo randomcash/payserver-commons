@@ -81,5 +81,5 @@ pub use mnemonic::RecoveryMnemonic;
 // registration, the server and the recovery flow must all agree on (RCS-200).
 pub use recovery_salt::{
     RECOVERY_ITERATIONS, RECOVERY_MEMORY_KB, RECOVERY_PARALLELISM, SaltIdentity, eip55_checksum,
-    recovery_salt_for,
+    recovery_salt_for, recovery_verification_hash,
 };
