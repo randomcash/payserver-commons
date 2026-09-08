@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::RepositoryResult;
+use crate::types::ChainId;
 use crate::types::StoreSettings;
 
 /// Read operations for store settings.
@@ -20,7 +21,7 @@ pub trait StoreSettingsWriter: Send + Sync {
     async fn upsert_store_settings(
         &self,
         store_id: Uuid,
-        default_chain_id: Option<i64>,
+        default_chain_id: Option<&ChainId>,
         default_display_currency: Option<&str>,
         logo_url: Option<&str>,
         accent_color: Option<&str>,

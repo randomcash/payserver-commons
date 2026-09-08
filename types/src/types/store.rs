@@ -113,7 +113,13 @@ pub struct StoreWebhook {
 pub struct StoreSettings {
     pub store_id: Uuid,
     /// Default chain ID for new invoices (null = no default).
-    pub default_chain_id: Option<i64>,
+    /// Chain this store quotes by default, as a CAIP-2 identifier.
+    ///
+    /// Was `Option<i64>` of an EIP-155 number. The column became the `caip2`
+    /// domain in RCS-241 but this did not follow, so the repository was reading
+    /// and binding a TEXT column as `i64` - which compiles, because sqlx is
+    /// checked at runtime, and fails the first time a store actually sets one.
+    pub default_chain_id: Option<ChainId>,
     /// Default fiat display currency (e.g. "USD").
     pub default_display_currency: Option<String>,
     /// Logo URL for checkout branding.
