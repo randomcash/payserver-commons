@@ -1,7 +1,9 @@
 //! Stores, their payment methods, webhooks, settings and token policy.
 
 use serde::{Deserialize, Serialize};
-use types::ChainId;
+
+use crate::common::mask_xpub;
+use types::{ChainId, StorePaymentMethod};
 use uuid::Uuid;
 
 #[cfg(feature = "openapi")]
@@ -20,6 +22,7 @@ pub struct StoreResponse {
     /// Owner user ID.
     pub owner_id: Uuid,
     /// Whether the store is archived.
+    #[serde(default)]
     pub archived: bool,
     /// Creation timestamp.
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -65,6 +68,7 @@ pub struct PaymentMethodResponse {
     /// Next derivation index on the resolved wallet. Null for the same reason.
     pub derivation_index: Option<i32>,
     /// Whether the payment method is enabled.
+    #[serde(default = "default_enabled")]
     pub enabled: bool,
     /// Creation timestamp.
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -109,6 +113,7 @@ pub struct WebhookResponse {
     /// Only shown once when created/updated.
     pub webhook_secret: Option<String>,
     /// Whether the webhook is enabled.
+    #[serde(default = "default_enabled")]
     pub enabled: bool,
     /// Creation timestamp.
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -217,4 +222,20 @@ pub struct UpdateMemberRequest {
 /// the worse failure.
 fn default_enabled() -> bool {
     true
+}
+
+impl From<StorePaymentMethod> for PaymentMethodResponse {
+    fn from(pm: StorePaymentMethod) -> Self {
+        Self {
+            id: pm.id,
+            store_id: pm.store_id,
+            chain_id: pm.chain_id,
+            token_address: pm.token_address,
+            asset_symbol: pm.asset_symbol,
+            xpub_masked: pm.xpub.as_deref().map(mask_xpub),
+            derivation_index: pm.derivation_index,
+            enabled: pm.enabled,
+            created_at: pm.created_at,
+        }
+    }
 }

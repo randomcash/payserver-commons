@@ -142,3 +142,21 @@ pub struct RpcHealth {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
+
+impl ChainHealthInfo {
+    /// Strip everything a non-admin should not see.
+    ///
+    /// `is_healthy`, `status` and the chain's identity stay: that is the "on or
+    /// off" answer the dashboard exists to show. Block heights, the watched
+    /// address count and the failure reason go - the reason especially, since
+    /// an RPC error string routinely carries the provider and the endpoint.
+    pub fn redact(mut self) -> Self {
+        self.current_block = None;
+        self.last_processed_block = None;
+        self.watched_addresses = None;
+        if let Some(bare) = self.status.split(':').next() {
+            self.status = bare.trim().to_string();
+        }
+        self
+    }
+}

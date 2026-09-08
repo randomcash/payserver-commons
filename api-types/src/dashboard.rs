@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 
 /// Dashboard statistics response.
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DashboardStats {
     /// Total number of invoices across all user stores.
     pub total_invoices: i64,
@@ -25,7 +25,7 @@ pub struct DashboardStats {
 }
 /// One day of volume for a single asset.
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct DailyVolume {
     /// UTC calendar day.
     pub date: NaiveDate,
@@ -37,7 +37,7 @@ pub struct DailyVolume {
 
 /// Volume for one asset over the whole window.
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AssetVolume {
     /// Asset symbol as recorded on the payments (e.g. `ETH`).
     pub asset_symbol: String,
@@ -54,7 +54,7 @@ pub struct AssetVolume {
 
 /// Payment analytics for the authenticated user's stores.
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DashboardAnalytics {
     /// Window size actually used.
     pub days: u32,

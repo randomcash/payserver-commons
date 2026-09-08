@@ -1,7 +1,9 @@
 //! Account wallets, and the per-store override that points at one.
 
 use serde::{Deserialize, Serialize};
-use types::ChainId;
+
+use crate::common::mask_xpub;
+use types::{ChainId, Wallet};
 use uuid::Uuid;
 
 #[cfg(feature = "openapi")]
@@ -135,7 +137,14 @@ pub struct RotationEntry {
     /// Payment method that was rotated.
     pub payment_method_id: Uuid,
     /// Chain ID of the rotated payment method.
-    pub chain_id: ChainId,
+    /// Chain the rotated method was on.
+    ///
+    /// Optional because the rotation record does not carry it - it is looked up
+    /// from a snapshot of the store's methods, and a method created between
+    /// that snapshot and the rotation has no entry. The rotation still happened
+    /// and is still identified by `payment_method_id`; only the label is
+    /// missing.
+    pub chain_id: Option<ChainId>,
     /// Asset symbol of the rotated payment method.
     pub asset_symbol: String,
     /// Previous xpub (masked).
@@ -158,4 +167,18 @@ pub struct RotateWalletResponse {
     pub methods_rotated: usize,
     /// Individual rotation entries.
     pub rotations: Vec<RotationEntry>,
+}
+
+impl From<Wallet> for WalletResponse {
+    fn from(w: Wallet) -> Self {
+        Self {
+            id: w.id,
+            user_id: w.user_id,
+            xpub_masked: mask_xpub(&w.xpub),
+            derivation_index: w.derivation_index,
+            name: w.name,
+            is_primary: w.is_primary,
+            created_at: w.created_at,
+        }
+    }
 }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::invoice::InvoiceResponse;
 use chrono::Utc;
-use types::ChainId;
+use types::{ChainId, PaymentData, PayoutData, RefundData};
 use uuid::Uuid;
 
 #[cfg(feature = "openapi")]
@@ -134,4 +134,99 @@ pub struct TxHashLookupResponse {
     pub invoice: InvoiceResponse,
     /// The payment matching the tx hash.
     pub payment: PaymentResponse,
+}
+
+impl From<PaymentData> for PaymentResponse {
+    fn from(p: PaymentData) -> Self {
+        let decimals = token_decimals(&p.asset_symbol, p.token_address.as_deref());
+        Self {
+            id: p.id.to_string(),
+            // Payments carry no store of their own; only the list endpoint,
+            // which already resolves the invoice, fills these in.
+            store_id: None,
+            store_name: None,
+            chain_id: p.chain_id,
+            invoice_id: p.invoice_id.0,
+            tx_hash: p.tx_hash,
+            amount: p.amount,
+            asset_symbol: p.asset_symbol,
+            token_address: p.token_address,
+            block_number: p.block_number,
+            from_address: p.from_address,
+            detected_at: p.detected_at,
+            confirmed_at: p.confirmed_at,
+            reorged: p.reorged,
+            decimals,
+        }
+    }
+}
+
+impl From<RefundData> for RefundResponse {
+    fn from(r: RefundData) -> Self {
+        Self {
+            id: r.id,
+            invoice_id: r.invoice_id.0,
+            payment_id: r.payment_id,
+            to_address: r.to_address,
+            chain_id: r.chain_id,
+            asset_type: r.asset_type,
+            asset_symbol: r.asset_symbol,
+            amount: r.amount,
+            tx_hash: r.tx_hash,
+            status: r.status.to_string(),
+            fee_amount: r.fee_amount,
+            reason: r.reason,
+            error_message: r.error_message,
+            created_at: r.created_at,
+            confirmed_at: r.confirmed_at,
+        }
+    }
+}
+
+impl From<PayoutData> for PayoutResponse {
+    fn from(p: PayoutData) -> Self {
+        Self {
+            id: p.id,
+            store_id: p.store_id.0,
+            invoice_ids: p.invoice_ids,
+            destination_address: p.destination_address,
+            chain_id: p.chain_id,
+            asset_type: p.asset_type,
+            asset_symbol: p.asset_symbol,
+            amount: p.amount,
+            tx_hash: p.tx_hash,
+            status: p.status.to_string(),
+            fee_amount: p.fee_amount,
+            error_message: p.error_message,
+            created_at: p.created_at,
+            confirmed_at: p.confirmed_at,
+        }
+    }
+}
+
+/// Resolve token decimals from symbol and optional contract address.
+pub(crate) fn token_decimals(symbol: &str, token_address: Option<&str>) -> u8 {
+    match symbol {
+        "ETH" | "POL" | "MATIC" | "FTM" | "xDAI" | "DAI" | "WETH" => 18,
+        "USDC" | "USDT" => 6,
+        "WBTC" => 8,
+        _ => {
+            // ERC20 without a known symbol — check well-known contract addresses.
+            if let Some(addr) = token_address {
+                let addr_lower = addr.to_lowercase();
+                // USDC on major chains
+                if addr_lower == "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                    || addr_lower == "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
+                    || addr_lower == "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359"
+                {
+                    return 6;
+                }
+                // WBTC on Ethereum
+                if addr_lower == "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599" {
+                    return 8;
+                }
+            }
+            18 // default to 18 for unknown tokens
+        }
+    }
 }

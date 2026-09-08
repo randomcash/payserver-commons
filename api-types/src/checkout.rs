@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::invoice::PaymentOptionResponse;
-use types::ChainId;
+use types::{ChainId, PaymentData};
 
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
@@ -62,4 +62,20 @@ pub struct CheckoutPaymentInfo {
     pub detected_at: chrono::DateTime<chrono::Utc>,
     /// When the payment reached required confirmations (None = pending).
     pub confirmed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<PaymentData> for CheckoutPaymentInfo {
+    fn from(p: PaymentData) -> Self {
+        Self {
+            id: p.id.to_string(),
+            chain_id: p.chain_id,
+            tx_hash: p.tx_hash,
+            amount: p.amount,
+            asset_symbol: p.asset_symbol,
+            token_address: p.token_address,
+            block_number: p.block_number,
+            detected_at: p.detected_at,
+            confirmed_at: p.confirmed_at,
+        }
+    }
 }

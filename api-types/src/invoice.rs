@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::payment::PaymentResponse;
-use types::ChainId;
+use types::{ChainId, InvoiceStatus, PaymentOptionData};
 use uuid::Uuid;
 
 #[cfg(feature = "openapi")]
@@ -26,7 +26,13 @@ pub struct InvoiceResponse {
     /// Invoice currency (e.g., "USD", "EUR", "ETH").
     pub currency: String,
     /// Status.
-    pub status: String,
+    /// Current status.
+    ///
+    /// The enum rather than a `String`: `Display` and the serde form are the
+    /// same snake_case words, so the wire shape is unchanged, but the client
+    /// can now match on it instead of comparing strings - which is what it was
+    /// already doing against its own copy of this struct.
+    pub status: InvoiceStatus,
     /// Requested amount in the invoice currency.
     pub amount: String,
     /// Amount received so far (in invoice currency terms).
@@ -40,6 +46,7 @@ pub struct InvoiceResponse {
     /// Customer email for payment receipt (if set).
     pub customer_email: Option<String>,
     /// Payment options for this invoice.
+    #[serde(default)]
     pub payment_options: Vec<PaymentOptionResponse>,
 }
 
@@ -86,7 +93,13 @@ pub struct InvoiceStatusResponse {
     /// Invoice ID.
     pub id: String,
     /// Current status.
-    pub status: String,
+    /// Current status.
+    ///
+    /// The enum rather than a `String`: `Display` and the serde form are the
+    /// same snake_case words, so the wire shape is unchanged, but the client
+    /// can now match on it instead of comparing strings - which is what it was
+    /// already doing against its own copy of this struct.
+    pub status: InvoiceStatus,
     /// Requested amount in invoice currency.
     pub amount: String,
     /// Amount received so far.
@@ -122,13 +135,33 @@ pub struct CreateInvoiceRequest {
     /// For asset-denominated invoices, this is in the asset's smallest unit (wei, satoshi).
     pub amount: String,
     /// Expiration in seconds from now (default: 900 = 15 minutes).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expiration_seconds: Option<u64>,
     /// Optional metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
     /// Optional customer email for payment receipt.
     pub customer_email: Option<String>,
     /// Optional webhook URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub webhook_url: Option<String>,
     /// Optional redirect URL after payment.
     pub redirect_url: Option<String>,
+}
+
+impl From<PaymentOptionData> for PaymentOptionResponse {
+    fn from(po: PaymentOptionData) -> Self {
+        Self {
+            id: po.id.0.to_string(),
+            payment_method_id: po.payment_method_id.0,
+            chain_id: po.chain_id,
+            asset_symbol: po.asset_symbol,
+            token_address: po.token_address,
+            decimals: po.decimals,
+            payment_address: po.payment_address,
+            amount: po.amount,
+            rate: po.rate,
+            is_active: po.is_active,
+        }
+    }
 }
