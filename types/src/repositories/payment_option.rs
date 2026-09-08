@@ -4,6 +4,7 @@ use async_trait::async_trait;
 
 use super::RepositoryResult;
 use crate::InvoiceId;
+use crate::types::ChainId;
 use crate::types::{PaymentMethodId, PaymentOptionData, PaymentOptionId};
 
 /// Read operations for payment options.
@@ -35,7 +36,7 @@ pub trait PaymentOptionReader: Send + Sync {
     async fn get_by_address(
         &self,
         address: &str,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<Option<PaymentOptionData>>;
 }

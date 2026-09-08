@@ -1,10 +1,10 @@
 //! Network badge components.
 
 use leptos::prelude::*;
-use types::Network;
+use types::ChainId;
 
 /// Network badge colors.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum NetworkColor {
     #[default]
     Gray,
@@ -30,73 +30,96 @@ impl NetworkColor {
     }
 }
 
-/// Get network color for a Network type.
+/// Pick a badge colour for a chain.
 ///
-/// Returns the brand color for mainnet networks.
-/// Use `testnet=true` on `NetworkBadge` for testnets (they use a default gray color).
-pub fn color_for_network(network: &Network) -> NetworkColor {
-    match network {
-        // Bitcoin family - orange (Bitcoin brand color)
-        Network::BitcoinMainnet | Network::BitcoinLightning => NetworkColor::Orange,
-
-        // Ethereum and L2s that use ETH - blue
-        Network::Ethereum => NetworkColor::Blue,
-        Network::Arbitrum => NetworkColor::Blue,
-        Network::Base => NetworkColor::Blue,
-        Network::Linea => NetworkColor::Blue,
-
-        // Optimism - red (brand color)
-        Network::Optimism => NetworkColor::Red,
-
-        // Polygon - purple (brand color)
-        Network::Polygon => NetworkColor::Purple,
-
-        // zkSync - purple
-        Network::ZkSync => NetworkColor::Purple,
-
-        // Avalanche - red (brand color)
-        Network::Avalanche => NetworkColor::Red,
-
-        // BSC/BNB - yellow (brand color)
-        Network::BinanceSmartChain => NetworkColor::Yellow,
-
-        // Scroll - orange
-        Network::Scroll => NetworkColor::Orange,
-
-        // Fantom - blue (brand color)
-        Network::Fantom => NetworkColor::Blue,
-
-        // Gnosis - green (brand color)
-        Network::Gnosis => NetworkColor::Green,
+/// Brand colours for the chains we know, and a deterministic fallback for the
+/// ones we do not. The fallback is the point: this used to `match` on a closed
+/// enum, so a chain that was not a variant could not be rendered at all — and
+/// adding a variant meant editing this crate and cutting a release. A chain
+/// added by a plugin gets a stable colour here with no configuration and no
+/// change to this file.
+///
+/// Keyed on the CAIP-2 identifier, so `eip155:10` is Optimism red on any server
+/// that speaks to Optimism, without anyone agreeing on a display name first.
+pub fn color_for_chain(chain_id: &ChainId) -> NetworkColor {
+    match chain_id.as_str() {
+        // Ethereum and the L2s that settle in ETH.
+        "eip155:1" | "eip155:42161" | "eip155:8453" | "eip155:59144" => NetworkColor::Blue,
+        // Optimism, Avalanche.
+        "eip155:10" | "eip155:43114" => NetworkColor::Red,
+        // Polygon, zkSync.
+        "eip155:137" | "eip155:324" => NetworkColor::Purple,
+        // BNB Chain.
+        "eip155:56" => NetworkColor::Yellow,
+        // Scroll, and Bitcoin's orange.
+        "eip155:534352" => NetworkColor::Orange,
+        "eip155:250" => NetworkColor::Blue,
+        "eip155:100" => NetworkColor::Green,
+        _ if chain_id.namespace() == "bip122" => NetworkColor::Orange,
+        _ if chain_id.namespace() == "monero" => NetworkColor::Orange,
+        _ if chain_id.namespace() == "solana" => NetworkColor::Purple,
+        _ if chain_id.namespace() == "tron" => NetworkColor::Red,
+        other => fallback_color(other),
     }
+}
+
+/// A stable colour for a chain nobody has named.
+///
+/// Deliberately not `Gray`: gray means "testnet" in this component, and an
+/// unknown mainnet is not a testnet. Any colour is better than the wrong
+/// meaning, and the same chain must get the same colour on every render, so
+/// this hashes rather than counts.
+fn fallback_color(identifier: &str) -> NetworkColor {
+    const PALETTE: [NetworkColor; 6] = [
+        NetworkColor::Blue,
+        NetworkColor::Purple,
+        NetworkColor::Orange,
+        NetworkColor::Green,
+        NetworkColor::Red,
+        NetworkColor::Yellow,
+    ];
+    // FNV-1a. Not for security - just a stable spread that does not pull in a
+    // dependency and does not vary between processes the way `DefaultHasher`
+    // is permitted to.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in identifier.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    PALETTE[(hash % PALETTE.len() as u64) as usize]
 }
 
 /// Network badge component.
 ///
-/// Displays a colored badge for a blockchain network.
-/// Testnets always use a gray color regardless of the network.
+/// Displays a coloured badge for a chain. Testnets always use gray.
+///
+/// The display name is a parameter rather than something derived from the
+/// chain: CAIP-2 references are mostly opaque genesis hashes, so no function
+/// can turn `monero:418015bb9ae982a1975da7d79277c270` into "Monero". That
+/// mapping is data (`chain_configs`), which is also what lets a plugin name its
+/// own chain.
 #[component]
 pub fn NetworkBadge(
-    /// The network type.
-    network: Network,
-    /// Custom name override. If not provided, uses `network.display_name()`.
+    /// The chain, as a CAIP-2 identifier.
+    chain_id: ChainId,
+    /// Human-readable name. Falls back to the raw identifier, which is ugly but
+    /// honest — better than inventing a name for a chain we do not know.
     #[prop(optional)]
     name: Option<String>,
-    /// Explicit color override (ignored for testnets).
+    /// Explicit colour override (ignored for testnets).
     #[prop(optional)]
     color: Option<NetworkColor>,
-    /// Whether this is a testnet. Testnets use gray color.
+    /// Whether this is a testnet. Testnets use gray.
     #[prop(default = false)]
     testnet: bool,
 ) -> impl IntoView {
-    // Testnets always use gray, mainnets use network color or explicit override
     let badge_color = if testnet {
         NetworkColor::Gray
     } else {
-        color.unwrap_or_else(|| color_for_network(&network))
+        color.unwrap_or_else(|| color_for_chain(&chain_id))
     };
 
-    let display_name = name.unwrap_or_else(|| network.display_name().to_string());
+    let display_name = name.unwrap_or_else(|| chain_id.to_string());
 
     view! {
         <span class=format!("ps-network-badge {}", badge_color.class())>
@@ -190,70 +213,93 @@ mod tests {
     }
 
     #[test]
-    fn test_color_for_network_bitcoin() {
-        assert_eq!(
-            color_for_network(&Network::BitcoinMainnet),
-            NetworkColor::Orange
-        );
-        assert_eq!(
-            color_for_network(&Network::BitcoinLightning),
-            NetworkColor::Orange
+    fn brand_colors_are_keyed_on_the_caip2_identifier() {
+        assert_eq!(color_for_chain(&ChainId::evm(1)), NetworkColor::Blue);
+        assert_eq!(color_for_chain(&ChainId::evm(42161)), NetworkColor::Blue);
+        assert_eq!(color_for_chain(&ChainId::evm(10)), NetworkColor::Red);
+        assert_eq!(color_for_chain(&ChainId::evm(137)), NetworkColor::Purple);
+        assert_eq!(color_for_chain(&ChainId::evm(56)), NetworkColor::Yellow);
+        assert_eq!(color_for_chain(&ChainId::evm(100)), NetworkColor::Green);
+    }
+
+    #[test]
+    fn non_evm_families_get_their_own_colors() {
+        let btc = ChainId::parse("bip122:000000000019d6689c085ae165831e93").unwrap();
+        assert_eq!(color_for_chain(&btc), NetworkColor::Orange);
+
+        let xmr = ChainId::parse("monero:418015bb9ae982a1975da7d79277c270").unwrap();
+        assert_eq!(color_for_chain(&xmr), NetworkColor::Orange);
+
+        let sol = ChainId::parse("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp").unwrap();
+        assert_eq!(color_for_chain(&sol), NetworkColor::Purple);
+
+        let trx = ChainId::parse("tron:728126428").unwrap();
+        assert_eq!(color_for_chain(&trx), NetworkColor::Red);
+    }
+
+    /// The property the closed enum could not have: a chain nobody hardcoded
+    /// still renders, with the same colour every time.
+    #[test]
+    fn an_unknown_chain_still_gets_a_stable_color() {
+        let unknown = ChainId::parse("cosmos:cosmoshub-3").unwrap();
+        let first = color_for_chain(&unknown);
+        assert_eq!(first, color_for_chain(&unknown), "colour must be stable");
+
+        // And it must not be gray, which this component uses to mean "testnet".
+        assert_ne!(
+            first,
+            NetworkColor::Gray,
+            "an unknown mainnet must not be indistinguishable from a testnet"
         );
     }
 
     #[test]
-    fn test_color_for_network_ethereum_family() {
-        // Ethereum and L2s using ETH should be blue
-        assert_eq!(color_for_network(&Network::Ethereum), NetworkColor::Blue);
-        assert_eq!(color_for_network(&Network::Arbitrum), NetworkColor::Blue);
-        assert_eq!(color_for_network(&Network::Base), NetworkColor::Blue);
-        assert_eq!(color_for_network(&Network::Linea), NetworkColor::Blue);
-    }
-
-    #[test]
-    fn test_color_for_network_brand_colors() {
-        // Networks with distinct brand colors
-        assert_eq!(color_for_network(&Network::Optimism), NetworkColor::Red);
-        assert_eq!(color_for_network(&Network::Polygon), NetworkColor::Purple);
-        assert_eq!(color_for_network(&Network::ZkSync), NetworkColor::Purple);
-        assert_eq!(color_for_network(&Network::Avalanche), NetworkColor::Red);
-        assert_eq!(
-            color_for_network(&Network::BinanceSmartChain),
-            NetworkColor::Yellow
+    fn unknown_chains_do_not_all_collapse_to_one_color() {
+        let ids = [
+            "cosmos:cosmoshub-3",
+            "starknet:SN_GOERLI",
+            "lip9:9ee11e9df416b18b",
+            "eip155:999999",
+            "eip155:888888",
+            "near:mainnet",
+        ];
+        let colors: std::collections::HashSet<_> = ids
+            .iter()
+            .map(|id| color_for_chain(&ChainId::parse(*id).unwrap()))
+            .collect();
+        assert!(
+            colors.len() > 1,
+            "the fallback should spread across the palette, not pick one colour"
         );
-        assert_eq!(color_for_network(&Network::Scroll), NetworkColor::Orange);
-        assert_eq!(color_for_network(&Network::Fantom), NetworkColor::Blue);
-        assert_eq!(color_for_network(&Network::Gnosis), NetworkColor::Green);
     }
 
     #[test]
-    fn test_all_networks_have_colors() {
-        // Ensure every Network variant returns a color (not panicking)
-        let networks = [
-            Network::BitcoinMainnet,
-            Network::BitcoinLightning,
-            Network::Ethereum,
-            Network::Polygon,
-            Network::Arbitrum,
-            Network::Optimism,
-            Network::Base,
-            Network::Avalanche,
-            Network::BinanceSmartChain,
-            Network::ZkSync,
-            Network::Linea,
-            Network::Scroll,
-            Network::Fantom,
-            Network::Gnosis,
+    fn every_chain_we_support_gets_a_non_gray_color() {
+        let chains = [
+            "eip155:1",
+            "eip155:10",
+            "eip155:56",
+            "eip155:100",
+            "eip155:137",
+            "eip155:250",
+            "eip155:324",
+            "eip155:8453",
+            "eip155:42161",
+            "eip155:43114",
+            "eip155:59144",
+            "eip155:534352",
+            "tron:728126428",
+            "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+            "monero:418015bb9ae982a1975da7d79277c270",
+            "bip122:000000000019d6689c085ae165831e93",
         ];
 
-        for network in networks {
-            let color = color_for_network(&network);
-            // Should not be default gray for any mainnet
+        for id in chains {
+            let chain_id = ChainId::parse(id).unwrap();
             assert_ne!(
-                color,
+                color_for_chain(&chain_id),
                 NetworkColor::Gray,
-                "Network {:?} should have a brand color",
-                network
+                "{id} rendered as gray, which this component uses to mean testnet"
             );
         }
     }

@@ -7,6 +7,7 @@ use uuid::Uuid;
 use super::{RepositoryResult, normalize_search};
 use crate::store::StoreId;
 use crate::traits::PaymentData;
+use crate::types::ChainId;
 use crate::types::InvoiceId;
 
 /// Query parameters for listing payments.
@@ -143,7 +144,7 @@ pub trait PaymentWriter: Send + Sync {
     async fn mark_reorged(
         &self,
         invoice_id: &InvoiceId,
-        chain_id: u64,
+        chain_id: &ChainId,
         fork_block: u64,
     ) -> RepositoryResult<u64>;
 }

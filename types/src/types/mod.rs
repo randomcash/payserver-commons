@@ -4,10 +4,10 @@
 //! Network-specific types (like ERC20 tokens, Lightning invoices) are defined in
 //! their respective PayServer crates.
 
+mod chain;
 mod events;
 mod ids;
 mod invoice;
-mod network;
 mod payment_option;
 mod payout;
 mod refund;
@@ -16,10 +16,13 @@ mod store_token_policy;
 mod token;
 mod watched_address;
 
+pub use chain::{
+    ChainId, ChainIdError, NAMESPACE_BIP122, NAMESPACE_EIP155, NAMESPACE_MONERO, NAMESPACE_SOLANA,
+    NAMESPACE_TRON,
+};
 pub use events::{HealthStatus, PaymentEvent};
 pub use ids::{InvoiceId, UserId};
 pub use invoice::{AssetType, InvoiceStatus};
-pub use network::Network;
 pub use payment_option::{PaymentMethodId, PaymentOptionData, PaymentOptionId};
 pub use payout::{PayoutData, PayoutStatus};
 pub use refund::{RefundData, RefundStatus};

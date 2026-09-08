@@ -13,6 +13,7 @@
 use async_trait::async_trait;
 
 use super::RepositoryResult;
+use crate::types::ChainId;
 use crate::types::InvoiceId;
 
 /// Read operations for live watched addresses.
@@ -26,7 +27,7 @@ pub trait LiveWatchedAddressReader: Send + Sync {
     async fn get_watched_invoice(
         &self,
         address: &str,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<Option<InvoiceId>>;
 
@@ -50,7 +51,7 @@ pub trait LiveWatchedAddressWriter: Send + Sync {
         &self,
         address: &str,
         invoice_id: &InvoiceId,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<()>;
 
@@ -61,7 +62,7 @@ pub trait LiveWatchedAddressWriter: Send + Sync {
     async fn unwatch_address(
         &self,
         address: &str,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<bool>;
 }

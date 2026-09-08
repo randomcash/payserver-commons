@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use crypto::{EncryptedBlob, KdfParams};
 use serde::{Deserialize, Serialize};
+use types::ChainId;
 use utoipa::ToSchema;
 use uuid::Uuid;
 pub use webauthn_rs::prelude::{
@@ -261,8 +262,12 @@ pub struct ServerSettings {
     /// Global rate limit in requests per minute.
     pub rate_limit_rpm: i32,
 
-    /// Chain IDs enabled for payment processing.
-    pub enabled_chain_ids: Vec<i64>,
+    /// Chains enabled for payment processing, as CAIP-2 identifiers.
+    ///
+    /// Was `Vec<i64>` of EIP-155 numbers, which could only ever name EVM
+    /// chains. A server built for Tron or Solana had no way to express its own
+    /// chains here.
+    pub enabled_chain_ids: Vec<ChainId>,
 }
 
 impl Default for ServerSettings {
@@ -271,9 +276,14 @@ impl Default for ServerSettings {
             default_confirmations: 3,
             invoice_expiry_minutes: 60,
             rate_limit_rpm: 100,
-            enabled_chain_ids: vec![
+            // EVM defaults, spelled as CAIP-2. A non-EVM server overrides this
+            // wholesale rather than adding to it.
+            enabled_chain_ids: [
                 1, 10, 137, 42161, 8453, 56, 43114, 250, 100, 324, 59144, 534352,
-            ],
+            ]
+            .into_iter()
+            .map(ChainId::evm)
+            .collect(),
         }
     }
 }

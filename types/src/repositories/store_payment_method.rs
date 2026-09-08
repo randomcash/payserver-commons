@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::RepositoryResult;
+use crate::types::ChainId;
 use crate::types::{DerivationAllocation, StorePaymentMethod};
 
 /// Read operations for store payment methods.
@@ -28,7 +29,7 @@ pub trait StorePaymentMethodReader: Send + Sync {
     async fn get_payment_method_by_chain(
         &self,
         store_id: Uuid,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
     ) -> RepositoryResult<Option<StorePaymentMethod>>;
 
@@ -47,7 +48,7 @@ pub trait StorePaymentMethodWriter: Send + Sync {
     async fn create_payment_method(
         &self,
         store_id: Uuid,
-        chain_id: u64,
+        chain_id: &ChainId,
         token_address: Option<&str>,
         asset_symbol: &str,
         decimals: u8,
