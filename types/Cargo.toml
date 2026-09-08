@@ -16,7 +16,7 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 tokio = { version = "1.42", features = ["sync"] }
 async-trait = "0.1"
 futures = "0.3"
-utoipa = { version = "5.3", optional = true }
+utoipa = { version = "5.3", features = ["uuid", "chrono"], optional = true }
 
 [features]
 default = []
