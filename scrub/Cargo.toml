@@ -1,0 +1,11 @@
+[package]
+name = "scrub"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+license = "MIT"
+description = "Secret and PII redaction for error reports, shared by every payserver and the client"
+
+[dependencies]
+
+[dev-dependencies]
