@@ -808,3 +808,242 @@ fn crypto_eip55_agrees_with_alloy_checksum() {
         assert_eq!(crypto::eip55_checksum(&alloy_form), alloy_form);
     }
 }
+
+// --- RCS-219 -----------------------------------------------------------------
+// The registration -> recovery round trip, through the real code on both sides.
+//
+// The tests above build their inputs by hand ("recovery-hash", "correct-hash"),
+// which proves the service's control flow but says nothing about whether the
+// derivation registration performs is the one recovery can reverse. That is the
+// failure that matters: it is silent, permanent, and reported to the merchant as
+// the same generic "invalid recovery phrase" a typo gives.
+//
+// So here nothing is hand-built. A real 24-word phrase goes in, real Argon2id
+// derives the material, the real `User::new_*` constructor pins the identifier,
+// the real `start_account_recovery` verifies it, and the assertion is that the
+// account's symmetric key comes back out of the far end unchanged.
+//
+// Every step below is a call into the single shared definition of its
+// convention - `SaltIdentity` for the salt, `recovery_verification_hash` for the
+// hash encoding - never a local restatement of it. `ui-kit`'s
+// `register_page::tests` pins that `derive_recovery_crypto`, the function the
+// browser actually runs, composes those same calls in this same order; `auth`
+// cannot call it directly without depending on the UI crate.
+//
+// These are the slowest tests in the suite by a wide margin: two Argon2id runs
+// at 64 MiB / t=3 each, unoptimised. The cost is the security property.
+
+/// What a client uploads at the end of registration.
+struct RegistrationMaterial {
+    phrase: String,
+    account_key: crypto::SymmetricKey,
+    kdf_params: crypto::KdfParams,
+    encrypted_symmetric_key: crypto::EncryptedBlob,
+    recovery_verification_hash: String,
+}
+
+/// Registration, client side: generate a phrase, bind a fresh account key to it
+/// under `identifier`, and produce the three values the server persists.
+fn register_client_side(identifier: &str) -> RegistrationMaterial {
+    let mnemonic = crypto::RecoveryMnemonic::generate().expect("generate");
+    let recovery_key = mnemonic.derive_recovery_key(identifier).expect("derive");
+
+    let stretched = crypto::stretch_master_key(&recovery_key).expect("stretch");
+    let account_key = crypto::kdf::generate_symmetric_key();
+    let wrapped = crypto::symmetric::encrypt_key(&account_key, &stretched).expect("wrap");
+
+    RegistrationMaterial {
+        phrase: mnemonic.phrase().to_string(),
+        account_key,
+        kdf_params: crypto::KdfParams {
+            algorithm: "argon2id".to_string(),
+            memory_kb: crypto::RECOVERY_MEMORY_KB,
+            iterations: crypto::RECOVERY_ITERATIONS,
+            parallelism: crypto::RECOVERY_PARALLELISM,
+            salt: crypto::recovery_salt_for(identifier).into_bytes(),
+        },
+        encrypted_symmetric_key: wrapped,
+        recovery_verification_hash: crypto::recovery_verification_hash(&recovery_key),
+    }
+}
+
+/// Recovery, client side: the merchant has the phrase, and the server tells them
+/// which identifier the account was salted with. Nothing else survives.
+///
+/// One Argon2id run serves both halves - the hash that proves possession, and
+/// the stretched key that unwraps whatever the server returns.
+fn recover_client_side(phrase: &str, pinned_identifier: &str) -> (String, crypto::StretchedKey) {
+    let mnemonic = crypto::RecoveryMnemonic::from_phrase(phrase).expect("phrase must re-parse");
+    let recovery_key = mnemonic
+        .derive_recovery_key(pinned_identifier)
+        .expect("derive");
+    let hash = crypto::recovery_verification_hash(&recovery_key);
+    let stretched = crypto::stretch_master_key(&recovery_key).expect("stretch");
+    (hash, stretched)
+}
+
+/// Drive a registered account through `start_account_recovery` and assert its
+/// symmetric key survives the trip.
+///
+/// `typed_identifier` is what a merchant enters on the recovery form, which is
+/// only used to *find* the account. The salt comes from the pinned
+/// `kdf_salt_identifier` the server hands back - the distinction RCS-201 turns
+/// on, and the reason these are not the same argument.
+async fn assert_recovers(
+    service: &AuthService<InMemoryRepository>,
+    user: &User,
+    material: &RegistrationMaterial,
+    typed_identifier: &str,
+) {
+    let (hash, stretched) = recover_client_side(&material.phrase, &user.kdf_salt_identifier);
+
+    let response = service
+        .start_account_recovery(StartRecoveryRequest {
+            identifier: typed_identifier.to_string(),
+            recovery_verification_hash: hash,
+        })
+        .await
+        .expect("the phrase registration derived from must be accepted");
+
+    let recovered = crypto::symmetric::decrypt_key(&response.encrypted_symmetric_key, &stretched)
+        .expect("the returned blob must unwrap under the recovery key");
+    assert_eq!(
+        recovered.as_bytes(),
+        material.account_key.as_bytes(),
+        "recovery must return the account's original key, not a fresh one"
+    );
+
+    // The cost the server hands back has to be the one the key was derived
+    // under, or a client deriving from it lands somewhere else entirely.
+    assert_eq!(response.kdf_params.memory_kb, material.kdf_params.memory_kb);
+    assert_eq!(
+        response.kdf_params.iterations,
+        material.kdf_params.iterations
+    );
+    assert_eq!(response.kdf_params.salt, material.kdf_params.salt);
+}
+
+/// Email registration.
+#[tokio::test]
+async fn email_account_registers_and_recovers() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    // Mixed case on purpose: `User::new` lowercases before pinning, so a client
+    // that salted with the raw input would produce an unreproducible hash.
+    let typed_email = "Merchant@Example.COM";
+    let material =
+        register_client_side(&crypto::SaltIdentity::Email(typed_email.to_string()).as_identifier());
+
+    let user = User::new(
+        typed_email.to_string(),
+        material.kdf_params.clone(),
+        material.encrypted_symmetric_key.clone(),
+        material.recovery_verification_hash.clone(),
+    );
+    assert_eq!(user.kdf_salt_identifier, "merchant@example.com");
+    repo.create_user(&user).await.unwrap();
+
+    assert_recovers(&service, &user, &material, "merchant@example.com").await;
+}
+
+/// Wallet-only registration.
+#[tokio::test]
+async fn wallet_only_account_registers_and_recovers() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    // The browser reports whatever casing the wallet gives; the server pins the
+    // EIP-55 form via `validate_and_checksum_address`. Both sides only meet
+    // because `SaltIdentity::Wallet` normalises.
+    let as_reported = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
+    let checksummed = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    let material = register_client_side(
+        &crypto::SaltIdentity::Wallet(as_reported.to_string()).as_identifier(),
+    );
+
+    let user = User::new_wallet_only(
+        checksummed.to_string(),
+        material.kdf_params.clone(),
+        material.encrypted_symmetric_key.clone(),
+        material.recovery_verification_hash.clone(),
+    );
+    assert_eq!(user.kdf_salt_identifier, format!("wallet:{checksummed}"));
+    repo.create_user(&user).await.unwrap();
+
+    // Typed back in lower case, as a merchant would paste it.
+    assert_recovers(&service, &user, &material, as_reported).await;
+}
+
+/// Passkey-only registration - no email, no wallet, so the account id is the
+/// only handle the phrase can be bound to (RCS-201).
+#[tokio::test]
+async fn passkey_only_account_registers_and_recovers() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    let user_id = UserId::new();
+    let material =
+        register_client_side(&crypto::SaltIdentity::Passkey(user_id.to_string()).as_identifier());
+
+    let user = User::new_passkey_only(
+        user_id,
+        material.kdf_params.clone(),
+        material.encrypted_symmetric_key.clone(),
+        material.recovery_verification_hash.clone(),
+    );
+    assert_eq!(user.kdf_salt_identifier, format!("passkey:{user_id}"));
+    repo.create_user(&user).await.unwrap();
+
+    assert_recovers(&service, &user, &material, &user_id.to_string()).await;
+}
+
+/// The RCS-201 regression, end to end.
+///
+/// `pinned_identifier_survives_adding_an_email` above proves the field does not
+/// move. This proves the consequence: an account that registered with a wallet
+/// and later gained an email is still recoverable, and is recoverable *only*
+/// with the wallet salt. Recomputing the identifier - which is what the
+/// deprecated `kdf_salt_identifier()` does, preferring email over wallet - would
+/// leave both halves of this passing and the merchant permanently locked out.
+#[tokio::test]
+async fn adding_an_email_does_not_break_recovery() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(Arc::clone(&repo));
+
+    let address = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    let material =
+        register_client_side(&crypto::SaltIdentity::Wallet(address.to_string()).as_identifier());
+
+    let mut user = User::new_wallet_only(
+        address.to_string(),
+        material.kdf_params.clone(),
+        material.encrypted_symmetric_key.clone(),
+        material.recovery_verification_hash.clone(),
+    );
+    repo.create_user(&user).await.unwrap();
+
+    // The account gains an email after the fact. Everything about the stored
+    // recovery material was fixed before this point.
+    user.email = Some("added.later@example.com".to_string());
+    repo.update_user(&user).await.unwrap();
+    let user = repo.get_user(user.id).await.unwrap().expect("user");
+
+    assert_recovers(&service, &user, &material, address).await;
+
+    // And the salt an implementation that recomputed would have used must be
+    // rejected, so this test fails if recovery is ever "fixed" to derive the
+    // identifier from the account's current state.
+    #[allow(deprecated)]
+    let recomputed = user.kdf_salt_identifier();
+    assert_ne!(recomputed, user.kdf_salt_identifier);
+    let (wrong_hash, _) = recover_client_side(&material.phrase, &recomputed);
+    let err = service
+        .start_account_recovery(StartRecoveryRequest {
+            identifier: address.to_string(),
+            recovery_verification_hash: wrong_hash,
+        })
+        .await
+        .expect_err("the recomputed identifier must not reproduce the stored hash");
+    assert!(matches!(err, AuthError::InvalidRecoveryMnemonic), "{err:?}");
+}

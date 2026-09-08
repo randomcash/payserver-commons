@@ -67,6 +67,28 @@ pub fn recovery_salt_for(identifier: &str) -> String {
     format!("payserver-recovery:{identifier}")
 }
 
+/// The value stored as an account's `recovery_verification_hash`:
+/// `base64(SHA-256(recovery_key))`.
+///
+/// One definition, for the same reason the salt has one (RCS-219). This was
+/// written out twice — inline in `ui-kit`'s registration flow, and again as a
+/// local helper in this module's round-trip tests — so those tests would have
+/// stayed green through a change to the encoding registration actually uses,
+/// which is the single thing they exist to catch.
+///
+/// The server never computes this. It only compares the stored string against
+/// the one a recovery attempt supplies, so there is no server-side authority to
+/// catch a client that changes the encoding: every existing account simply stops
+/// being recoverable, reported as a generic "invalid recovery phrase". The
+/// encoding is pinned by a golden vector below rather than by a second
+/// implementation.
+pub fn recovery_verification_hash(recovery_key: &crate::types::SymmetricKey) -> String {
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+    use sha2::{Digest, Sha256};
+
+    B64.encode(Sha256::digest(recovery_key.as_bytes()))
+}
+
 /// EIP-55 checksum an Ethereum address.
 ///
 /// Mirrors alloy's `Address::to_checksum(None)`, which is what the server uses
@@ -253,6 +275,32 @@ mod tests {
         }
     }
 
+    /// Golden vectors for the verification-hash encoding.
+    ///
+    /// `recovery_verification_hash` is the only definition, so nothing else in
+    /// the tree disagrees with it by construction — which also means nothing
+    /// else would notice if it changed. These literals are the external
+    /// authority: they were computed outside this codebase, and changing the
+    /// encoding makes every account registered under the old one permanently
+    /// unrecoverable (RCS-219).
+    #[test]
+    fn verification_hash_encoding_is_pinned() {
+        use crate::types::SymmetricKey;
+
+        assert_eq!(
+            recovery_verification_hash(&SymmetricKey([0u8; 32])),
+            "Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=",
+            "base64(SHA-256(32 zero bytes))"
+        );
+
+        let counting = SymmetricKey(std::array::from_fn(|i| i as u8));
+        assert_eq!(
+            recovery_verification_hash(&counting),
+            "Yw3NKWbEM2aRElRIu7JbT/QSpJxzLbLIq8G4WBvXEN0=",
+            "base64(SHA-256(0x00..0x1f))"
+        );
+    }
+
     /// The constants above and `KdfParams::default()` must not drift apart:
     /// registration stores the latter while derivation uses the former, so a
     /// mismatch produces a hash the server can never reproduce.
@@ -274,14 +322,9 @@ mod tests {
 /// gives, and nobody finds out until a merchant genuinely needs to recover.
 #[cfg(test)]
 mod recovery_round_trip {
+    use super::recovery_verification_hash as verification_hash;
     use crate::mnemonic::RecoveryMnemonic;
     use crate::{kdf, symmetric};
-    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
-    use sha2::{Digest, Sha256};
-
-    fn verification_hash(key: &crate::SymmetricKey) -> String {
-        B64.encode(Sha256::digest(key.as_bytes()))
-    }
 
     /// Registration and recovery must derive the SAME verification hash from the
     /// same phrase and identifier. This is the whole basis of recovery working.

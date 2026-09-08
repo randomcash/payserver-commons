@@ -547,7 +547,6 @@ fn derive_recovery_crypto(
     state: &RegistrationState,
 ) -> Result<(KdfParams, EncryptedBlob, String), String> {
     use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
-    use sha2::{Digest, Sha256};
 
     if state.mnemonic_words.is_empty() {
         return Err("No recovery phrase was generated for this registration".to_string());
@@ -565,8 +564,10 @@ fn derive_recovery_crypto(
         .map_err(|e| format!("Could not derive the recovery key: {e}"))?;
 
     // What the server stores and compares against on a recovery attempt. It
-    // reveals nothing about the phrase.
-    let recovery_hash = B64.encode(Sha256::digest(recovery_key.as_bytes()));
+    // reveals nothing about the phrase. The encoding lives in `crypto` because
+    // the server never recomputes it - only this side does, so a change here
+    // silently strands every existing account (RCS-219).
+    let recovery_hash = crypto::recovery_verification_hash(&recovery_key);
 
     let stretched = crypto::kdf::stretch_master_key(&recovery_key)
         .map_err(|e| format!("Could not stretch the recovery key: {e}"))?;
@@ -594,4 +595,155 @@ fn derive_recovery_crypto(
         },
         recovery_hash,
     ))
+}
+
+/// The registration derivation, exercised as registration actually runs it
+/// (RCS-219).
+///
+/// The round-trip tests in `crypto` prove the primitives agree with themselves.
+/// They never touch `derive_recovery_crypto`, which is the function that
+/// actually decides what a real account stores — the identifier it salts with,
+/// the Argon2id cost it declares, the encoding of everything it uploads. A
+/// divergence introduced here left those tests green.
+///
+/// The recovery side of each test is deliberately reassembled from primitives
+/// rather than by calling back into `derive_recovery_crypto`: a test that runs
+/// the same function twice proves determinism, not agreement, which is exactly
+/// the gap this ticket exists to close.
+///
+/// These are slow — Argon2id at 64 MiB / t=3, twice per test, and the debug
+/// profile does not optimise it. That cost is the security property; do not
+/// lower the parameters to speed the suite up.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+
+    /// Rebuild the account key from nothing but the phrase and the identifier
+    /// the server pinned — which is all a merchant has at recovery time.
+    ///
+    /// Returns the verification hash it derived alongside the unwrapped key, so
+    /// a caller can check both halves of the contract from one Argon2id run.
+    fn recover(
+        phrase: &str,
+        pinned_identifier: &str,
+        blob: &EncryptedBlob,
+    ) -> (String, crypto::SymmetricKey) {
+        let mnemonic =
+            crypto::mnemonic::RecoveryMnemonic::from_phrase(phrase).expect("phrase must re-parse");
+        let recovery_key = mnemonic
+            .derive_recovery_key(pinned_identifier)
+            .expect("derive");
+        let hash = crypto::recovery_verification_hash(&recovery_key);
+
+        let stretched = crypto::kdf::stretch_master_key(&recovery_key).expect("stretch");
+        let wrapped = crypto::EncryptedBlob {
+            ciphertext: B64.decode(&blob.ciphertext).expect("ciphertext base64"),
+            iv: B64.decode(&blob.iv).expect("iv base64"),
+            mac: B64.decode(&blob.mac).expect("mac base64"),
+        };
+        let account_key = crypto::symmetric::decrypt_key(&wrapped, &stretched)
+            .expect("the phrase must unwrap the account key registration stored");
+
+        (hash, account_key)
+    }
+
+    /// Everything the server needs to reproduce the derivation must be either
+    /// pinned in `kdf_params` or rebuildable from the identifier. Asserted for
+    /// every shape, because a wrong salt or cost fails identically to a wrong
+    /// phrase.
+    fn assert_params_describe_the_derivation(params: &KdfParams, pinned_identifier: &str) {
+        assert_eq!(params.algorithm, "argon2id");
+        assert_eq!(params.memory_kb, crypto::RECOVERY_MEMORY_KB);
+        assert_eq!(params.iterations, crypto::RECOVERY_ITERATIONS);
+        assert_eq!(params.parallelism, crypto::RECOVERY_PARALLELISM);
+        assert_eq!(
+            String::from_utf8(B64.decode(&params.salt).expect("salt base64")).expect("salt utf8"),
+            crypto::recovery_salt_for(pinned_identifier),
+            "the declared salt must be the one derivation used"
+        );
+    }
+
+    /// Wallet registration: real derivation in, real recovery out.
+    ///
+    /// The state carries a `user_id` as well, because the live wallet flow sets
+    /// both — `start_wallet_register` returns one. So this also pins the
+    /// precedence: registration must salt with the wallet, which is what
+    /// `auth::models::User::new_wallet_only` pins into `kdf_salt_identifier`.
+    /// Salting with the passkey identifier instead would be invisible to a test
+    /// that only supplied one of the two.
+    #[test]
+    fn wallet_registration_derives_what_recovery_rebuilds() {
+        // Lowercased on purpose: the browser hands back whatever the wallet
+        // gives, while the server pins the EIP-55 form. Recovery rebuilds from
+        // the pinned form, so the two only meet if registration normalises.
+        let address = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
+        let state = RegistrationState {
+            wallet_address: Some(address.to_string()),
+            user_id: Some(crate::auth::types::UserId(uuid::Uuid::new_v4())),
+            signature: Some("0xsig".to_string()),
+            passkey_credential: None,
+            mnemonic_words: generate_recovery_mnemonic().expect("generate"),
+        };
+        let phrase = state.mnemonic_words.join(" ");
+
+        let (params, blob, stored_hash) = derive_recovery_crypto(&state).expect("derive");
+
+        // What the server pins, produced by the same shared definition
+        // `User::new_wallet_only` calls.
+        let pinned = crypto::SaltIdentity::Wallet(address.to_string()).as_identifier();
+        assert_eq!(pinned, "wallet:0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed");
+        assert_params_describe_the_derivation(&params, &pinned);
+
+        let (rebuilt_hash, _account_key) = recover(&phrase, &pinned, &blob);
+        assert_eq!(
+            rebuilt_hash, stored_hash,
+            "recovery must reproduce the hash registration uploaded"
+        );
+    }
+
+    /// Passkey-only registration: no email, no wallet, so the account id is the
+    /// only handle it has and `passkey:{id}` is the only salt it can use.
+    #[test]
+    fn passkey_registration_derives_what_recovery_rebuilds() {
+        let user_id = crate::auth::types::UserId(uuid::Uuid::new_v4());
+        let state = RegistrationState {
+            wallet_address: None,
+            user_id: Some(user_id),
+            signature: None,
+            passkey_credential: Some(serde_json::json!({"id": "cred"})),
+            mnemonic_words: generate_recovery_mnemonic().expect("generate"),
+        };
+        let phrase = state.mnemonic_words.join(" ");
+
+        let (params, blob, stored_hash) = derive_recovery_crypto(&state).expect("derive");
+
+        let pinned = crypto::SaltIdentity::Passkey(user_id.to_string()).as_identifier();
+        assert_eq!(pinned, format!("passkey:{user_id}"));
+        assert_params_describe_the_derivation(&params, &pinned);
+
+        let (rebuilt_hash, _account_key) = recover(&phrase, &pinned, &blob);
+        assert_eq!(
+            rebuilt_hash, stored_hash,
+            "recovery must reproduce the hash registration uploaded"
+        );
+    }
+
+    /// Fail closed rather than register an account whose stored crypto is
+    /// unrelated to the words on screen — the `generate_placeholder_crypto`
+    /// failure mode (RCS-193). Costs no Argon2id: both guards reject first.
+    #[test]
+    fn refuses_to_derive_without_a_phrase_or_an_identity() {
+        let no_phrase = RegistrationState {
+            user_id: Some(crate::auth::types::UserId(uuid::Uuid::new_v4())),
+            ..Default::default()
+        };
+        assert!(derive_recovery_crypto(&no_phrase).is_err());
+
+        let no_identity = RegistrationState {
+            mnemonic_words: generate_recovery_mnemonic().expect("generate"),
+            ..Default::default()
+        };
+        assert!(derive_recovery_crypto(&no_identity).is_err());
+    }
 }

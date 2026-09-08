@@ -52,8 +52,17 @@ jobs:
           RUSTFLAGS: -D warnings
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      - name: Tests
-        run: cargo nextest run --workspace --lib --no-fail-fast
+      # --all-features here for the same reason as the clippy step above, and
+      # it is the second half of RCS-199: without it `cargo nextest run` never
+      # builds ui-kit's `auth` module, so the registration-derivation tests in
+      # register_page.rs would sit in the tree reading as coverage and never
+      # execute. A test CI does not run is worse than a known gap (RCS-219).
+      #
+      # This makes the suite noticeably slower: the recovery round trips run
+      # Argon2id at 64 MiB / t=3 unoptimised, twice per test. That cost is the
+      # security property - do not lower the parameters to speed it up.
+      - name: Tests (all features)
+        run: cargo nextest run --workspace --lib --all-features --no-fail-fast
 
   audit:
     name: Audit
