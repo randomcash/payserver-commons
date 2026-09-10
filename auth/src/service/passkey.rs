@@ -282,32 +282,30 @@ where
         // Reset failed login attempts on successful passkey auth
         self.repo.reset_failed_logins(user.id).await?;
 
-        // Find existing device by ID, or create new device
-        let device_id = if let Some(provided_device_id) = request.device_id {
-            // Client provided a device ID - verify it belongs to this user and is active
-            let device = self
-                .repo
-                .get_device(provided_device_id)
-                .await?
-                .ok_or(AuthError::DeviceNotFound(provided_device_id.to_string()))?;
+        // Reuse the client's device if it is usable, otherwise mint a new one.
+        //
+        // An unusable device id is NOT a login failure. The passkey assertion has
+        // already succeeded by this point - the id is a client-side hint about
+        // which device record to attach the session to, held in localStorage, and
+        // a hint that no longer applies is simply absent.
+        //
+        // It used to return DeviceNotFound for all three cases (unknown, owned by
+        // someone else, revoked), which locked the user out of that passkey
+        // permanently: the client stores one id per browser, never clears it on
+        // rejection, and so resent the same rejected id forever. Anyone with two
+        // accounts in one browser hit it and could only recover by clearing
+        // localStorage by hand (RCS-248). The comment on the revoked branch even
+        // said "client should create new" - the client had no way to know, and
+        // the server is the one holding everything needed to do it.
+        let reusable = self.reusable_device(user.id, request.device_id).await?;
 
-            if device.user_id != user.id {
-                // Device belongs to a different user - treat as not found
-                return Err(AuthError::DeviceNotFound(provided_device_id.to_string()));
-            }
-
-            if !device.is_active {
-                // Device was revoked - treat as not found, client should create new
-                return Err(AuthError::DeviceNotFound(provided_device_id.to_string()));
-            }
-
-            // Update last_used_at
-            let mut updated = device.clone();
+        let device_id = if let Some(device) = reusable {
+            let mut updated = device;
             updated.last_used_at = Some(Utc::now());
+            let id = updated.id;
             self.repo.update_device(&updated).await?;
-            provided_device_id
+            id
         } else {
-            // No device ID provided - create new device
             let active_count = self.repo.count_active_devices(user.id).await?;
             if active_count >= self.config.max_devices_per_user {
                 return Err(AuthError::MaxDevicesReached(

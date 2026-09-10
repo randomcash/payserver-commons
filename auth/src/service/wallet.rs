@@ -277,24 +277,19 @@ where
         wallet.last_used_at = Some(Utc::now());
         self.repo.update_wallet(&wallet).await?;
 
-        // Handle device - reuse existing or create new
-        let device_id = if let Some(provided_device_id) = request.device_id {
-            // Verify device belongs to user and is active
-            let device = self
-                .repo
-                .get_device(provided_device_id)
-                .await?
-                .ok_or(AuthError::DeviceNotFound(provided_device_id.to_string()))?;
+        // Reuse the client's device if it is usable, otherwise mint a new one.
+        // Same reasoning as the passkey path (RCS-248): the signature has already
+        // been verified, so a device id that no longer applies is a stale hint,
+        // not a login failure. Returning an error here locked a user out of their
+        // wallet login until they cleared localStorage by hand.
+        let reusable = self.reusable_device(user.id, request.device_id).await?;
 
-            if device.user_id != user.id || !device.is_active {
-                return Err(AuthError::DeviceNotFound(provided_device_id.to_string()));
-            }
-
-            // Update last_used_at
+        let device_id = if let Some(device) = reusable {
             let mut device = device;
             device.last_used_at = Some(Utc::now());
+            let id = device.id;
             self.repo.update_device(&device).await?;
-            provided_device_id
+            id
         } else {
             // Check device limit
             let device_count = self.repo.count_active_devices(user.id).await?;

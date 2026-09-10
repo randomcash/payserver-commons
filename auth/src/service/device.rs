@@ -1,7 +1,7 @@
 //! Device management methods.
 
 use crate::error::{AuthError, Result};
-use crate::models::{DeviceId, DeviceInfo, SessionId};
+use crate::models::{Device, DeviceId, DeviceInfo, SessionId, UserId};
 use crate::repository::{
     ChallengeRepository, DeviceRepository, PasskeyRepository, SessionRepository, UserRepository,
     WalletRepository,
@@ -63,5 +63,43 @@ where
 
         // Deactivate the device
         self.repo.deactivate_device(device_id).await
+    }
+
+    /// Resolve the device id a client sent on login into a device we can reuse.
+    ///
+    /// Returns `None` when the id is unusable — unknown, owned by someone else,
+    /// or revoked — so the caller mints a fresh device instead. Deliberately not
+    /// an error: by the time login calls this the credential has already been
+    /// verified, so the id is only a hint about which device record to attach the
+    /// session to. A hint that no longer applies is the same as no hint.
+    ///
+    /// It used to return `DeviceNotFound` for all three cases, which locked users
+    /// out (RCS-248): the client keeps one id per browser in localStorage and
+    /// never clears it on rejection, so it resent the same rejected id forever.
+    /// Anyone with two accounts in one browser could only recover by clearing
+    /// storage by hand.
+    pub(crate) async fn reusable_device(
+        &self,
+        user_id: UserId,
+        provided: Option<DeviceId>,
+    ) -> Result<Option<Device>> {
+        let Some(id) = provided else {
+            return Ok(None);
+        };
+
+        match self.repo.get_device(id).await? {
+            Some(d) if d.user_id == user_id && d.is_active => Ok(Some(d)),
+            // Wrong owner and revoked are not distinguished in the log on
+            // purpose: both mean "stale hint", and naming the owner of a device
+            // id would leak across accounts.
+            Some(_) => {
+                tracing::info!(device_id = %id, "stale device id on login; creating a new device");
+                Ok(None)
+            }
+            None => {
+                tracing::info!(device_id = %id, "unknown device id on login; creating a new device");
+                Ok(None)
+            }
+        }
     }
 }

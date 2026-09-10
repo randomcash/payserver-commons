@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use crate::error::AuthError;
 use crate::models::{
-    DeviceId, PasskeyId, SessionId, StartNewUserWalletRegistrationRequest,
+    Device, DeviceId, DeviceType, PasskeyId, SessionId, StartNewUserWalletRegistrationRequest,
     StartPasskeyRegistrationRequest, StartRecoveryRequest, StartWalletLoginRequest, User, UserId,
 };
-use crate::repository::UserRepository;
 use crate::repository::inmemory::InMemoryRepository;
+use crate::repository::{DeviceRepository, UserRepository};
 
 use super::AuthService;
 
@@ -1046,4 +1046,100 @@ async fn adding_an_email_does_not_break_recovery() {
         .await
         .expect_err("the recomputed identifier must not reproduce the stored hash");
     assert!(matches!(err, AuthError::InvalidRecoveryMnemonic), "{err:?}");
+}
+
+// ========================================================================
+// Device reuse on login (RCS-248)
+// ========================================================================
+//
+// A stale device id must never fail a login. The client keeps one id per browser
+// in localStorage and does not clear it when the server rejects it, so returning
+// an error locked the user out of that credential permanently - recoverable only
+// by clearing storage by hand. These pin the three ways an id goes stale.
+
+async fn seed_device(repo: &InMemoryRepository, user_id: UserId, active: bool) -> Device {
+    let mut d = Device::new(
+        user_id,
+        "test device".to_string(),
+        DeviceType::Browser,
+        crypto::EncryptedBlob {
+            ciphertext: vec![1],
+            iv: vec![2],
+            mac: vec![3],
+        },
+        crypto::KdfParams::default(),
+    );
+    d.is_active = active;
+    repo.create_device(&d).await.unwrap();
+    d
+}
+
+#[tokio::test]
+async fn reusable_device_returns_none_when_no_id_supplied() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(repo);
+    assert!(
+        service
+            .reusable_device(UserId::new(), None)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn reusable_device_reuses_the_users_own_active_device() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let user_id = UserId::new();
+    let device = seed_device(&repo, user_id, true).await;
+    let service = AuthService::new(repo);
+
+    let got = service
+        .reusable_device(user_id, Some(device.id))
+        .await
+        .unwrap();
+    assert_eq!(got.map(|d| d.id), Some(device.id));
+}
+
+#[tokio::test]
+async fn reusable_device_ignores_an_unknown_id_instead_of_failing() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let service = AuthService::new(repo);
+
+    // Ok(None), never Err: the caller mints a new device.
+    let got = service
+        .reusable_device(UserId::new(), Some(DeviceId::new()))
+        .await
+        .unwrap();
+    assert!(got.is_none());
+}
+
+#[tokio::test]
+async fn reusable_device_ignores_a_device_owned_by_another_user() {
+    // The exact shape of RCS-248: two accounts in one browser, so localStorage
+    // holds a device id belonging to the other one.
+    let repo = Arc::new(InMemoryRepository::new());
+    let other_user = UserId::new();
+    let device = seed_device(&repo, other_user, true).await;
+    let service = AuthService::new(repo);
+
+    let got = service
+        .reusable_device(UserId::new(), Some(device.id))
+        .await
+        .unwrap();
+    assert!(got.is_none(), "must not hand back another user's device");
+}
+
+#[tokio::test]
+async fn reusable_device_ignores_a_revoked_device() {
+    let repo = Arc::new(InMemoryRepository::new());
+    let user_id = UserId::new();
+    let device = seed_device(&repo, user_id, false).await;
+    let service = AuthService::new(repo);
+
+    let got = service
+        .reusable_device(user_id, Some(device.id))
+        .await
+        .unwrap();
+    assert!(got.is_none(), "a revoked device must not be reused");
 }
