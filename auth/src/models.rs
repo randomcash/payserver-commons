@@ -102,7 +102,7 @@ pub struct User {
     /// Pinned rather than recomputed. `kdf_salt_identifier()` derives it from
     /// email → wallet → passkey, all of which can change after the fact, while
     /// `recovery_verification_hash` never moves. A wallet user who later adds an
-    /// email would otherwise become permanently unrecoverable (RCS-201).
+    /// email would otherwise become permanently unrecoverable.
     ///
     /// Treat as immutable: changing it invalidates the recovery hash.
     pub kdf_salt_identifier: String,
@@ -224,7 +224,7 @@ impl User {
         note = "use the pinned `kdf_salt_identifier` field. Recomputing derives from \
                 mutable fields, so an account that gains an email after registration \
                 yields a different salt than its recovery_verification_hash was built \
-                from — permanently unrecoverable (RCS-201). NOT a reference for the \
+                from — permanently unrecoverable. NOT a reference for the \
                 migration backfill, which is deliberately wallet-before-email: a row \
                 holding both is by construction a wallet registration that gained an \
                 email later, and pinning the email would freeze the broken salt."
@@ -562,21 +562,21 @@ pub struct StartRecoveryRequest {
     /// - wallet-only account: the primary wallet address (EIP-55 checksummed)
     /// - passkey-only account: the account id (UUID)
     ///
-    /// The UUID form was added in RCS-201 so passkey-only accounts, which have
-    /// no other handle, are reachable at all. It is accepted **only** for
+    /// The UUID form exists so passkey-only accounts, which have no other
+    /// handle, are reachable at all. It is accepted **only** for
     /// accounts that genuinely have neither an email nor a wallet - user ids are
     /// not secret, so honouring one for any account would hand anyone who learns
-    /// it a way to drive that account's recovery endpoint (RCS-204).
+    /// it a way to drive that account's recovery endpoint.
     pub identifier: String,
 
     /// Recovery verification hash to prove possession of the mnemonic.
     ///
     /// Client derives this as `base64(SHA-256(Argon2id(mnemonic, salt)))`, where
     /// the salt comes from `crypto::SaltIdentity` - the shared definition the
-    /// server pins with at registration (RCS-200). It must reproduce the
+    /// server pins with at registration. It must reproduce the
     /// account's **pinned** `kdf_salt_identifier`, not one recomputed from the
     /// account's current state: an account that gained an email after
-    /// registering with a wallet still salts with the wallet (RCS-201).
+    /// registering with a wallet still salts with the wallet.
     ///
     /// Must match the hash stored during registration.
     /// SENSITIVE: Zeroized on drop.
@@ -753,7 +753,7 @@ pub struct StartPasskeyRegistrationResponse {
 /// Response to `POST /auth/recovery/start`, after the recovery hash verifies.
 ///
 /// Carries more than the WebAuthn challenge because a client cannot rebuild an
-/// account from the phrase alone (RCS-200):
+/// account from the phrase alone:
 ///
 /// - **`kdf_params`** — the recovery hash depends on the Argon2id cost, not just
 ///   the phrase and salt. Without the account's actual parameters the client has

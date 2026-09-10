@@ -203,7 +203,7 @@ pub trait RecoveryService: Send + Sync {
     ///
     /// Verifies the mnemonic, then returns a passkey registration challenge
     /// together with the material the client needs to rebuild the account: the
-    /// account's pinned KDF parameters and its wrapped symmetric key (RCS-200).
+    /// account's pinned KDF parameters and its wrapped symmetric key.
     /// Both are released only after the hash comparison succeeds.
     async fn start_account_recovery(
         &self,

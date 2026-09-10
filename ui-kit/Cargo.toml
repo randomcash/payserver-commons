@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # Shared types from payserver-commons
 types = { path = "../types" }
-# Real recovery-phrase generation and client-side key wrapping (RCS-193).
+# Real recovery-phrase generation and client-side key wrapping.
 # Optional so the base ui-kit (no auth) does not pull in argon2/aes.
 crypto = { path = "../crypto", optional = true }
 

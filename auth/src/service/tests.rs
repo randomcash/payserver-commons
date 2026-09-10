@@ -405,13 +405,13 @@ async fn test_wallet_challenge_uses_consistent_timestamp() {
     );
 }
 
-// --- RCS-201 -----------------------------------------------------------------
+// --- The pinned KDF salt identifier -------------------------------------------
 // Both halves of the fix, because reverting either one previously passed the
 // entire suite and the regression only surfaces when a user needs recovery.
 
 /// The pinned identifier must survive the account gaining an email.
 ///
-/// This is the RCS-201 bug: `kdf_salt_identifier()` prefers email over wallet,
+/// This is the bug: `kdf_salt_identifier()` prefers email over wallet,
 /// so recomputing after an email is added yields a different salt than the
 /// stored `recovery_verification_hash` was built from, and the account can
 /// never be recovered.
@@ -461,7 +461,7 @@ fn constructors_pin_the_identifier() {
         "h".to_string(),
     );
     // EIP-55 canonical form of that address. The constructor normalises rather
-    // than passing through (RCS-205), so the pinned value is the same one a
+    // than passing through, so the pinned value is the same one a
     // recovery form reaches from whatever casing the merchant types. In
     // production the address arrives already checksummed from
     // validate_and_checksum_address, where normalising is a no-op.
@@ -517,7 +517,7 @@ fn constructors_pin_the_identifier() {
 /// The account-id branch resolves passkey-only accounts, and ONLY those.
 ///
 /// Deleting the `Uuid::parse_str` arm previously passed the whole suite. It also
-/// guards the RCS-204 narrowing: user ids are not secret, so accepting one for an
+/// guards the narrowing: user ids are not secret, so accepting one for an
 /// account that has an email or wallet would hand anyone who learns it a free
 /// route to the lockout counter.
 #[tokio::test]
@@ -584,7 +584,7 @@ async fn account_id_resolves_only_passkey_only_accounts() {
     );
 }
 
-/// RCS-204: a wrong recovery hash must not touch the account's lockout state.
+/// A wrong recovery hash must not touch the account's lockout state.
 ///
 /// `/auth/recovery/start` is unauthenticated and resolves a user from a public
 /// identifier, so incrementing `failed_login_attempts` here let anyone who knew
@@ -638,7 +638,7 @@ async fn failed_recovery_never_touches_the_lockout_counter() {
     );
 }
 
-/// The other half of RCS-204: removing the lockout must not have made a locked
+/// The other half: removing the lockout must not have made a locked
 /// account recoverable. Lockout still applies to accounts locked by the login
 /// paths, which is where guessing is the actual risk.
 #[tokio::test]
@@ -676,7 +676,7 @@ async fn recovery_still_refuses_an_account_locked_by_login() {
     );
 }
 
-/// RCS-200: a successful recovery start must hand back what the client needs to
+/// A successful recovery start must hand back what the client needs to
 /// rebuild the account, not just a WebAuthn challenge.
 ///
 /// Without `kdf_params` the client has to guess the Argon2id cost, so raising it
@@ -809,7 +809,7 @@ fn crypto_eip55_agrees_with_alloy_checksum() {
     }
 }
 
-// --- RCS-219 -----------------------------------------------------------------
+// --- Registration -> recovery, end to end -------------------------------------
 // The registration -> recovery round trip, through the real code on both sides.
 //
 // The tests above build their inputs by hand ("recovery-hash", "correct-hash"),
@@ -887,8 +887,8 @@ fn recover_client_side(phrase: &str, pinned_identifier: &str) -> (String, crypto
 ///
 /// `typed_identifier` is what a merchant enters on the recovery form, which is
 /// only used to *find* the account. The salt comes from the pinned
-/// `kdf_salt_identifier` the server hands back - the distinction RCS-201 turns
-/// on, and the reason these are not the same argument.
+/// `kdf_salt_identifier` the server hands back - the distinction the pinned
+/// identifier turns on, and the reason these are not the same argument.
 async fn assert_recovers(
     service: &AuthService<InMemoryRepository>,
     user: &User,
@@ -976,7 +976,7 @@ async fn wallet_only_account_registers_and_recovers() {
 }
 
 /// Passkey-only registration - no email, no wallet, so the account id is the
-/// only handle the phrase can be bound to (RCS-201).
+/// only handle the phrase can be bound to.
 #[tokio::test]
 async fn passkey_only_account_registers_and_recovers() {
     let repo = Arc::new(InMemoryRepository::new());
@@ -998,7 +998,7 @@ async fn passkey_only_account_registers_and_recovers() {
     assert_recovers(&service, &user, &material, &user_id.to_string()).await;
 }
 
-/// The RCS-201 regression, end to end.
+/// The pinned-identifier regression, end to end.
 ///
 /// `pinned_identifier_survives_adding_an_email` above proves the field does not
 /// move. This proves the consequence: an account that registered with a wallet
@@ -1049,7 +1049,7 @@ async fn adding_an_email_does_not_break_recovery() {
 }
 
 // ========================================================================
-// Device reuse on login (RCS-248)
+// Device reuse on login
 // ========================================================================
 //
 // A stale device id must never fail a login. The client keeps one id per browser
@@ -1116,7 +1116,7 @@ async fn reusable_device_ignores_an_unknown_id_instead_of_failing() {
 
 #[tokio::test]
 async fn reusable_device_ignores_a_device_owned_by_another_user() {
-    // The exact shape of RCS-248: two accounts in one browser, so localStorage
+    // The exact shape of the bug: two accounts in one browser, so localStorage
     // holds a device id belonging to the other one.
     let repo = Arc::new(InMemoryRepository::new());
     let other_user = UserId::new();

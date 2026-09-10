@@ -76,8 +76,7 @@ pub trait StorePaymentMethodWriter: Send + Sync {
     /// and left the caller to pair it with an xpub it had read earlier. That
     /// pairing was only safe while the counter lived on the same row as the
     /// key; once it moved to the wallet, a rotation between the read and the
-    /// allocation could combine two different wallets and re-issue an address
-    /// (RCS-234).
+    /// allocation could combine two different wallets and re-issue an address.
     ///
     /// Must be atomic: two invoices allocating at once on one wallet have to
     /// receive different indices.

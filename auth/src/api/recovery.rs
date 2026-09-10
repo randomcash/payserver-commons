@@ -42,7 +42,7 @@ pub async fn start_recovery<A: AuthenticationService>(
     Json(body): Json<StartRecoveryRequestBody>,
 ) -> Result<Json<StartRecoveryResponse>, (StatusCode, String)> {
     // Unauthenticated endpoint reachable with a public identifier, and it no
-    // longer defends itself by locking the victim's account (RCS-204). CAPTCHA
+    // longer defends itself by locking the victim's account. CAPTCHA
     // is what makes automated abuse expensive to the caller instead.
     if let Some(captcha) = &state.captcha {
         let token = body.captcha_token.as_deref().ok_or((

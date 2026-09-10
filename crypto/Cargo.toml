@@ -38,7 +38,7 @@ subtle = "2.6"
 # WASM: `rand`/`getrandom` refuse to build for wasm32-unknown-unknown without an
 # explicit entropy source rather than silently falling back to a weak one. The
 # `js` feature routes them to `crypto.getRandomValues`, which is the correct
-# browser CSPRNG — the client generates recovery mnemonics with this (RCS-193).
+# browser CSPRNG — the client generates recovery mnemonics with this.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
 

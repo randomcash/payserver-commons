@@ -82,7 +82,7 @@ pub use repositories::{
     TokenRepository,
     TokenWriter,
     // Watched Address (for PostgreSQL persistence)
-    // Account Wallet (RCS-234)
+    // Account Wallet
     WalletReader,
     WalletRepository,
     WalletWriter,

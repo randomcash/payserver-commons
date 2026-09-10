@@ -17,7 +17,7 @@ pub struct InvoiceResponse {
     pub id: String,
     /// Store this invoice belongs to.
     pub store_id: String,
-    /// Store name, when the caller needs to tell stores apart (RCS-171).
+    /// Store name, when the caller needs to tell stores apart.
     ///
     /// Only the list endpoints resolve this: a single-invoice response is
     /// always read in a context that already knows the store, and looking the

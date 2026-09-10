@@ -30,33 +30,27 @@ jobs:
       - name: Format check
         run: cargo fmt --all -- --check
 
-      # ui-kit's `auth` feature is optional, so the default build never compiles
-      # ui-kit/src/auth - login, registration and recovery. A PR adding code
-      # there could be clippy-clean and not build: three E0425s reached a green
-      # PR on 2026-09-06 (RCS-205 review).
+      # --all-features is the point of this step. ui-kit's `auth` feature is
+      # optional, so a default build never compiles ui-kit/src/auth - login,
+      # registration, recovery. That module was therefore never linted at all
+      # and had accumulated 83 findings; three E0425s once reached a green PR
+      # (2026-09-06), and a dead binding shipped green in #15. Both were
+      # invisible to a clippy step that did not build the code.
       #
-      # --all-features matters here, and is the point of RCS-199. ui-kit's
-      # `auth` feature is optional, so a default build never compiles
-      # ui-kit/src/auth - login, registration, recovery. That module was
-      # therefore never linted at all, and had accumulated 83 findings; three
-      # E0425s once reached a green PR (2026-09-06, RCS-205 review), and a dead
-      # binding shipped green in #15. Both were invisible to a clippy step that
-      # did not build the code.
-      #
-      # RCS-199 cleared the backlog - 78 auto-fixed, 5 redundant locals by hand
-      # - so this is now one step that denies rustc AND clippy warnings across
-      # every feature, instead of a lenient `check` beside a clippy run that
-      # skipped half the crate.
+      # The backlog is cleared - 78 auto-fixed, 5 redundant locals by hand - so
+      # this is one step that denies rustc AND clippy warnings across every
+      # feature, instead of a lenient `check` beside a clippy run that skipped
+      # half the crate.
       - name: Clippy (all features)
         env:
           RUSTFLAGS: -D warnings
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      # --all-features here for the same reason as the clippy step above, and
-      # it is the second half of RCS-199: without it `cargo nextest run` never
+      # --all-features here for the same reason as the clippy step above:
+      # without it `cargo nextest run` never
       # builds ui-kit's `auth` module, so the registration-derivation tests in
       # register_page.rs would sit in the tree reading as coverage and never
-      # execute. A test CI does not run is worse than a known gap (RCS-219).
+      # execute. A test CI does not run is worse than a known gap.
       #
       # This makes the suite noticeably slower: the recovery round trips run
       # Argon2id at 64 MiB / t=3 unoptimised, twice per test. That cost is the

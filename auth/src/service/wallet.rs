@@ -278,7 +278,7 @@ where
         self.repo.update_wallet(&wallet).await?;
 
         // Reuse the client's device if it is usable, otherwise mint a new one.
-        // Same reasoning as the passkey path (RCS-248): the signature has already
+        // Same reasoning as the passkey path: the signature has already
         // been verified, so a device id that no longer applies is a stale hint,
         // not a login failure. Returning an error here locked a user out of their
         // wallet login until they cleared localStorage by hand.

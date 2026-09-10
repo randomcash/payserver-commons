@@ -31,7 +31,7 @@ where
     /// Resolve the user a recovery attempt refers to.
     ///
     /// Email, wallet address, or **account id**. The last exists for
-    /// passkey-only accounts (RCS-201): they have no email and no wallet, so
+    /// passkey-only accounts: they have no email and no wallet, so
     /// without it their recovery phrase is bound to `passkey:{user_id}` and no
     /// endpoint will ever accept it.
     ///
@@ -57,7 +57,7 @@ where
             // not secret — they come back from both registration-start responses
             // and `UserInfo`, and are the WebAuthn user handle — so accepting them
             // for every account would let anyone who learns one drive an account
-            // to `max_failed_attempts` and lock it (RCS-204). Passkey-only accounts
+            // to `max_failed_attempts` and lock it. Passkey-only accounts
             // have no alternative, so they take that trade; nobody else needs to.
             let user = self.repo.get_user(UserId(id)).await?;
             return Ok(user.filter(|u| u.email.is_none() && u.primary_wallet_address.is_none()));
@@ -85,7 +85,7 @@ where
     ///
     /// # Abuse resistance
     /// A failed attempt here deliberately does not touch the account's
-    /// failed-login counter and cannot lock the account (RCS-204) - the
+    /// failed-login counter and cannot lock the account - the
     /// endpoint is unauthenticated and reachable with a public identifier.
     /// Abuse is limited by CAPTCHA and by per-IP/identifier rate limiting in
     /// front of the handler, which cost the caller rather than the victim.
@@ -112,7 +112,7 @@ where
 
         if !verification_matches {
             // Deliberately does NOT touch failed_login_attempts, and does not
-            // lock the account (RCS-204).
+            // lock the account.
             //
             // This endpoint is unauthenticated and resolves a user from a
             // public identifier - an email address, an on-chain address, or an
@@ -153,7 +153,7 @@ where
         // The pinned value, not the recomputed one: recomputing prefers email
         // over wallet, so an account that gained an email after registration
         // would derive a different salt than the stored hash was built from and
-        // could never be recovered (RCS-201).
+        // could never be recovered.
         let user_identifier = user.kdf_salt_identifier.clone();
 
         // Generate WebAuthn registration challenge
@@ -182,7 +182,7 @@ where
             .await?;
 
         // Released only now, after the hash comparison above succeeded, so the
-        // caller has proven possession of the phrase (RCS-200).
+        // caller has proven possession of the phrase.
         //
         // kdf_params: the client must derive with the account's ACTUAL Argon2id
         // cost. Hardcoding a constant works only until someone raises it, at
@@ -226,7 +226,7 @@ where
         // The pinned value, not the recomputed one: recomputing prefers email
         // over wallet, so an account that gained an email after registration
         // would derive a different salt than the stored hash was built from and
-        // could never be recovered (RCS-201).
+        // could never be recovered.
         let user_identifier = user.kdf_salt_identifier.clone();
 
         // Retrieve the stored challenge state and verify identifier consistency

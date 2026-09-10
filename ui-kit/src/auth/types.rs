@@ -208,7 +208,7 @@ pub struct StartRecoveryRequest {
 /// Response to a successful recovery start.
 ///
 /// Carries more than the WebAuthn challenge, because the phrase alone is not
-/// enough to rebuild an account (RCS-200):
+/// enough to rebuild an account:
 ///
 /// - `kdf_params` are the account's PINNED cost, returned so a client is not
 ///   guessing. Note `RecoveryMnemonic::derive_recovery_key` currently takes only

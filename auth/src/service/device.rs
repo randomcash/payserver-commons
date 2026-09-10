@@ -74,7 +74,7 @@ where
     /// session to. A hint that no longer applies is the same as no hint.
     ///
     /// It used to return `DeviceNotFound` for all three cases, which locked users
-    /// out (RCS-248): the client keeps one id per browser in localStorage and
+    /// out: the client keeps one id per browser in localStorage and
     /// never clears it on rejection, so it resent the same rejected id forever.
     /// Anyone with two accounts in one browser could only recover by clearing
     /// storage by hand.

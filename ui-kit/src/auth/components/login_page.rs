@@ -107,7 +107,7 @@ pub fn LoginPage(
 
                 match api.complete_wallet_login(complete_request).await {
                     Ok(response) => {
-                        // Signal writes BEFORE save_login (RCS-220). save_login
+                        // Signal writes BEFORE save_login. save_login
                         // flips auth.state to Authenticated, which synchronously
                         // fires the redirect Effect above and disposes this
                         // component; a signal written afterwards belongs to a dead
@@ -171,8 +171,8 @@ pub fn LoginPage(
 
                 match api.complete_passkey_login(complete_request).await {
                     Ok(response) => {
-                        // Same ordering requirement as the wallet path above
-                        // (RCS-220): settle local state first, authenticate last.
+                        // Same ordering requirement as the wallet path above:
+                        // settle local state first, authenticate last.
                         set_passkey_state.set(PasskeyState::Success);
                         auth.save_login(&response);
                         navigate(&redirect, Default::default());

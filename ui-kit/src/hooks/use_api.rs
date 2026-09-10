@@ -29,7 +29,7 @@ impl ApiError {
     /// The distinction matters because the caller's response to `true` is to
     /// delete the stored session, which cannot be undone: the user is signed out
     /// and has to re-authenticate with their passkey or wallet. Treating every
-    /// error as `true` (RCS-221) meant anyone sharing an IP - corporate NAT, a
+    /// error as `true` meant anyone sharing an IP - corporate NAT, a
     /// VPN, mobile CGNAT - could trip the 5 req/min auth limit and simply be
     /// logged out, and a deploy could sign out everyone mid-request.
     ///

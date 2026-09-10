@@ -78,7 +78,7 @@ pub use asymmetric::{Ed25519KeyPair, X25519KeyPair};
 pub use mnemonic::RecoveryMnemonic;
 
 // Recovery KDF salt identifier — the single definition of a convention that
-// registration, the server and the recovery flow must all agree on (RCS-200).
+// registration, the server and the recovery flow must all agree on.
 pub use recovery_salt::{
     RECOVERY_ITERATIONS, RECOVERY_MEMORY_KB, RECOVERY_PARALLELISM, SaltIdentity, eip55_checksum,
     recovery_salt_for, recovery_verification_hash,

@@ -573,7 +573,7 @@ pub mod inmemory {
             // derived from it, so changing it strands the account - which means
             // a `users.insert` here would happily persist a value production
             // drops on the floor. Service code that assigned the field would
-            // then pass its tests and silently no-op live (RCS-203).
+            // then pass its tests and silently no-op live.
             if old_salt_identifier != user.kdf_salt_identifier {
                 return Err(AuthError::ImmutableField("kdf_salt_identifier".to_string()));
             }
@@ -1495,7 +1495,7 @@ mod immutability_tests {
     }
 
     /// The invariant the Postgres statement enforces by omission, asserted here
-    /// so the mock cannot disagree with it. Before RCS-203 this write was
+    /// so the mock cannot disagree with it. This write was once
     /// accepted and persisted, so a caller that mutated the field passed its
     /// tests and then silently no-opped against Postgres.
     #[tokio::test]
@@ -1534,7 +1534,7 @@ mod immutability_tests {
         let stored = repo.get_user(user.id).await.unwrap().unwrap();
         assert_eq!(stored.email.as_deref(), Some("someone@example.com"));
         assert_eq!(stored.failed_login_attempts, 3);
-        // Adding an email must not re-derive the salt identifier (RCS-201).
+        // Adding an email must not re-derive the salt identifier.
         assert_eq!(stored.kdf_salt_identifier, user.kdf_salt_identifier);
     }
 

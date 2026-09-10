@@ -67,7 +67,7 @@ pub use webhook_delivery::{
     CreateDeliveryParams, WebhookDeliveryReader, WebhookDeliveryRepository, WebhookDeliveryWriter,
 };
 
-/// Normalize a free-text list search term (RCS-231).
+/// Normalize a free-text list search term.
 ///
 /// Trims, and treats a blank term as absent. The distinction matters: an empty
 /// search box must mean "no filter", never "match nothing" - a user who clears
@@ -76,8 +76,8 @@ pub use webhook_delivery::{
 ///
 /// Both `InvoiceQueryParams::search_term` and `PaymentQueryParams::search_term`
 /// go through here, and so does every backend that reads the field, so the rule
-/// cannot drift between the SQL store and the in-memory double (RCS-203 is what
-/// that drift costs).
+/// cannot drift between the SQL store and the in-memory double, which have
+/// silently disagreed before.
 pub fn normalize_search(search: Option<&str>) -> Option<&str> {
     search.map(str::trim).filter(|term| !term.is_empty())
 }

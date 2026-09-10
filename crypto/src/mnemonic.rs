@@ -79,7 +79,7 @@ impl RecoveryMnemonic {
         // Additional strengthening with Argon2id
         // This makes brute-forcing the mnemonic much harder
         // Shared definition, so this cannot drift from what registration and
-        // recovery rebuild (RCS-200).
+        // recovery rebuild.
         let salt = crate::recovery_salt::recovery_salt_for(user_id);
 
         let params = Params::new(
