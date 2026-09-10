@@ -42,7 +42,7 @@ pub enum RegisterStep {
 ///
 /// Deliberately NOT `Debug`: `mnemonic_words` holds the account's real recovery
 /// phrase for the lifetime of the page, and a derived `Debug` means any
-/// `log!("{:?}", state)` added later prints it to the console (RCS-193).
+/// `log!("{:?}", state)` added later prints it to the console.
 #[derive(Clone, Default)]
 struct RegistrationState {
     wallet_address: Option<String>,
@@ -64,9 +64,9 @@ pub fn RegisterPage(
     /// explicitly declined to record, and the phrase is the account recovery
     /// mechanism - the thing `/auth/recovery/start` redeems - not merely a data
     /// key. There is no password to fall back on, so a merchant who skips has
-    /// no route back in once they lose their passkey or wallet (RCS-214).
+    /// no route back in once they lose their passkey or wallet.
     ///
-    /// Recovery redemption has no UI yet (RCS-205), so nobody can redeem the
+    /// Recovery redemption has no UI yet, so nobody can redeem the
     /// phrase today either way. That is exactly why the default matters now:
     /// every account registered before that ships is enrolled either with a
     /// recorded phrase or without one, and the ones without cannot be fixed
@@ -102,7 +102,7 @@ pub fn RegisterPage(
 
     // Bounce a visitor who is ALREADY authenticated off the register page.
     //
-    // The `step` guard is the fix for RCS-220, and it is not incidental. On the
+    // The `step` guard is the fix here, and it is not incidental. On the
     // success path below, `save_login` makes this true while the writes to
     // `step` and `loading` are still queued: signal writes mark subscribers
     // dirty and their effects run on the next tick, not inline. Without the
@@ -215,7 +215,7 @@ pub fn RegisterPage(
         Arc::new(move || {
             let api = api.get_value();
             // No `navigate` here on purpose: the redirect is a gloo Timeout
-            // below, because save_login disposes this component (RCS-220).
+            // below, because save_login disposes this component.
             let redirect = redirect.get_value();
             let state = reg_state.get();
 
@@ -286,8 +286,8 @@ pub fn RegisterPage(
                         // way round: the redirect Effect above reads `step` to
                         // decide whether to bounce, so it must already say
                         // Complete by the time authenticating wakes it.
-                        // No `set_loading.set(false)` here, and that omission is
-                        // the fix for RCS-220.
+                        // No `set_loading.set(false)` here, and that omission
+                        // is the fix.
                         //
                         // `loading` is handed to RecoverySetup below as
                         // `loading=loading.into()`, so its subscribers live in
@@ -380,7 +380,7 @@ pub fn RegisterPage(
                                         // registration already has an identifier the
                                         // merchant knows (their address), so showing an
                                         // account id there is noise. A passkey-only
-                                        // account has nothing else (RCS-201/205).
+                                        // account has nothing else.
                                         account_id={
                                             let st = reg_state.get();
                                             st.wallet_address
@@ -510,7 +510,7 @@ fn generate_recovery_mnemonic() -> Result<Vec<String>, String> {
 /// The identifier the recovery KDF is salted with.
 ///
 /// Delegates to `crypto::SaltIdentity`, which is the single definition shared
-/// with the server's `auth::models::User` (RCS-200). This used to reimplement
+/// with the server's `auth::models::User`. This used to reimplement
 /// the rule, with a comment warning that the two "must be changed together" -
 /// nothing enforced it, and a divergence would have made accounts permanently
 /// unrecoverable while failing silently as a wrong-phrase error.
@@ -530,8 +530,8 @@ fn kdf_salt_identifier(state: &RegistrationState) -> Result<String, String> {
 /// Derive the account's recovery material from the phrase shown to the user.
 ///
 /// Replaces the former `generate_placeholder_crypto`, which returned literal
-/// base64 of "placeholder_salt"/"placeholder_ciphertext"/... for every account
-/// (RCS-193). Critically, that function also ignored the displayed phrase
+/// base64 of "placeholder_salt"/"placeholder_ciphertext"/... for every account.
+/// Critically, that function also ignored the displayed phrase
 /// entirely — the words on screen and the stored crypto were independent
 /// placeholders, so even real word generation alone would not have made the
 /// phrase able to decrypt anything.
@@ -566,7 +566,7 @@ fn derive_recovery_crypto(
     // What the server stores and compares against on a recovery attempt. It
     // reveals nothing about the phrase. The encoding lives in `crypto` because
     // the server never recomputes it - only this side does, so a change here
-    // silently strands every existing account (RCS-219).
+    // silently strands every existing account.
     let recovery_hash = crypto::recovery_verification_hash(&recovery_key);
 
     let stretched = crypto::kdf::stretch_master_key(&recovery_key)
@@ -597,8 +597,7 @@ fn derive_recovery_crypto(
     ))
 }
 
-/// The registration derivation, exercised as registration actually runs it
-/// (RCS-219).
+/// The registration derivation, exercised as registration actually runs it.
 ///
 /// The round-trip tests in `crypto` prove the primitives agree with themselves.
 /// They never touch `derive_recovery_crypto`, which is the function that
@@ -731,7 +730,7 @@ mod tests {
 
     /// Fail closed rather than register an account whose stored crypto is
     /// unrelated to the words on screen — the `generate_placeholder_crypto`
-    /// failure mode (RCS-193). Costs no Argon2id: both guards reject first.
+    /// failure mode. Costs no Argon2id: both guards reject first.
     #[test]
     fn refuses_to_derive_without_a_phrase_or_an_identity() {
         let no_phrase = RegistrationState {

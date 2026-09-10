@@ -8,8 +8,8 @@
 //! contact with the API.
 //!
 //! It drifted three times in one day. `Wallet.store_id` against the server's
-//! `user_id` (RCS-234). Eleven fields expecting a numeric `chain_id` after the
-//! server moved to CAIP-2 strings (RCS-241). `ChainHealthInfo.chain_id` sending
+//! `user_id`. Eleven fields expecting a numeric `chain_id` after the
+//! server moved to CAIP-2 strings. `ChainHealthInfo.chain_id` sending
 //! `"1"` where `"eip155:1"` was expected. Two of the three were caught by a
 //! human reading a diff, because CI structurally could not see them.
 //!

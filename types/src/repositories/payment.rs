@@ -21,12 +21,12 @@ pub struct PaymentQueryParams {
     /// An EMPTY vec means "no stores", and must filter every row out. It is not
     /// the same as `None`, which means "do not filter at all" - collapsing the
     /// two would turn a user who belongs to no store into a caller who sees
-    /// every store on the server (RCS-222, and RCS-211 before it).
+    /// every store on the server.
     pub store_ids: Option<Vec<StoreId>>,
     pub invoice_id: Option<InvoiceId>,
     pub confirmed: Option<bool>,
 
-    /// Free-text search over the columns the payment list shows (RCS-231).
+    /// Free-text search over the columns the payment list shows.
     ///
     /// Read it through [`Self::search_term`] rather than directly: blank means
     /// "no filter", and the backends have to agree on that.

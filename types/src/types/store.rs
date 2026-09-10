@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 /// An account-level wallet: one extended public key, and the one derivation
-/// counter that belongs to it (RCS-234).
+/// counter that belongs to it.
 ///
 /// Distinct from `auth::WalletCredential`, which is a wallet used to *log in*.
 /// This is the one money arrives at.
@@ -52,8 +52,7 @@ pub struct StorePaymentMethod {
     pub asset_symbol: String,
     /// Number of decimals for this asset (18 for ETH, 6 for USDC/USDT).
     pub decimals: u8,
-    /// The wallet this method actually derives from, after resolution
-    /// (RCS-234).
+    /// The wallet this method actually derives from, after resolution.
     ///
     /// Resolved, not stored: a method may be pinned to a wallet, and otherwise
     /// follows its store's override, and otherwise the account primary. What
@@ -79,7 +78,7 @@ pub struct StorePaymentMethod {
     pub created_at: DateTime<Utc>,
 }
 
-/// One derivation slot, taken atomically (RCS-234).
+/// One derivation slot, taken atomically.
 ///
 /// The key and the index come out of the same statement against the same
 /// wallet row. Fetching them separately is a duplicate-address bug: a rotation
@@ -116,7 +115,7 @@ pub struct StoreSettings {
     /// Chain this store quotes by default, as a CAIP-2 identifier.
     ///
     /// Was `Option<i64>` of an EIP-155 number. The column became the `caip2`
-    /// domain in RCS-241 but this did not follow, so the repository was reading
+    /// domain but this did not follow, so the repository was reading
     /// and binding a TEXT column as `i64` - which compiles, because sqlx is
     /// checked at runtime, and fails the first time a store actually sets one.
     pub default_chain_id: Option<ChainId>,

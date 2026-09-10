@@ -56,7 +56,7 @@ where
         let user_id = UserId::new();
 
         // Use user_id as the WebAuthn user identifier. Shared definition, so
-        // this cannot drift from what registration pins (RCS-200).
+        // this cannot drift from what registration pins.
         let user_identifier = crypto::SaltIdentity::Passkey(user_id.to_string()).as_identifier();
 
         // Generate WebAuthn registration challenge
@@ -105,7 +105,7 @@ where
     ) -> Result<LoginResponse> {
         use crate::models::User;
 
-        // Expected user identifier format for passkey-only users (RCS-200).
+        // Expected user identifier format for passkey-only users.
         let user_identifier =
             crypto::SaltIdentity::Passkey(request.user_id.to_string()).as_identifier();
 
@@ -294,7 +294,7 @@ where
         // permanently: the client stores one id per browser, never clears it on
         // rejection, and so resent the same rejected id forever. Anyone with two
         // accounts in one browser hit it and could only recover by clearing
-        // localStorage by hand (RCS-248). The comment on the revoked branch even
+        // localStorage by hand. The comment on the revoked branch even
         // said "client should create new" - the client had no way to know, and
         // the server is the one holding everything needed to do it.
         let reusable = self.reusable_device(user.id, request.device_id).await?;
@@ -386,11 +386,11 @@ where
         // passkey. Recomputing email-or-wallet returned "User has neither email
         // nor wallet address" for exactly the accounts with no other way back in:
         // losing their single device meant recovery was the only route, and
-        // recovery had no UI (RCS-205).
+        // recovery had no UI.
         //
         // Safe against the recovery flow despite sharing the challenge slot:
         // `start_account_recovery` namespaces its challenge `recovery:{…}`, so
-        // the two can never satisfy each other's identifier check (RCS-207).
+        // the two can never satisfy each other's identifier check.
         let user = self
             .repo
             .get_user(user_info.id)

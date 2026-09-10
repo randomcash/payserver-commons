@@ -153,7 +153,7 @@ impl AuthContext {
                 // limiter, a 502 mid-deploy, a dropped connection. Signing the
                 // user out here is destructive and almost always wrong: the
                 // session is very likely still valid, and clearing it forces a
-                // fresh passkey or wallet ceremony (RCS-221).
+                // fresh passkey or wallet ceremony.
                 //
                 // Trust what we already have. The token is still set, so the
                 // next request carries it; if the session really has gone, that

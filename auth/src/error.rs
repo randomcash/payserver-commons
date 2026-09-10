@@ -19,7 +19,7 @@ pub enum AuthError {
     /// `recovery_verification_hash` was derived from it, so changing it makes
     /// the account permanently unrecoverable. Both repositories reject the
     /// write rather than silently discarding it, so a caller that gets this
-    /// wrong fails its tests instead of no-opping in production (RCS-203).
+    /// wrong fails its tests instead of no-opping in production.
     #[error("{0} is immutable and cannot be changed after registration")]
     ImmutableField(String),
 

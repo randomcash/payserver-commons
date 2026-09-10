@@ -1,4 +1,4 @@
-//! Account wallet repository traits (RCS-234).
+//! Account wallet repository traits.
 //!
 //! Replaces the old per-store `StoreWalletReader`/`StoreWalletWriter`, which
 //! kept an xpub and a counter on each store. Two stores handed the same xpub

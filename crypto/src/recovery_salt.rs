@@ -1,7 +1,7 @@
 //! The identifier the account recovery KDF is salted with.
 //!
 //! This convention had three independent implementations and no test proving
-//! they agreed (RCS-200):
+//! they agreed:
 //!
 //! 1. `auth::models::User::new_*` pins it at registration into
 //!    `users.kdf_salt_identifier`.
@@ -19,7 +19,7 @@
 /// The variant is fixed at registration and pinned; it is deliberately not
 /// recomputed from the account's current state. An account that gains an email
 /// after registering with a wallet must keep salting with the wallet, or its
-/// stored hash becomes unreproducible (RCS-201).
+/// stored hash becomes unreproducible.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SaltIdentity {
     /// Email account. Lowercased — `auth::models` lowercases before pinning, so
@@ -70,7 +70,7 @@ pub fn recovery_salt_for(identifier: &str) -> String {
 /// The value stored as an account's `recovery_verification_hash`:
 /// `base64(SHA-256(recovery_key))`.
 ///
-/// One definition, for the same reason the salt has one (RCS-219). This was
+/// One definition, for the same reason the salt has one. This was
 /// written out twice — inline in `ui-kit`'s registration flow, and again as a
 /// local helper in this module's round-trip tests — so those tests would have
 /// stayed green through a change to the encoding registration actually uses,
@@ -282,7 +282,7 @@ mod tests {
     /// else would notice if it changed. These literals are the external
     /// authority: they were computed outside this codebase, and changing the
     /// encoding makes every account registered under the old one permanently
-    /// unrecoverable (RCS-219).
+    /// unrecoverable.
     #[test]
     fn verification_hash_encoding_is_pinned() {
         use crate::types::SymmetricKey;
@@ -314,7 +314,7 @@ mod tests {
     }
 }
 
-/// End-to-end proof of the recovery contract (RCS-200 / RCS-205).
+/// End-to-end proof of the recovery contract.
 ///
 /// These use the real primitives rather than mocks, because the failure they
 /// guard against is silent: if registration and recovery derive different keys,
@@ -366,7 +366,7 @@ mod recovery_round_trip {
         );
     }
 
-    /// The data-preserving half (RCS-200): recovery must carry the account's
+    /// The data-preserving half: recovery must carry the account's
     /// EXISTING symmetric key across to the new phrase.
     ///
     /// If a recovery implementation generates a fresh key instead - which is

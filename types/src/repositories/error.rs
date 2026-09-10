@@ -26,7 +26,7 @@ pub enum RepositoryError {
     ///
     /// Separate from `Database` because it is the caller's to fix: an API
     /// mapping this to 500 tells a merchant to retry something that will never
-    /// succeed, where 409 tells them what to change (RCS-234).
+    /// succeed, where 409 tells them what to change.
     #[error("conflict: {0}")]
     Conflict(String),
 }

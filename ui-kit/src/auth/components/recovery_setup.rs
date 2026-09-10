@@ -29,9 +29,9 @@ pub fn RecoverySetup(
     /// handle.
     ///
     /// A passkey-only account has no email and no wallet address, so the account
-    /// id is the ONLY thing it can be identified by at recovery (RCS-201). The
+    /// id is the ONLY thing it can be identified by at recovery. The
     /// phrase alone is not enough - recovery needs an identifier too, and a
-    /// merchant who saved only the words would have nothing to type (RCS-205).
+    /// merchant who saved only the words would have nothing to type.
     /// Presented as one unit with the phrase so both get saved together.
     // `optional_no_strip` keeps the Option in the builder: plain `optional`
     // auto-wraps, so the caller would have to pass a bare String and could not
@@ -42,7 +42,7 @@ pub fn RecoverySetup(
     ///
     /// Safe by default: this component is exported, so a consumer that says
     /// nothing should get the flow that cannot strand an account. See
-    /// `RegisterPage::require_recovery` (RCS-214).
+    /// `RegisterPage::require_recovery`.
     #[prop(optional, default = false)]
     allow_skip: bool,
     /// Whether a request is in progress (disables buttons).
@@ -84,7 +84,7 @@ pub fn RecoverySetup(
                             <p class="ps-recovery-description">
                                 // Honest about the current state: the phrase is real and
                                 // bound to the account, but no recovery flow exists yet
-                                // (RCS-205), so promising it "recovers your account" is a
+                                //, so promising it "recovers your account" is a
                                 // promise the product cannot keep today.
                                 "Write down these " {word_count} " words in order and keep them safe. "
                                 "Account recovery is not available yet — when it ships, this "
