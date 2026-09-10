@@ -171,8 +171,8 @@ pub fn LoginPage(
 
                 match api.complete_passkey_login(complete_request).await {
                     Ok(response) => {
-                        // Same ordering requirement as the wallet path above
-                        //: settle local state first, authenticate last.
+                        // Same ordering requirement as the wallet path above:
+                        // settle local state first, authenticate last.
                         set_passkey_state.set(PasskeyState::Success);
                         auth.save_login(&response);
                         navigate(&redirect, Default::default());

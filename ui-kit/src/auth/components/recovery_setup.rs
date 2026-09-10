@@ -83,8 +83,8 @@ pub fn RecoverySetup(
                             <h3 class="ps-recovery-title">"Save Your Recovery Phrase"</h3>
                             <p class="ps-recovery-description">
                                 // Honest about the current state: the phrase is real and
-                                // bound to the account, but no recovery flow exists yet
-                                //, so promising it "recovers your account" is a
+                                // bound to the account, but no recovery flow exists yet,
+                                // so promising it "recovers your account" is a
                                 // promise the product cannot keep today.
                                 "Write down these " {word_count} " words in order and keep them safe. "
                                 "Account recovery is not available yet — when it ships, this "
