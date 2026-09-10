@@ -36,7 +36,11 @@ metrics = { version = "0.24", optional = true }
 
 # CAPTCHA verification (optional)
 reqwest = { version = "0.12", features = ["json"], optional = true }
-tracing = { version = "0.1", optional = true }
+# Not optional: the service layer logs on paths that are always compiled
+# (e.g. ignoring a stale device id). This crate is server-side only - the
+# frontend consumes `ui-kit`, whose "auth" is a feature name, not this crate -
+# so there is no wasm bundle to keep it out of.
+tracing = "0.1"
 
 # Utilities
 thiserror = "2.0"
@@ -58,7 +62,7 @@ hex = "0.4"  # Hex encoding/decoding for signatures
 [features]
 default = []
 metrics = ["dep:metrics"]
-captcha = ["dep:reqwest", "dep:tracing"]
+captcha = ["dep:reqwest"]
 
 [dev-dependencies]
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros"] }
