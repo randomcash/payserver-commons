@@ -192,11 +192,41 @@ mod tests {
             token_address: None,
             asset_symbol: "ETH".into(),
             decimals: 18,
-            xpub: "xpub123".into(),
+            xpub: Some("xpub123".into()),
         };
         let back: CreatePaymentMethodRequest =
             serde_json::from_value(serde_json::to_value(&req).unwrap()).unwrap();
         assert_eq!(back.chain_id, req.chain_id);
+        assert_eq!(back.xpub, req.xpub);
+
+        // Omitted is the paste-once case, and it has to survive the trip as
+        // `None` rather than arriving as an empty string - the server branches
+        // on which of those it got.
+        let inherited = CreatePaymentMethodRequest {
+            chain_id: ChainId::evm(1),
+            token_address: None,
+            asset_symbol: "ETH".into(),
+            decimals: 18,
+            xpub: None,
+        };
+        let json = serde_json::to_value(&inherited).unwrap();
+        assert!(
+            json.get("xpub").is_none(),
+            "an absent key must be absent on the wire, not null"
+        );
+        let back: CreatePaymentMethodRequest = serde_json::from_value(json).unwrap();
+        assert_eq!(back.xpub, None);
+
+        // And a payload that predates the field being optional still parses.
+        let legacy: CreatePaymentMethodRequest = serde_json::from_value(serde_json::json!({
+            "chain_id": "eip155:1",
+            "token_address": null,
+            "asset_symbol": "ETH",
+            "decimals": 18,
+            "xpub": "xpub123"
+        }))
+        .unwrap();
+        assert_eq!(legacy.xpub.as_deref(), Some("xpub123"));
 
         let wallet = WalletResponse {
             id: uuid::Uuid::nil(),
