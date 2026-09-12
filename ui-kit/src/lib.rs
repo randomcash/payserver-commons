@@ -13,6 +13,7 @@
 pub mod components;
 pub mod hooks;
 pub mod module;
+pub mod styles;
 pub mod theme;
 pub mod types;
 
@@ -23,6 +24,7 @@ pub mod auth;
 pub use components::*;
 pub use hooks::*;
 pub use module::*;
+pub use styles::{STYLES, UiKitStyles};
 pub use types::*;
 
 #[cfg(feature = "auth")]

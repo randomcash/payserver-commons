@@ -9,6 +9,7 @@ mod events;
 mod ids;
 mod invoice;
 mod payment_option;
+mod payment_uri;
 mod payout;
 mod refund;
 mod store;
@@ -24,6 +25,7 @@ pub use events::{HealthStatus, PaymentEvent};
 pub use ids::{InvoiceId, UserId};
 pub use invoice::{AssetType, InvoiceStatus};
 pub use payment_option::{PaymentMethodId, PaymentOptionData, PaymentOptionId};
+pub use payment_uri::payment_request_uri;
 pub use payout::{PayoutData, PayoutStatus};
 pub use refund::{RefundData, RefundStatus};
 pub use store::{
