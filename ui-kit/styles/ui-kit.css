@@ -43,10 +43,16 @@
     border-radius: var(--border-radius-md, 0.5rem);
 }
 
-/* A real control rather than the browser default. The QR card sits beside the
- * consumer's own copy button on the checkout page, and the two looked like they
- * came from different products. */
-.ps-qr-copy-btn {
+/* ------------------------------------------------------------- Copy button */
+
+/* Styled as a real control, and sized to sit inline beside the thing it copies.
+ * This generalises the `ps-qr-copy-btn` rules it replaces: that button was added
+ * because the QR card's copy control rendered as a raw browser button beside a
+ * styled one, and the same gap existed at four other call sites. Those rules are
+ * gone rather than kept alongside - `.ps-qr-copy-btn:hover` outranks
+ * `.ps-copy-button-copied` on specificity, so hovering a confirmed button would
+ * have repainted it as if nothing had been copied. */
+.ps-copy-button {
     padding: var(--space-1, 0.25rem) var(--space-3, 0.75rem);
     font-family: var(--font-family, inherit);
     font-size: var(--text-xs, 0.75rem);
@@ -60,13 +66,30 @@
     white-space: nowrap;
 }
 
-.ps-qr-copy-btn:hover {
+.ps-copy-button:hover {
     color: #fff;
     background: var(--color-primary, #5e6ad2);
 }
 
-/* Confirmation is the whole point of the button, so it has to be visible
- * without moving anything: same box, different colour. */
-.ps-qr-copy-btn:active {
+.ps-copy-button:active {
     transform: translateY(1px);
+}
+
+/* Confirmation has to be visible without moving anything, so the box keeps its
+ * size and only the colour changes. A label swap alone ("Copy" -> "Copied!")
+ * changes the text width and nudges its neighbours. */
+.ps-copy-button-copied {
+    color: #fff;
+    background: var(--color-success, #16a34a);
+    border-color: var(--color-success, #16a34a);
+}
+
+/* A refused clipboard write must not look like a successful one. Every previous
+ * implementation discarded the promise and said "Copied!" regardless, which
+ * leaves the user pasting a stale buffer - and for an address, into a
+ * transaction. */
+.ps-copy-button-failed {
+    color: #fff;
+    background: var(--color-error, #dc2626);
+    border-color: var(--color-error, #dc2626);
 }

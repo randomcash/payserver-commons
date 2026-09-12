@@ -2,6 +2,8 @@
 
 use leptos::prelude::*;
 
+use crate::components::copy::CopyButton;
+
 /// Display a truncated crypto address with copy functionality.
 #[component]
 pub fn Address(
@@ -11,7 +13,10 @@ pub fn Address(
     #[prop(default = true)] copyable: bool,
     #[prop(optional)] class: &'static str,
 ) -> impl IntoView {
-    let (copied, set_copied) = signal(false);
+    // `Option<bool>`: None at rest, Some(true) copied, Some(false) refused. A
+    // bare bool cannot say "the clipboard said no", which is the state every
+    // previous copy of this code was missing.
+    let (copied, set_copied) = signal(None::<bool>);
     let addr_clone = address.clone();
 
     let truncated = if address.len() <= prefix_len + suffix_len + 3 {
@@ -30,18 +35,29 @@ pub fn Address(
             title=address
             on:click=move |_| {
                 if copyable {
-                    copy_to_clipboard(&addr_clone);
-                    set_copied.set(true);
-                    gloo_timers::callback::Timeout::new(2000, move || {
-                        set_copied.set(false);
-                    }).forget();
+                    let addr = addr_clone.clone();
+                    leptos::task::spawn_local(async move {
+                        // The whole span is the control here, not a button, so
+                        // it drives the shared helper directly - but it is the
+                        // same helper, so a refused write is still noticed
+                        // rather than confirmed.
+                        let ok = crate::components::copy::copy_to_clipboard(&addr).await;
+                        let _ = set_copied.try_set(Some(ok));
+                        gloo_timers::callback::Timeout::new(2000, move || {
+                            let _ = set_copied.try_set(None);
+                        }).forget();
+                    });
                 }
             }
         >
             <span class="ps-address-text">{truncated}</span>
             {copyable.then(|| view! {
                 <span class="ps-address-icon">
-                    {move || if copied.get() { "✓" } else { "📋" }}
+                    {move || match copied.get() {
+                        Some(true) => "✓",
+                        Some(false) => "✗",
+                        None => "📋",
+                    }}
                 </span>
             })}
         </span>
@@ -54,7 +70,6 @@ pub fn AddressDisplay(
     address: String,
     #[prop(optional)] label: Option<&'static str>,
 ) -> impl IntoView {
-    let (copied, set_copied) = signal(false);
     let addr_clone = address.clone();
 
     view! {
@@ -62,27 +77,9 @@ pub fn AddressDisplay(
             {label.map(|l| view! { <label class="ps-label">{l}</label> })}
             <div class="ps-address-box">
                 <code class="ps-address-full">{address}</code>
-                <button
-                    class="ps-address-copy"
-                    on:click=move |_| {
-                        copy_to_clipboard(&addr_clone);
-                        set_copied.set(true);
-                        gloo_timers::callback::Timeout::new(2000, move || {
-                            set_copied.set(false);
-                        }).forget();
-                    }
-                >
-                    {move || if copied.get() { "Copied!" } else { "Copy" }}
-                </button>
+                <CopyButton text=addr_clone />
             </div>
         </div>
-    }
-}
-
-fn copy_to_clipboard(text: &str) {
-    if let Some(window) = web_sys::window() {
-        let clipboard = window.navigator().clipboard();
-        let _ = clipboard.write_text(text);
     }
 }
 

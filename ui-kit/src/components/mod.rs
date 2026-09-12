@@ -2,6 +2,7 @@
 
 pub mod buttons;
 pub mod cards;
+pub mod copy;
 pub mod forms;
 pub mod layout;
 pub mod loading;
@@ -12,6 +13,7 @@ pub mod crypto;
 // Re-export commonly used components
 pub use buttons::*;
 pub use cards::*;
+pub use copy::*;
 pub use crypto::*;
 pub use forms::*;
 pub use layout::*;

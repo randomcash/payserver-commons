@@ -3,6 +3,8 @@
 use leptos::prelude::*;
 use qrcode::{EcLevel, QrCode};
 
+use crate::components::copy::CopyButton;
+
 /// QR code display component.
 #[component]
 pub fn QrCodeDisplay(
@@ -31,34 +33,14 @@ pub fn QrCodeCard(
     #[prop(optional)] label: Option<&'static str>,
     #[prop(default = 200)] size: u32,
 ) -> impl IntoView {
-    let (copied, set_copied) = signal(false);
     let data_for_copy = data.clone();
 
     view! {
         <div class="ps-qr-card">
             {label.map(|l| view! { <span class="ps-qr-label">{l}</span> })}
             <QrCodeDisplay data=data size=size />
-            <button
-                class="ps-qr-copy-btn"
-                on:click=move |_| {
-                    copy_to_clipboard(&data_for_copy);
-                    set_copied.set(true);
-                    gloo_timers::callback::Timeout::new(2000, move || {
-                        set_copied.set(false);
-                    }).forget();
-                }
-            >
-                {move || if copied.get() { "Copied!" } else { "Copy" }}
-            </button>
+            <CopyButton text=data_for_copy />
         </div>
-    }
-}
-
-/// Copy text to clipboard.
-fn copy_to_clipboard(text: &str) {
-    if let Some(window) = web_sys::window() {
-        let clipboard = window.navigator().clipboard();
-        let _ = clipboard.write_text(text);
     }
 }
 
