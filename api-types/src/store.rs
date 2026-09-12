@@ -86,8 +86,24 @@ pub struct CreatePaymentMethodRequest {
     pub asset_symbol: String,
     /// Number of decimals for this asset (18 for ETH, 6 for USDC/USDT).
     pub decimals: u8,
-    /// Extended public key for address derivation.
-    pub xpub: String,
+    /// Extended **public** key to derive receive addresses from.
+    ///
+    /// Optional. Omitted means "use the key this store already resolves to" -
+    /// the method's own pin, else the store's wallet, else the account primary.
+    /// Supplying it is still allowed and pins the method to that key, creating
+    /// the account wallet if it is new.
+    ///
+    /// Making this optional is what lets a merchant paste their key **once**.
+    /// It used to be required, so the same 111-character string had to be
+    /// retyped per chain, per token and per store, and every paste was another
+    /// chance to fumble the value that decides where their money lands.
+    ///
+    /// It is a public key by construction: `validate_xpub` refuses an `xprv` on
+    /// the version-byte prefix, so this can derive receive addresses and can
+    /// never spend. That is what lets a merchant register with a passkey, paste
+    /// a key, and take payments without ever identifying themselves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xpub: Option<String>,
 }
 
 /// Request to update a payment method.
