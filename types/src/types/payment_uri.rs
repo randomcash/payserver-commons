@@ -169,3 +169,30 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod reachable {
+    //! The function is only useful to a consumer, so pin that a consumer can
+    //! reach it.
+    //!
+    //! It was added to `types::types`'s re-export list but not the crate root's,
+    //! so `types::payment_request_uri` did not resolve outside this crate. Every
+    //! test above passed, because they call it by its in-crate path - a `pub`
+    //! item can be untouchable from outside and the tests will not say so.
+
+    #[test]
+    fn the_crate_root_exports_it() {
+        // Names it through the crate root exactly as a consumer would.
+        let f: fn(&crate::ChainId, &str, &str, Option<&str>) -> Option<String> =
+            crate::payment_request_uri;
+        assert!(
+            f(
+                &crate::ChainId::evm(1),
+                "0x66da354a361225a8C4FF5232f413A80af943C14c",
+                "1",
+                None
+            )
+            .is_some()
+        );
+    }
+}
