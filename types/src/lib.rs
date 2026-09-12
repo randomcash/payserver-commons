@@ -104,5 +104,5 @@ pub use types::{
     InvoiceId, InvoiceStatus, PaymentEvent, PaymentMethodId, PaymentOptionData, PaymentOptionId,
     PayoutData, PayoutStatus, PendingWatchInfo, RefundData, RefundStatus, StorePaymentMethod,
     StoreSettings, StoreTokenPolicy, StoreTokenPolicyEntry, StoreTokenPolicyWithEntries,
-    StoreWebhook, TokenData, TokenPolicyMode, UserId, Wallet, WebhookDelivery,
+    StoreWebhook, TokenData, TokenPolicyMode, UserId, Wallet, WebhookDelivery, payment_request_uri,
 };
