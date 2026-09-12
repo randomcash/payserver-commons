@@ -45,6 +45,18 @@ pub trait StorePaymentMethodReader: Send + Sync {
 #[async_trait]
 pub trait StorePaymentMethodWriter: Send + Sync {
     /// Create a new payment method for a store.
+    /// Add a payment method to a store.
+    ///
+    /// `xpub` is the extended **public** key to derive receive addresses from.
+    /// `None` means "use the key this store already resolves to" - the store's
+    /// own wallet, else the account primary - and the method is left unpinned
+    /// so it follows that resolution afterwards. `Some` pins the method to that
+    /// key, creating the account wallet if it is new.
+    ///
+    /// With `None` and nothing to resolve to, this is a [`RepositoryError::Conflict`]:
+    /// the request is well-formed and the account state refuses it, which is
+    /// the merchant's to fix by adding a key. Returning a database error there
+    /// would tell them to retry something that can never succeed.
     async fn create_payment_method(
         &self,
         store_id: Uuid,
@@ -52,7 +64,7 @@ pub trait StorePaymentMethodWriter: Send + Sync {
         token_address: Option<&str>,
         asset_symbol: &str,
         decimals: u8,
-        xpub: &str,
+        xpub: Option<&str>,
     ) -> RepositoryResult<StorePaymentMethod>;
 
     /// Update a payment method (enable/disable, change xpub).
