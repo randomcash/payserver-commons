@@ -108,6 +108,34 @@ pub struct DeepHealthResponse {
     pub rpcs: HashMap<String, RpcHealth>,
     /// EVM monitor liveness.
     pub monitor: MonitorHealth,
+    /// The WebAuthn relying party the server is actually running with.
+    ///
+    /// Optional so a payserver that does not do WebAuthn can omit it, and so an
+    /// older server answering a newer client does not fail to deserialise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub webauthn: Option<WebAuthnHealth>,
+}
+
+/// The effective WebAuthn relying party.
+///
+/// Neither field is a secret: they are the public origin the site is served
+/// from, and a passkey is bound to exactly that origin. Getting them wrong
+/// breaks registration and login completely, which has happened three times
+/// (RCS-62, RCS-64, RCS-126) and was invisible to every health check that
+/// existed at the time - the server is perfectly healthy, it just cannot
+/// authenticate anyone.
+///
+/// These are read from the resolved config the server is running with, never
+/// from the environment. The environment is the thing being verified; reading
+/// it back would confirm only that a variable was set, not that it took effect.
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebAuthnHealth {
+    /// Effective relying party id, e.g. `testnet.random.cash`.
+    pub rp_id: String,
+    /// Effective relying party origin, e.g. `https://testnet.random.cash`.
+    pub rp_origin: String,
 }
 
 /// Status of a single dependency in the deep health check.
@@ -165,5 +193,60 @@ impl ChainHealthInfo {
             self.status = bare.trim().to_string();
         }
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webauthn_health_is_reachable_from_the_crate_root() {
+        // Named through the crate root exactly as a consumer does. `pub use
+        // health::*` covers it today, but an explicit list is one refactor away
+        // and a `pub` item can be untouchable from outside while every in-crate
+        // test passes - which is how `payment_request_uri` shipped unreachable.
+        let _: Option<crate::WebAuthnHealth> = None;
+    }
+
+    #[test]
+    fn an_absent_webauthn_block_still_deserialises() {
+        // A payserver that does not do WebAuthn omits the field, and an older
+        // server answering a newer client omits it too. Neither may fail to
+        // parse: the deploy check reads this endpoint, and a check that cannot
+        // parse a healthy server's answer is the failure mode this replaces.
+        let json = r#"{
+            "build_sha": "abc1234",
+            "version": "0.1.0",
+            "postgres": {"status": "ok", "latency_ms": 1},
+            "redis": {"status": "ok", "latency_ms": 1},
+            "rpcs": {},
+            "monitor": {"status": "ok", "data_fresh": true}
+        }"#;
+        let parsed: DeepHealthResponse = serde_json::from_str(json).expect("parse");
+        assert!(parsed.webauthn.is_none());
+    }
+
+    #[test]
+    fn the_webauthn_block_round_trips() {
+        let json = r#"{
+            "build_sha": "abc1234",
+            "version": "0.1.0",
+            "postgres": {"status": "ok", "latency_ms": 1},
+            "redis": {"status": "ok", "latency_ms": 1},
+            "rpcs": {},
+            "monitor": {"status": "ok", "data_fresh": true},
+            "webauthn": {"rp_id": "testnet.random.cash", "rp_origin": "https://testnet.random.cash"}
+        }"#;
+        let parsed: DeepHealthResponse = serde_json::from_str(json).expect("parse");
+        let w = parsed.webauthn.expect("webauthn block");
+        assert_eq!(w.rp_id, "testnet.random.cash");
+        assert_eq!(w.rp_origin, "https://testnet.random.cash");
+
+        // The deploy check reads these by jq path, so the wire names matter as
+        // much as the values.
+        let back = serde_json::to_value(&w).unwrap();
+        assert!(back.get("rp_id").is_some());
+        assert!(back.get("rp_origin").is_some());
     }
 }
