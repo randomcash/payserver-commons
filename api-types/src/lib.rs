@@ -56,6 +56,7 @@ pub mod invoice;
 pub mod payment;
 pub mod store;
 pub mod wallet;
+pub mod webhook;
 
 pub use admin::*;
 pub use api_key::*;
@@ -67,6 +68,7 @@ pub use invoice::*;
 pub use payment::*;
 pub use store::*;
 pub use wallet::*;
+pub use webhook::*;
 
 #[cfg(test)]
 mod tests {
@@ -241,5 +243,60 @@ mod tests {
             serde_json::from_value(serde_json::to_value(&wallet).unwrap()).unwrap();
         assert_eq!(back.derivation_index, 3);
         assert!(back.is_primary);
+    }
+
+    /// The webhook contract is reachable by the paths an *external* consumer
+    /// uses - `api_types::WebhookPayload`, not `api_types::webhook::...` -
+    /// because the crate root is the only surface a plugin crate sees.
+    ///
+    /// Every name below is spelled out fully rather than picked up from the
+    /// `use super::*` above, which is the whole point: this repo has shipped
+    /// an item that was `pub` in its module and missing from the root's
+    /// re-export list, and every in-crate test passed because they all reached
+    /// it by the in-crate path.
+    #[test]
+    fn the_webhook_contract_is_reachable_from_the_crate_root() {
+        let event: crate::WebhookEventType = crate::WebhookEventType::PaymentReorged;
+        assert_eq!(event.as_str(), "payment_reorged");
+
+        let version: u32 = crate::WEBHOOK_PAYLOAD_VERSION;
+        assert_eq!(version, 1);
+
+        let key: String = crate::idempotency_key(event, "inv_1", "pending:0xaaa");
+        assert!(key.starts_with("evt_"));
+
+        let info = crate::WebhookPaymentInfo {
+            tx_hash: "0xaaa".into(),
+            from_address: None,
+            block_number: None,
+            confirmed: false,
+        };
+
+        // Built field-by-field, as a subscriber's own test fixture would be:
+        // a private field or a missing re-export fails to compile right here.
+        let payload = crate::WebhookPayload {
+            version,
+            event_id: uuid::Uuid::nil(),
+            idempotency_key: key.clone(),
+            event_type: event,
+            timestamp: chrono::Utc::now(),
+            invoice_id: "inv_1".into(),
+            store_id: uuid::Uuid::nil(),
+            status: "pending".into(),
+            amount: "1000".into(),
+            amount_received: "0".into(),
+            asset_symbol: "ETH".into(),
+            chain_id: Some("eip155:1".into()),
+            network: None,
+            payment: None,
+            retracted_payments: Some(vec![info]),
+        };
+
+        // And it round-trips through the same serde a subscriber parses with.
+        let back: crate::WebhookPayload =
+            serde_json::from_value(serde_json::to_value(&payload).unwrap()).unwrap();
+        assert_eq!(back.idempotency_key, key);
+        assert_eq!(back.event_type, crate::WebhookEventType::PaymentReorged);
+        assert_eq!(back.retracted_payments.unwrap().len(), 1);
     }
 }
