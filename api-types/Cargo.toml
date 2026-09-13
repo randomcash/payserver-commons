@@ -12,6 +12,12 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
+# Pure-Rust SHA-256 and hex for the webhook idempotency key. Both are
+# no_std-capable RustCrypto/companion crates with no C, no system entropy
+# and no JS shim, so they build for wasm32-unknown-unknown unchanged - the
+# constraint that rules out ring, openssl and the like in this crate.
+sha2 = "0.10"
+hex = "0.4"
 utoipa = { version = "5.3", features = ["uuid", "chrono"], optional = true }
 
 [features]
