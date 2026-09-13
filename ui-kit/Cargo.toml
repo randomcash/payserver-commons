@@ -60,6 +60,15 @@ console_error_panic_hook = "0.1"
 uuid = { version = "1.11", features = ["v4", "serde"], optional = true }
 base64 = { version = "0.22", optional = true }
 
+# WASM: `uuid` refuses to build for wasm32-unknown-unknown without an explicit
+# randomness source. The `js` feature routes it to `crypto.getRandomValues`,
+# same as crypto's getrandom entry - the client already supplies this via its
+# own direct `uuid` dependency and feature unification, so this changes nothing
+# it ships. It only makes `cargo check --target wasm32-unknown-unknown --features
+# auth` on this crate alone tell you something real.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1.11", features = ["js"], optional = true }
+
 [features]
 default = []
 # Enable wasm_bindgen(start) for standalone use - disable when used as a library
