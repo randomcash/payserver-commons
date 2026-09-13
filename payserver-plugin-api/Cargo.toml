@@ -1,0 +1,15 @@
+[package]
+name = "payserver-plugin-api"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+license = "MIT"
+description = "The plugin manifest contract: parsing, id validation, and version negotiation, shared by the plugin host and plugins"
+
+[dependencies]
+semver = { version = "1.0", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+thiserror = "2.0"
+
+[dev-dependencies]
