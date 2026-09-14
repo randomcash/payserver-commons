@@ -170,6 +170,20 @@ pub fn RecoverySetup(
                                 }
                             />
                             <span>
+                                // RCS-217 asked for this to state the "permanent model" because
+                                // its unblock note claimed RCS-205 (recovery UI) had shipped. It
+                                // hasn't: payserver-client has no /recover route or redemption
+                                // call, and RCS-205's own merged work (payserver-commons#14) is
+                                // foundation only — "the page's UI is not here" per that commit -
+                                // and lives on feature lanes, not main. RCS-216 (client-side
+                                // metadata encryption) hasn't shipped either: invoice `metadata`
+                                // is still a plaintext JSONB column, substring-searched by the
+                                // server (see the TODO in data-service/src/postgres/invoice.rs).
+                                // So this omits the RCS-216 data-loss clause and keeps saying
+                                // recovery isn't live yet — both true today. Re-verify both
+                                // claims against the code, not the ticket, before changing this;
+                                // an automated review has asked for this exact change twice
+                                // (PR #42) on the strength of the ticket's claim alone.
                                 "I have written down my recovery phrase and stored it securely. "
                                 "I understand that random.cash is non-custodial: random.cash holds "
                                 "no copy of my recovery phrase, my account key, or my funds, and "
