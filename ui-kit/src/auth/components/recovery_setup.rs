@@ -172,11 +172,10 @@ pub fn RecoverySetup(
                             <span>
                                 // Honest about the current state, same as the ShowPhrase step
                                 // above: no recovery redemption flow exists yet, and invoice
-                                // metadata is a plaintext column the server still
-                                // substring-searches, not something client-side encryption makes
-                                // unreadable to us. So this covers funds loss, holding no copy,
-                                // and no back door, but leaves out a data-loss clause that would
-                                // not be true yet and keeps saying recovery isn't live today.
+                                // metadata is not yet encrypted client-side either. So this
+                                // covers funds loss, holding no copy, and no back door, but
+                                // leaves out a data-loss clause that would not be true yet and
+                                // keeps saying recovery isn't live today.
                                 "I have written down my recovery phrase and stored it securely. "
                                 "I understand that random.cash is non-custodial: random.cash holds "
                                 "no copy of my recovery phrase, my account key, or my funds, and "
