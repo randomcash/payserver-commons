@@ -171,11 +171,13 @@ pub fn RecoverySetup(
                             />
                             <span>
                                 "I have written down my recovery phrase and stored it securely. "
-                                "I understand that random.cash is non-custodial: if I lose both my "
-                                "sign-in method and this phrase, I lose access to my funds "
-                                "permanently, and random.cash cannot restore it. Random.cash holds "
+                                "I understand that random.cash is non-custodial: random.cash holds "
                                 "no copy of my recovery phrase, my account key, or my funds, and "
-                                "support cannot override this — there is no back door, deliberately."
+                                "support cannot override this — there is no back door, deliberately. "
+                                "If I lose access to my account, I lose access to my funds "
+                                "permanently. Account recovery is not available in this release, so "
+                                "right now this phrase is not yet a way back in if I lose my "
+                                "sign-in method."
                             </span>
                         </label>
 
