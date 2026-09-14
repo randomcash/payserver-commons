@@ -24,11 +24,11 @@ pub enum InvoiceStatus {
     /// Refunds are the merchant's responsibility, not this server's — it
     /// derives payment addresses from a merchant's xpub and never holds the
     /// matching private key, so nothing here can ever construct or broadcast
-    /// a refund transaction (RCS-272). Kept, rather than deleted, only
-    /// because it is part of the public API surface and a possible future
-    /// hot-wallet mode would need a status to land on; until such a mode is
-    /// built and shipped as a deliberate product decision, no invoice can
-    /// legitimately reach this value.
+    /// a refund transaction. Kept, rather than deleted, only because it is
+    /// part of the public API surface and a possible future hot-wallet mode
+    /// would need a status to land on; until such a mode is built and
+    /// shipped as a deliberate product decision, no invoice can legitimately
+    /// reach this value.
     Refunded,
     /// Payment received after invoice expired.
     LatePaid,
