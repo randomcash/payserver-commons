@@ -7,10 +7,8 @@
 //! primitives stack, row, grid and section - so there is nothing the
 //! merchant dashboard renders that a plugin page cannot.
 //!
-//! Static rendering only ([RCS-302](https://linear.app/randomcash/issue/RCS-302),
-//! the second slice of [RCS-258](https://linear.app/randomcash/issue/RCS-258)):
-//! no actions, no interactivity. A button in this tree renders and does
-//! nothing yet.
+//! Static rendering only: no actions, no interactivity. A button in this
+//! tree renders and does nothing yet.
 
 use serde::{Deserialize, Serialize};
 
