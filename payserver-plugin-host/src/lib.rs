@@ -32,7 +32,6 @@
 mod artifacts;
 mod error;
 mod host;
-pub mod page;
 mod pages;
 mod registry;
 mod runtime;
@@ -40,8 +39,16 @@ mod runtime;
 pub use artifacts::{ArtifactError, PluginArtifacts, digest};
 pub use error::PluginLoadError;
 pub use host::{FilterOutcome, PluginHost, PluginHostError, PluginStatusSnapshot};
-pub use page::{PageElement, Viewer};
+// The page descriptor is `payserver-plugin-api`'s, not this crate's. A
+// plugin constructs one of these, so the types have to live in the crate a
+// plugin depends on; this crate only renders them. Re-exported so a host
+// still reaches everything it needs through one import.
 pub use pages::{PageError, PageHost, PageRenderer};
+pub use payserver_plugin_api::page;
+// Kept at this crate's root as well as under `page`: a host that renders a
+// descriptor names these two constantly, and removing them from here would
+// break every consumer's imports for no gain beyond a shorter export list.
+pub use payserver_plugin_api::page::{PageElement, Viewer};
 pub use registry::{PluginRegistry, host_version};
 pub use runtime::{
     HOST_MODULE, PluginCallError, PluginEngine, PluginHostCalls, PluginInstance, PluginWasmError,
