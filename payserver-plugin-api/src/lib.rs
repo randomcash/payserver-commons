@@ -2,9 +2,10 @@
 //! negotiation primitives shared by the plugin host and, eventually,
 //! plugins themselves.
 //!
-//! This crate has no wasmtime dependency and instantiates nothing — see
-//! [RCS-256](https://linear.app/randomcash/issue/RCS-256) for the runtime,
-//! action/filter dispatch, deadlines and trap handling. What lives here is
+//! This crate has no wasmtime dependency and instantiates nothing: the
+//! runtime that instantiates a module, dispatches actions and filters, and
+//! bounds and contains a call lives in the host, because only the host knows
+//! what it is willing to run. What lives here is
 //! everything that can be decided before a plugin's code ever runs: is the
 //! manifest well-formed, is its id safe to route to, and does its declared
 //! `ethpayserver` requirement match a candidate host version. The host-side
