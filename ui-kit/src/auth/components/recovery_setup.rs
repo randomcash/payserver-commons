@@ -170,8 +170,20 @@ pub fn RecoverySetup(
                                 }
                             />
                             <span>
+                                // Honest about the current state, same as the ShowPhrase step
+                                // above: no recovery redemption flow exists yet, and invoice
+                                // metadata is not yet encrypted client-side either. So this
+                                // covers funds loss, holding no copy, and no back door, but
+                                // leaves out a data-loss clause that would not be true yet and
+                                // keeps saying recovery isn't live today.
                                 "I have written down my recovery phrase and stored it securely. "
-                                "I understand that if I lose it, I will not be able to recover my account."
+                                "I understand that random.cash is non-custodial: random.cash holds "
+                                "no copy of my recovery phrase, my account key, or my funds, and "
+                                "support cannot override this — there is no back door, deliberately. "
+                                "If I lose access to my account, I lose access to my funds "
+                                "permanently. Account recovery is not available in this release, so "
+                                "right now this phrase is not yet a way back in if I lose my "
+                                "sign-in method."
                             </span>
                         </label>
 
@@ -179,6 +191,13 @@ pub fn RecoverySetup(
                             <button
                                 type="button"
                                 class="ps-button ps-button-primary"
+                                // The only gate before `handle_confirm` fires the same
+                                // account-creation request that persists the account, so a
+                                // completed registration is itself evidence the merchant
+                                // passed through this checkbox. `RegisterPage` defaults
+                                // `require_recovery` to `true`, and its one caller never
+                                // overrides it, so no real registration has a path around
+                                // this button.
                                 disabled=move || !confirmed.get() || is_loading()
                                 on:click=handle_confirm
                             >
