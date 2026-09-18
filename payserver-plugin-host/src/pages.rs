@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use payserver_plugin_api::PluginId;
 
-use super::page::{PageElement, Viewer};
+use payserver_plugin_api::page::{PageElement, Viewer};
 
 /// What a plugin implements to answer a page request.
 ///
@@ -75,7 +75,7 @@ impl PageHost {
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
-    use crate::page::{Badge, Card, Tone};
+    use payserver_plugin_api::page::{Badge, Card, Tone};
 
     fn plugin_id(s: &str) -> PluginId {
         PluginId::new(s).unwrap()
