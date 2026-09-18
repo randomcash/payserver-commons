@@ -4,11 +4,12 @@ use std::sync::Arc;
 
 use crate::error::AuthError;
 use crate::models::{
-    Device, DeviceId, DeviceType, PasskeyId, SessionId, StartNewUserWalletRegistrationRequest,
-    StartPasskeyRegistrationRequest, StartRecoveryRequest, StartWalletLoginRequest, User, UserId,
+    CompletePasskeyRegistrationRequest, Device, DeviceId, DeviceType, PasskeyId, Session,
+    SessionId, StartNewUserWalletRegistrationRequest, StartPasskeyRegistrationRequest,
+    StartRecoveryRequest, StartWalletLoginRequest, User, UserId,
 };
 use crate::repository::inmemory::InMemoryRepository;
-use crate::repository::{DeviceRepository, UserRepository};
+use crate::repository::{DeviceRepository, SessionRepository, UserRepository};
 
 use super::AuthService;
 
@@ -1142,4 +1143,85 @@ async fn reusable_device_ignores_a_revoked_device() {
         .await
         .unwrap();
     assert!(got.is_none(), "a revoked device must not be reused");
+}
+
+// ========================================================================
+// Adding a second passkey (existing user)
+// ========================================================================
+//
+// `start_passkey_registration` reads the *pinned* `kdf_salt_identifier` off
+// the `User` row precisely so that passkey-only accounts — the ones with no
+// email and no wallet — can add a second passkey at all (see its comment).
+// `complete_passkey_registration` never got that fix: it recomputes the
+// identifier from `UserInfo.email` / `UserInfo.primary_wallet_address`, which
+// is `None`/`None` for exactly those accounts, and also disagrees with the
+// pinned value for any wallet account that later added an email. A garbage
+// WebAuthn credential is enough to demonstrate it: the mismatch is detected
+// before the credential is ever inspected.
+
+fn garbage_passkey_credential() -> webauthn_rs_proto::RegisterPublicKeyCredential {
+    serde_json::from_value(serde_json::json!({
+        "id": "x",
+        "rawId": "AA",
+        "response": {
+            "attestationObject": "AA",
+            "clientDataJSON": "AA",
+        },
+        "type": "public-key",
+    }))
+    .expect("structurally valid, never cryptographically verified in this test")
+}
+
+#[tokio::test]
+async fn passkey_only_user_can_complete_adding_a_second_passkey() {
+    let repo = Arc::new(InMemoryRepository::new());
+
+    let user = User::new_passkey_only(
+        UserId::new(),
+        crypto::KdfParams::default(),
+        crypto::EncryptedBlob {
+            ciphertext: vec![1],
+            iv: vec![2],
+            mac: vec![3],
+        },
+        "recovery-hash".to_string(),
+    );
+    repo.create_user(&user).await.unwrap();
+    let device = seed_device(&repo, user.id, true).await;
+    let session = Session::new(user.id, device.id);
+    let session_id = session.id;
+    repo.create_session(&session).await.unwrap();
+
+    let service = AuthService::new(repo);
+
+    service
+        .start_passkey_registration(
+            session_id,
+            StartPasskeyRegistrationRequest {
+                passkey_name: "second device".to_string(),
+            },
+        )
+        .await
+        .expect("starting to add a second passkey must succeed");
+
+    let err = service
+        .complete_passkey_registration(
+            session_id,
+            CompletePasskeyRegistrationRequest {
+                passkey_name: "second device".to_string(),
+                credential: garbage_passkey_credential(),
+            },
+        )
+        .await
+        .expect_err("the credential is garbage, so this must fail — but not this way");
+
+    // A passkey-only account has no email and no wallet, so the buggy
+    // recompute in `complete_passkey_registration` bails out with
+    // `AuthError::Repository` before it ever reaches WebAuthn verification.
+    // The fix must get far enough to attempt (and fail) the WebAuthn check
+    // instead.
+    assert!(
+        !matches!(err, AuthError::Repository(_)),
+        "passkey-only account could not even reach WebAuthn verification: {err:?}"
+    );
 }

@@ -122,9 +122,8 @@ pub struct DeepHealthResponse {
 /// Neither field is a secret: they are the public origin the site is served
 /// from, and a passkey is bound to exactly that origin. Getting them wrong
 /// breaks registration and login completely, which has happened three times
-/// (RCS-62, RCS-64, RCS-126) and was invisible to every health check that
-/// existed at the time - the server is perfectly healthy, it just cannot
-/// authenticate anyone.
+/// already and was invisible to every health check that existed at the time
+/// - the server is perfectly healthy, it just cannot authenticate anyone.
 ///
 /// These are read from the resolved config the server is running with, never
 /// from the environment. The environment is the thing being verified; reading
