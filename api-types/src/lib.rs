@@ -233,6 +233,7 @@ mod tests {
         let wallet = WalletResponse {
             id: uuid::Uuid::nil(),
             user_id: uuid::Uuid::nil(),
+            namespace: "eip155".into(),
             xpub_masked: "xpub…".into(),
             derivation_index: 3,
             name: None,
@@ -243,6 +244,72 @@ mod tests {
             serde_json::from_value(serde_json::to_value(&wallet).unwrap()).unwrap();
         assert_eq!(back.derivation_index, 3);
         assert!(back.is_primary);
+    }
+
+    /// A create request that names no family means Ethereum, and one that
+    /// names Tron survives the wire.
+    ///
+    /// The default is load-bearing in both directions: without it every client
+    /// written before namespaces existed fails to register a wallet at all,
+    /// and if it silently applied to a request that *did* say `tron`, a Tron
+    /// key would be filed as an Ethereum one - which is the failure this whole
+    /// field exists to prevent, reintroduced by the compatibility shim.
+    #[test]
+    fn a_create_wallet_request_defaults_to_ethereum_and_carries_any_other_family() {
+        let legacy: crate::CreateWalletRequest = serde_json::from_value(serde_json::json!({
+            "xpub": "xpub6C…",
+            "name": "till"
+        }))
+        .unwrap();
+        assert_eq!(legacy.namespace, "eip155");
+
+        let tron: crate::CreateWalletRequest = serde_json::from_value(serde_json::json!({
+            "xpub": "xpub6C…",
+            "name": "till",
+            "namespace": "tron"
+        }))
+        .unwrap();
+        assert_eq!(tron.namespace, "tron");
+    }
+
+    /// The addresses a merchant checks a new key against are reachable by the
+    /// name a consumer spells, and they ride alongside the wallet rather than
+    /// replacing it - a client that only wants the wallet must not have to
+    /// know this type exists to parse the response.
+    #[test]
+    fn a_created_wallet_carries_verification_addresses_beside_the_wallet_itself() {
+        let created = crate::CreateWalletResponse {
+            wallet: crate::WalletResponse {
+                id: uuid::Uuid::nil(),
+                user_id: uuid::Uuid::nil(),
+                namespace: "tron".into(),
+                xpub_masked: "xpub…".into(),
+                derivation_index: 0,
+                name: None,
+                is_primary: true,
+                created_at: chrono::Utc::now(),
+            },
+            verification_addresses: vec![crate::DerivedAddressEntry {
+                address: "TQ5NMqJjW8bJ4Z2nLmRKMyJ9dQeGDjYFhL".into(),
+                index: 0,
+                derivation_path: "m/44'/195'/0'/0/0".into(),
+                used: false,
+            }],
+        };
+
+        let json = serde_json::to_value(&created).unwrap();
+        // Flattened: the wallet's own fields sit at the top level, so an older
+        // client parsing this as a WalletResponse still succeeds.
+        assert_eq!(json["namespace"], "tron");
+        let as_wallet: crate::WalletResponse = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(as_wallet.namespace, "tron");
+
+        let back: crate::CreateWalletResponse = serde_json::from_value(json).unwrap();
+        assert_eq!(back.verification_addresses.len(), 1);
+        assert_eq!(
+            back.verification_addresses[0].derivation_path,
+            "m/44'/195'/0'/0/0"
+        );
     }
 
     /// The webhook contract is reachable by the paths an *external* consumer

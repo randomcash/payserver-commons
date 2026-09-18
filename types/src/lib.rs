@@ -101,8 +101,34 @@ pub use traits::{
 };
 pub use types::{
     AssetType, ChainId, ChainIdError, CleanupAddressInfo, DerivationAllocation, HealthStatus,
-    InvoiceId, InvoiceStatus, PaymentEvent, PaymentMethodId, PaymentOptionData, PaymentOptionId,
-    PayoutData, PayoutStatus, PendingWatchInfo, RefundData, RefundStatus, StorePaymentMethod,
-    StoreSettings, StoreTokenPolicy, StoreTokenPolicyEntry, StoreTokenPolicyWithEntries,
-    StoreWebhook, TokenData, TokenPolicyMode, UserId, Wallet, WebhookDelivery, payment_request_uri,
+    InvoiceId, InvoiceStatus, NAMESPACE_BIP122, NAMESPACE_EIP155, NAMESPACE_MONERO,
+    NAMESPACE_SOLANA, NAMESPACE_TRON, PaymentEvent, PaymentMethodId, PaymentOptionData,
+    PaymentOptionId, PayoutData, PayoutStatus, PendingWatchInfo, RefundData, RefundStatus,
+    StorePaymentMethod, StoreSettings, StoreTokenPolicy, StoreTokenPolicyEntry,
+    StoreTokenPolicyWithEntries, StoreWebhook, TokenData, TokenPolicyMode, UserId, Wallet,
+    WebhookDelivery, payment_request_uri,
 };
+
+#[cfg(test)]
+mod root_reachability_tests {
+    /// The CAIP-2 namespace constants are reachable by the path a consumer
+    /// spells, not only by their in-crate one.
+    ///
+    /// They existed as `pub` in `types::chain` and were absent from the root
+    /// re-export list above, so `types::NAMESPACE_TRON` did not resolve while
+    /// every in-crate use of them compiled. A downstream crate scoping wallet
+    /// resolution by namespace has to name these rather than retype the
+    /// strings; a literal that drifts from the parser is a wallet that
+    /// resolves for nothing.
+    #[test]
+    fn the_caip2_namespace_constants_are_reachable_from_the_crate_root() {
+        assert_eq!(crate::NAMESPACE_EIP155, "eip155");
+        assert_eq!(crate::NAMESPACE_TRON, "tron");
+
+        // And they agree with what the parser reads back out of an identifier,
+        // which is the only reason a constant is better than a literal.
+        let tron = crate::ChainId::parse("tron:728126428").unwrap();
+        assert_eq!(tron.namespace(), crate::NAMESPACE_TRON);
+        assert_eq!(crate::ChainId::evm(1).namespace(), crate::NAMESPACE_EIP155);
+    }
+}
