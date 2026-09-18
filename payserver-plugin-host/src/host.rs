@@ -44,6 +44,7 @@ use serde::de::DeserializeOwned;
 
 use super::PluginLoadError;
 use super::registry::PluginRegistry;
+use super::runtime::PluginHostCalls;
 use super::runtime::{PluginEngine, PluginInstance, PluginWasmError};
 
 /// A plugin failed either the load-time gate or wasm compilation /
@@ -239,8 +240,35 @@ impl PluginHost {
     /// manifest and a bad module both leave the id free to retry, with no
     /// partial state to unwind either way.
     pub fn register(&self, manifest: Manifest, wasm: &[u8]) -> Result<(), PluginHostError> {
+        self.register_with_calls(manifest, wasm, None)
+    }
+
+    /// [`register`](Self::register), with `calls` available to the plugin as
+    /// host imports for the life of its instance.
+    ///
+    /// Separate from `register` rather than an extra argument on it: a host
+    /// that offers a plugin no capabilities at all is a legitimate
+    /// configuration - and the one every test here uses - so it should not
+    /// have to name `None` to say so.
+    ///
+    /// The calls are bound at instantiation and cannot be changed afterwards.
+    /// A plugin is instantiated once and kept for the life of the process, so
+    /// swapping them later would mean a plugin holding a stale handle to
+    /// whatever it was given first; re-registering is the way to change them.
+    ///
+    /// # Errors
+    /// As [`register`](Self::register).
+    pub fn register_with_calls(
+        &self,
+        manifest: Manifest,
+        wasm: &[u8],
+        calls: Option<Arc<dyn PluginHostCalls>>,
+    ) -> Result<(), PluginHostError> {
         let module = self.engine.compile(wasm)?;
-        let instance = self.engine.instantiate(&module)?;
+        let instance = match calls {
+            Some(calls) => self.engine.instantiate_with_calls(&module, calls)?,
+            None => self.engine.instantiate(&module)?,
+        };
 
         let id = manifest.id.clone();
         self.registry
@@ -951,5 +979,64 @@ mod admin_toggle_tests {
 
         assert!(!host.disable(&absent, "whatever"));
         assert!(!host.enable(&absent));
+    }
+
+    /// A plugin registered with host calls can actually reach them. Without
+    /// this, `register_with_calls` could quietly instantiate without imports
+    /// and every other test here would still pass, because none of them
+    /// exercise a plugin that calls back.
+    #[tokio::test]
+    async fn a_plugin_registered_with_calls_can_use_them() {
+        use std::sync::Mutex as StdMutex;
+
+        struct Recording(StdMutex<Vec<Vec<u8>>>);
+        impl PluginHostCalls for Recording {
+            fn storage_query(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+                self.0
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push(request.to_vec());
+                Ok(br#"{"ok":true}"#.to_vec())
+            }
+        }
+
+        let calls = Arc::new(Recording(StdMutex::new(Vec::new())));
+        let host = PluginHost::new(host_version(), 3, Duration::from_millis(500));
+        host.register_with_calls(
+            manifest_for("cash.random.asks"),
+            &crate::runtime::fixtures::host_calling_module(),
+            Some(calls.clone()),
+        )
+        .unwrap();
+
+        let outcome = host
+            .run_filter::<_, serde_json::Value>(
+                &PluginId::new("cash.random.asks").unwrap(),
+                "call",
+                &serde_json::json!({"statements": []}),
+            )
+            .await;
+
+        assert!(
+            matches!(outcome, FilterOutcome::Ran(_)),
+            "the plugin could not complete a call that goes through a host import: {outcome:?}"
+        );
+        assert_eq!(
+            calls.0.lock().unwrap_or_else(PoisonError::into_inner).len(),
+            1,
+            "the host import was never reached"
+        );
+    }
+
+    /// The same module registered *without* calls must not trap - the import
+    /// is defined and unbacked, which is an error the plugin can report.
+    #[tokio::test]
+    async fn the_same_plugin_registered_without_calls_still_loads() {
+        let host = PluginHost::new(host_version(), 3, Duration::from_millis(500));
+        host.register(
+            manifest_for("cash.random.asksnothing"),
+            &crate::runtime::fixtures::host_calling_module(),
+        )
+        .expect("a plugin importing host calls must load even when nothing backs them");
     }
 }

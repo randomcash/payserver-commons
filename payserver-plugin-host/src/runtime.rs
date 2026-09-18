@@ -501,6 +501,43 @@ pub enum PluginCallError {
 pub(crate) mod fixtures {
     #![allow(clippy::unwrap_used)]
 
+    /// A plugin that asks the host a question, takes the answer, and hands it
+    /// straight back — the full two-step protocol, exercised end to end.
+    pub(crate) fn host_calling_module() -> Vec<u8> {
+        wat::parse_str(
+            r#"
+            (module
+                (import "ethpayserver" "storage_query"
+                    (func $query (param i32 i32) (result i64)))
+                (import "ethpayserver" "host_take"
+                    (func $take (param i32 i32) (result i32)))
+                (memory (export "memory") 1)
+                (global $next (mut i32) (i32.const 1024))
+
+                (func $alloc (export "alloc") (param $len i32) (result i32)
+                    (local $ptr i32)
+                    (local.set $ptr (global.get $next))
+                    (global.set $next (i32.add (global.get $next) (local.get $len)))
+                    (local.get $ptr))
+
+                (func (export "call") (param $ptr i32) (param $len i32) (result i64)
+                    (local $n i32)
+                    (local $dest i32)
+                    (local.set $n
+                        (i32.wrap_i64 (call $query (local.get $ptr) (local.get $len))))
+                    (if (i32.lt_s (local.get $n) (i32.const 0))
+                        (then (return (i64.const 0))))
+                    (local.set $dest (call $alloc (local.get $n)))
+                    (drop (call $take (local.get $dest) (local.get $n)))
+                    (i64.or
+                        (i64.shl (i64.extend_i32_u (local.get $dest)) (i64.const 32))
+                        (i64.extend_i32_u (local.get $n))))
+            )
+            "#,
+        )
+        .unwrap()
+    }
+
     use super::{PluginEngine, PluginInstance};
 
     /// A plugin exporting a bump allocator and one `call` per fixture
@@ -774,43 +811,6 @@ mod tests {
         assert_eq!(engine.ticks_for(Duration::from_millis(11)), 2);
     }
 
-    /// A plugin that asks the host a question, takes the answer, and hands it
-    /// straight back — the full two-step protocol, exercised end to end.
-    pub(crate) fn host_calling_module() -> Vec<u8> {
-        wat::parse_str(
-            r#"
-            (module
-                (import "ethpayserver" "storage_query"
-                    (func $query (param i32 i32) (result i64)))
-                (import "ethpayserver" "host_take"
-                    (func $take (param i32 i32) (result i32)))
-                (memory (export "memory") 1)
-                (global $next (mut i32) (i32.const 1024))
-
-                (func $alloc (export "alloc") (param $len i32) (result i32)
-                    (local $ptr i32)
-                    (local.set $ptr (global.get $next))
-                    (global.set $next (i32.add (global.get $next) (local.get $len)))
-                    (local.get $ptr))
-
-                (func (export "call") (param $ptr i32) (param $len i32) (result i64)
-                    (local $n i32)
-                    (local $dest i32)
-                    (local.set $n
-                        (i32.wrap_i64 (call $query (local.get $ptr) (local.get $len))))
-                    (if (i32.lt_s (local.get $n) (i32.const 0))
-                        (then (return (i64.const 0))))
-                    (local.set $dest (call $alloc (local.get $n)))
-                    (drop (call $take (local.get $dest) (local.get $n)))
-                    (i64.or
-                        (i64.shl (i64.extend_i32_u (local.get $dest)) (i64.const 32))
-                        (i64.extend_i32_u (local.get $n))))
-            )
-            "#,
-        )
-        .unwrap()
-    }
-
     /// Records what it was asked and answers with a fixed result.
     struct RecordingCalls {
         asked: std::sync::Mutex<Vec<Vec<u8>>>,
@@ -845,7 +845,7 @@ mod tests {
     #[test]
     fn a_plugin_can_ask_the_host_a_question_and_read_the_answer() {
         let engine = PluginEngine::new();
-        let module = engine.compile(&host_calling_module()).unwrap();
+        let module = engine.compile(&fixtures::host_calling_module()).unwrap();
         let calls = RecordingCalls::answering(r#"{"rows":[{"paid_until":"2026-10-01"}]}"#);
         let mut instance = engine
             .instantiate_with_calls(&module, calls.clone())
@@ -874,7 +874,7 @@ mod tests {
     #[test]
     fn an_unbacked_host_call_is_an_error_not_a_trap() {
         let engine = PluginEngine::new();
-        let module = engine.compile(&host_calling_module()).unwrap();
+        let module = engine.compile(&fixtures::host_calling_module()).unwrap();
         // `instantiate`, not `instantiate_with_calls`: imports are defined,
         // nothing backs them.
         let mut instance = engine.instantiate(&module).unwrap();
@@ -892,7 +892,7 @@ mod tests {
     #[test]
     fn a_failing_host_call_does_not_trap_the_plugin() {
         let engine = PluginEngine::new();
-        let module = engine.compile(&host_calling_module()).unwrap();
+        let module = engine.compile(&fixtures::host_calling_module()).unwrap();
         let mut instance = engine
             .instantiate_with_calls(&module, RecordingCalls::failing("relation does not exist"))
             .unwrap();
