@@ -4,25 +4,44 @@ use super::ChainId;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-/// An account-level wallet: one extended public key, and the one derivation
-/// counter that belongs to it.
+/// An account-level wallet: one extended public key, the chain family that key
+/// belongs to, and the one derivation counter that belongs to both.
 ///
 /// Distinct from `auth::WalletCredential`, which is a wallet used to *log in*.
 /// This is the one money arrives at.
 ///
 /// The xpub and the counter live in the same row and nowhere else, and that
 /// pairing is the point. An xpub reachable through two counters derives the
-/// same address twice: `XpubDeriver::derive_address` is `m/44'/60'/0'/0/{i}`,
-/// with no store, chain or asset in the path, so two counters that both reach
-/// index 5 produce byte-identical addresses and two merchants' payments land
-/// on one address. Everything that needs an address therefore asks a wallet
-/// row for the next index rather than keeping a count beside it.
+/// same address twice: derivation is `m/44'/<coin>'/0'/0/{i}`, with no store,
+/// chain or asset in the path, so two counters that both reach index 5 produce
+/// byte-identical addresses and two merchants' payments land on one address.
+/// Everything that needs an address therefore asks a wallet row for the next
+/// index rather than keeping a count beside it.
+///
+/// `namespace` is the other half of that identity, and it is not cosmetic. An
+/// account-level xpub has its BIP-44 coin type already baked into it and its
+/// parent is unreachable, so the family a key was exported for cannot be
+/// recovered from the key: `m/44'/60'/0'` (Ethereum) and `m/44'/195'/0'`
+/// (Tron) are byte-indistinguishable - same base58 alphabet, same version
+/// bytes. Running an Ethereum account xpub through Tron's address encoding
+/// yields a valid, checksum-correct `T...` address that the merchant's Tron
+/// wallet will never show, because that wallet looks under coin type 195. The
+/// funds are then reachable only by re-importing the seed at a non-standard
+/// path. Nothing can detect that after the fact, so the family is recorded
+/// when the key is registered and every resolution is scoped by it.
 #[derive(Debug, Clone)]
 pub struct Wallet {
     pub id: Uuid,
     /// Owning account. Wallets belong to a user, not to a store.
     pub user_id: Uuid,
-    /// BIP-32 extended public key, at account level (m/44'/60'/0').
+    /// The CAIP-2 namespace this key derives for - `eip155`, `tron`, ... .
+    ///
+    /// Decides both the BIP-44 coin type the merchant's wallet used to export
+    /// the key and the encoding the derived address is rendered in. A wallet
+    /// only ever serves payment methods whose chain is in this namespace.
+    pub namespace: String,
+    /// BIP-32 extended public key, at account level (`m/44'/<coin>'/0'`, with
+    /// `<coin>` fixed by [`Self::namespace`]).
     pub xpub: String,
     /// Next derivation index to issue. Moved only by
     /// `WalletWriter::next_derivation_index`, which reads and advances it in
@@ -30,8 +49,10 @@ pub struct Wallet {
     pub derivation_index: i32,
     pub name: Option<String>,
     /// The wallet a store falls back to when it has no override of its own.
-    /// At most one per user, enforced by a partial unique index in the schema
-    /// rather than by application code.
+    /// At most one per (user, namespace), enforced by a partial unique index
+    /// in the schema rather than by application code. Per namespace, because
+    /// an account paid on two families needs one fallback in each and a single
+    /// primary would force one of them onto the wrong key.
     pub is_primary: bool,
     pub created_at: DateTime<Utc>,
 }
@@ -59,8 +80,15 @@ pub struct StorePaymentMethod {
     /// is reported here is the answer that derivation will reach, so a caller
     /// cannot render one key while payments are collected on another.
     ///
+    /// Every step of that walk is filtered to `chain_id`'s CAIP-2 namespace. A
+    /// wallet in another family is not a worse answer than the right one, it
+    /// is a wrong one: its key was exported under a different BIP-44 coin type
+    /// and the address derived from it is unreachable from the merchant's
+    /// wallet.
+    ///
     /// `None` means the chain runs out - no pin, no store override, no account
-    /// primary. The method exists but cannot be paid until a wallet does.
+    /// primary *in this namespace*. The method exists but cannot be paid until
+    /// a wallet for its family does.
     pub wallet_id: Option<Uuid>,
     /// The resolved wallet's xpub. `None` for the same reason as `wallet_id`.
     ///
@@ -89,6 +117,15 @@ pub struct StorePaymentMethod {
 pub struct DerivationAllocation {
     /// The wallet the index was taken from.
     pub wallet_id: Uuid,
+    /// That wallet's chain family, from the same row as the key.
+    ///
+    /// Carried rather than re-derived at the call site for the same reason the
+    /// xpub is: it fixes the coin type the key was exported under, and so the
+    /// encoding the address must be rendered in. A caller that paired this
+    /// xpub with a namespace read from somewhere else could render an
+    /// Ethereum key as a Tron address, which is valid, checksum-correct and
+    /// unspendable from the merchant's wallet.
+    pub namespace: String,
     /// That wallet's xpub - the one to derive with, not a snapshot.
     pub xpub: String,
     /// The index to derive at. Already consumed; nobody else will get it.
