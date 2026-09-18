@@ -447,19 +447,21 @@ where
             .await?
             .ok_or(AuthError::PasskeyChallengeExpired)?;
 
-        // Get current user identifier for verification
-        let user_identifier = user_info
-            .email
-            .clone()
-            .or_else(|| {
-                user_info
-                    .primary_wallet_address
-                    .clone()
-                    .map(|w| crypto::SaltIdentity::Wallet(w).as_identifier())
-            })
-            .ok_or_else(|| {
-                AuthError::Repository("User has neither email nor wallet address".into())
-            })?;
+        // The pinned identifier, not one recomputed from email-or-wallet: this
+        // must match what `start_passkey_registration` stored the challenge
+        // under, which is `user.kdf_salt_identifier`. Recomputing prefers
+        // email over wallet and falls back to nothing for passkey-only
+        // accounts, so it disagreed with the pinned value for any wallet
+        // account that later added an email, and unconditionally errored out
+        // before this check for passkey-only accounts - the exact accounts
+        // `start_passkey_registration` was fixed to support adding a second
+        // passkey for.
+        let user = self
+            .repo
+            .get_user(user_info.id)
+            .await?
+            .ok_or_else(|| AuthError::UserNotFound(user_info.id.to_string()))?;
+        let user_identifier = user.kdf_salt_identifier.clone();
 
         // Verify the identifier matches (should always match for existing user, but verify anyway)
         if stored_identifier != user_identifier {

@@ -4,6 +4,7 @@ members = [
     "auth",
     "crypto",
     "payserver-plugin-api",
+    "payserver-plugin-host",
     "rates",
     "scrub",
     "types",
