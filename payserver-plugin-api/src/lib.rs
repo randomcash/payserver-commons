@@ -24,11 +24,35 @@ mod failure_mode;
 mod id;
 mod kind;
 mod manifest;
+pub mod page;
 
 pub use dependency::{Dependency, InvalidDependency};
 pub use failure_mode::FailureMode;
 pub use id::{InvalidPluginId, PluginId};
 pub use kind::PluginKind;
 pub use manifest::{InvalidManifest, Manifest};
+pub use page::{
+    Badge, Button, ButtonVariant, Card, Direction, Form, Grid, Input, Notice, PageElement, Row,
+    Section, Select, Stack, Tab, Table, Tabs, Tone, Viewer,
+};
 
 pub use semver::{Version, VersionReq};
+
+/// Reachability is not the same as `pub`: an item can be `pub` in its module
+/// and absent from this crate root's re-export list, so every in-crate test
+/// would still pass by calling it through its in-crate path. This names the
+/// page descriptor types exactly as a consumer (a plugin crate) would.
+#[cfg(test)]
+mod reachability {
+    use crate::{Badge, PageElement, Tone, Viewer};
+
+    #[test]
+    fn page_descriptor_types_are_reachable_from_the_crate_root() {
+        let element = PageElement::Badge(Badge {
+            text: "ok".to_string(),
+            tone: Tone::Success,
+        });
+        assert!(matches!(element, PageElement::Badge(_)));
+        assert_eq!(Viewer::Merchant, Viewer::Merchant);
+    }
+}
