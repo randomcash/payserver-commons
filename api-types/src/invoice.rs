@@ -132,8 +132,11 @@ pub struct CreateInvoiceRequest {
     /// Invoice currency (e.g., "USD", "ETH", "BTC").
     /// For asset-denominated invoices (testing), use the asset symbol directly.
     pub currency: String,
-    /// Amount in the currency's standard unit (e.g., "100.00" for USD, "0.1" for ETH).
-    /// For asset-denominated invoices, this is in the asset's smallest unit (wei, satoshi).
+    /// Amount in the currency's standard unit (e.g., "100.00" for USD, "0.1" for ETH) —
+    /// always human-readable, regardless of whether `currency` is fiat or a crypto asset
+    /// symbol. The server converts it to the asset's smallest unit internally; never send
+    /// a pre-converted value here. Smallest-unit amounts only appear in responses, e.g.
+    /// `PaymentOptionResponse.amount`.
     pub amount: String,
     /// Expiration in seconds from now (default: 900 = 15 minutes).
     #[serde(skip_serializing_if = "Option::is_none")]
