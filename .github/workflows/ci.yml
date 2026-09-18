@@ -27,6 +27,14 @@ jobs:
           sudo apt-get update && sudo apt-get install -y mold
           curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
 
+      # Before the Rust steps: it needs no toolchain and no cache, and a
+      # leaked ticket id is worth failing fast on. This repository is public,
+      # and two doc comments carried tracker references until the commit that
+      # added this check - one a full tracker URL - which is precisely what
+      # nothing enforcing the rule looks like.
+      - name: No ticket ids or tracker links in source
+        run: ./scripts/check-no-ticket-refs.sh
+
       - name: Format check
         run: cargo fmt --all -- --check
 
