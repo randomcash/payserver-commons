@@ -49,6 +49,36 @@ pub struct Manifest {
     pub pages: Vec<PageDeclaration>,
 }
 
+/// Where a plugin's page belongs in the host's own interface.
+///
+/// A plugin cannot know what the rest of the product looks like, so it says
+/// what *kind* of page it is and the host decides where that goes. The two
+/// kinds are genuinely different audiences, not two positions in one menu.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PagePlacement {
+    /// A page the person whose account it is uses. Belongs in the main
+    /// navigation, beside the rest of what they do here.
+    #[default]
+    Nav,
+    /// A page for whoever runs the instance. Belongs with the other
+    /// server-wide administration, not in the navigation every merchant
+    /// sees.
+    ///
+    /// Always admin-only regardless of [`PageDeclaration::admin_only`]:
+    /// there is nowhere else it is reachable from, and a merchant offered a
+    /// link to it would be offered a page about other merchants.
+    AdminSettings,
+}
+
+impl PagePlacement {
+    /// Whether only a server admin may be offered this page.
+    #[must_use]
+    pub fn is_admin_only(self) -> bool {
+        matches!(self, Self::AdminSettings)
+    }
+}
+
 /// One page a plugin says it serves.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PageDeclaration {
@@ -56,7 +86,16 @@ pub struct PageDeclaration {
     pub path: String,
     /// What to call it in navigation.
     pub label: String,
+    /// Where this page belongs in the host's interface.
+    ///
+    /// Defaults to the main navigation, which is what a page about the
+    /// caller's own account should be.
+    #[serde(default)]
+    pub placement: PagePlacement,
     /// Whether only a server admin should be offered it.
+    ///
+    /// Implied by [`PagePlacement::AdminSettings`], so a page placed there
+    /// need not repeat it.
     ///
     /// Navigation only. A plugin still decides what to return for the
     /// [`Viewer`](crate::page::Viewer) it is handed, and the host still
@@ -329,5 +368,44 @@ mod tests {
         .parse::<Manifest>()
         .unwrap_err();
         assert!(err.to_string().contains("reserved"), "{err}");
+    }
+
+    /// The default has to be the merchant's own page. A plugin that says
+    /// nothing about placement is describing something for the person whose
+    /// account it is, and defaulting the other way would put a plugin's
+    /// operator tooling into every merchant's sidebar.
+    #[test]
+    fn a_page_belongs_in_the_navigation_unless_it_says_otherwise() {
+        let manifest: Manifest = r#"
+            id = "cash.random.billing"
+            version = "0.1.0"
+            kind = "filter"
+            slug = "billing"
+
+            [[pages]]
+            path = "subscription"
+            label = "Billing"
+
+            [[pages]]
+            path = "subscriptions"
+            label = "All merchant subscriptions"
+            placement = "admin_settings"
+        "#
+        .parse()
+        .unwrap();
+
+        assert_eq!(manifest.pages[0].placement, PagePlacement::Nav);
+        assert!(
+            !manifest.pages[0].placement.is_admin_only(),
+            "a merchant's own page must not be admin-gated by placement"
+        );
+
+        assert_eq!(manifest.pages[1].placement, PagePlacement::AdminSettings);
+        assert!(
+            manifest.pages[1].placement.is_admin_only(),
+            "an admin-settings page is admin-only without having to say so \
+             twice - there is nowhere else it is reachable from, and a \
+             merchant offered it would be offered a page about other merchants"
+        );
     }
 }
