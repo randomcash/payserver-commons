@@ -25,6 +25,7 @@ mod id;
 mod kind;
 mod manifest;
 pub mod page;
+mod slug;
 
 pub use dependency::{Dependency, InvalidDependency};
 pub use failure_mode::FailureMode;
@@ -35,6 +36,7 @@ pub use page::{
     Badge, Button, ButtonVariant, Card, Direction, Form, Grid, Input, Notice, PageElement, Row,
     Section, Select, Stack, Tab, Table, Tabs, Tone, Viewer,
 };
+pub use slug::{InvalidSlug, PluginSlug, RESERVED_SLUGS};
 
 pub use semver::{Version, VersionReq};
 
