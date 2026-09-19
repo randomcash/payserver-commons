@@ -4,7 +4,7 @@
 use std::str::FromStr;
 
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{Dependency, FailureMode, PluginId, PluginKind};
 
@@ -24,6 +24,36 @@ pub struct Manifest {
     /// it.
     pub failure_mode: Option<FailureMode>,
     pub ui_schema: Option<u32>,
+    /// The pages this plugin serves, in the order it wants them listed.
+    ///
+    /// Declared rather than discovered, because the client has to build
+    /// navigation *before* it asks for a page - and a host that had to call
+    /// every plugin to find out what to put in a menu would run wasm to draw
+    /// a sidebar.
+    ///
+    /// It also keeps a plugin's own vocabulary out of the client. The client
+    /// renders whatever is declared here; it never knows that one of these
+    /// happens to be billing.
+    pub pages: Vec<PageDeclaration>,
+}
+
+/// One page a plugin says it serves.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct PageDeclaration {
+    /// The path under `/plugins/{id}/pages/`. No leading slash.
+    pub path: String,
+    /// What to call it in navigation.
+    pub label: String,
+    /// Whether only a server admin should be offered it.
+    ///
+    /// Navigation only. A plugin still decides what to return for the
+    /// [`Viewer`](crate::page::Viewer) it is handed, and the host still
+    /// resolves that viewer from the session - so this hides a menu entry
+    /// and is not what stops a merchant reading an operator's page. A
+    /// manifest is the plugin's own claim about itself, and claims are not
+    /// access control.
+    #[serde(default)]
+    pub admin_only: bool,
 }
 
 impl Manifest {
@@ -46,6 +76,8 @@ struct RawManifest {
     failure_mode: Option<FailureMode>,
     #[serde(default)]
     ui_schema: Option<u32>,
+    #[serde(default)]
+    pages: Vec<PageDeclaration>,
 }
 
 impl FromStr for Manifest {
@@ -70,6 +102,7 @@ impl FromStr for Manifest {
             kind: raw.kind,
             failure_mode,
             ui_schema: raw.ui_schema,
+            pages: raw.pages,
         })
     }
 }
@@ -160,5 +193,51 @@ mod tests {
     #[test]
     fn rejects_malformed_toml() {
         assert!("not a manifest".parse::<Manifest>().is_err());
+    }
+
+    /// Pages are optional, and a manifest that declares none must still
+    /// parse - every plugin that existed before pages did declares none.
+    #[test]
+    fn a_manifest_without_pages_parses_with_an_empty_list() {
+        let manifest: Manifest = r#"
+            id = "cash.random.quiet"
+            version = "0.1.0"
+            kind = "action"
+        "#
+        .parse()
+        .unwrap();
+        assert!(manifest.pages.is_empty());
+    }
+
+    #[test]
+    fn declared_pages_keep_their_order_and_default_to_everyone() {
+        let manifest: Manifest = r#"
+            id = "cash.random.billing"
+            version = "0.1.0"
+            kind = "filter"
+            ui_schema = 1
+
+            [[pages]]
+            path = "subscription"
+            label = "Subscription"
+
+            [[pages]]
+            path = "subscriptions"
+            label = "Subscriptions"
+            admin_only = true
+        "#
+        .parse()
+        .unwrap();
+
+        assert_eq!(manifest.pages.len(), 2);
+        assert_eq!(
+            manifest.pages[0].path, "subscription",
+            "order is the plugin's, and it is what a menu is built from"
+        );
+        assert!(
+            !manifest.pages[0].admin_only,
+            "a page that says nothing is offered to everyone"
+        );
+        assert!(manifest.pages[1].admin_only);
     }
 }
