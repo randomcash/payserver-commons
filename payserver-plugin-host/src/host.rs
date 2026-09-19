@@ -418,19 +418,48 @@ impl PluginHost {
         Req: Serialize,
         Resp: DeserializeOwned + Send + 'static,
     {
-        let failure_mode = self.failure_mode_for(id);
+        match self.run_query(id, export, req).await {
+            Ok(resp) => FilterOutcome::Ran(resp),
+            Err(reason) => FilterOutcome::could_not_run(self.failure_mode_for(id), reason),
+        }
+    }
+
+    /// Runs `export` on plugin `id` and returns its answer, or the reason
+    /// there is not one.
+    ///
+    /// The same machinery [`Self::run_filter`] uses, without the
+    /// [`FailureMode`] on top. The two are not interchangeable and the
+    /// difference is the point: a filter that cannot run still has to yield
+    /// a verdict, so it falls back to what the manifest declared. A caller
+    /// with no safe default - one rendering a page, say, where "assume it
+    /// said yes" means nothing - needs the failure itself, and substituting
+    /// a default here would be inventing an answer the plugin never gave.
+    ///
+    /// # Errors
+    /// The reason the call could not be completed: the plugin is missing or
+    /// disabled, its argument or answer would not serialise, it trapped, it
+    /// ran past the deadline, or its task panicked. Every one of these also
+    /// counts against the plugin's failure budget, exactly as it would on
+    /// the filter path.
+    pub async fn run_query<Req, Resp>(
+        &self,
+        id: &PluginId,
+        export: &str,
+        req: &Req,
+    ) -> Result<Resp, String>
+    where
+        Req: Serialize,
+        Resp: DeserializeOwned + Send + 'static,
+    {
         let Some(entry) = self.enabled_entry(id) else {
-            return FilterOutcome::could_not_run(
-                failure_mode,
-                format!("plugin {id} is not available to run"),
-            );
+            return Err(format!("plugin {id} is not available to run"));
         };
         let arg = match serde_json::to_vec(req) {
             Ok(arg) => arg,
             Err(e) => {
-                let reason = format!("could not serialise filter argument: {e}");
+                let reason = format!("could not serialise the call argument: {e}");
                 entry.record_failure(reason.clone());
-                return FilterOutcome::could_not_run(failure_mode, reason);
+                return Err(reason);
             }
         };
         let export = export.to_string();
@@ -452,23 +481,23 @@ impl PluginHost {
             Ok(Ok(bytes)) => match serde_json::from_slice::<Resp>(&bytes) {
                 Ok(resp) => {
                     entry.record_success();
-                    FilterOutcome::Ran(resp)
+                    Ok(resp)
                 }
                 Err(e) => {
-                    let reason = format!("filter answer did not parse: {e}");
+                    let reason = format!("the plugin's answer did not parse: {e}");
                     entry.record_failure(reason.clone());
-                    FilterOutcome::could_not_run(failure_mode, reason)
+                    Err(reason)
                 }
             },
             Ok(Err(call_err)) => {
                 let reason = call_err.to_string();
                 entry.record_failure(reason.clone());
-                FilterOutcome::could_not_run(failure_mode, reason)
+                Err(reason)
             }
             Err(join_err) => {
-                let reason = format!("filter task panicked: {join_err}");
+                let reason = format!("plugin call task panicked: {join_err}");
                 entry.record_failure(reason.clone());
-                FilterOutcome::could_not_run(failure_mode, reason)
+                Err(reason)
             }
         }
     }
@@ -997,6 +1026,10 @@ mod admin_toggle_tests {
                     .unwrap_or_else(PoisonError::into_inner)
                     .push(request.to_vec());
                 Ok(br#"{"ok":true}"#.to_vec())
+            }
+
+            fn invoice_create(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+                Err("this double issues no invoices".to_string())
             }
         }
 

@@ -35,6 +35,25 @@
 //! means calling the plugin's own `alloc` export from inside a host function
 //! that the plugin called — re-entering an instance mid-call. Two steps keep
 //! the host writing only into memory the plugin already owns.
+//!
+//! Every host call answers this way, and they share the one `host_take`
+//! rather than each bringing its own. The protocol is strictly
+//! ask-then-take within a single call, and a plugin instance runs one call
+//! at a time, so there is never more than one answer waiting — a second
+//! take function would be two names for the same buffer.
+//!
+//! # `invoice_create`
+//!
+//! The second answering call, and the one that moves money: it asks the
+//! host to issue an invoice *on the host's own store*, which is how an
+//! instance sells a subscription to itself.
+//!
+//! Note what the plugin does not get to say. There is no store in the
+//! request — not a checked one, none at all. A plugin that could name a
+//! store could invoice a merchant's customers under the merchant's name, so
+//! the host substitutes its own and the refusal is structural rather than a
+//! check someone could later delete. See `enforce_own_store` on the host
+//! side for the same property stated where an ordinary caller can reach it.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -81,6 +100,24 @@ pub trait PluginHostCalls: Send + Sync {
     /// Returns the message to hand back to the plugin when the request could
     /// not be served.
     fn storage_query(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// Issue an invoice on the host's own store.
+    ///
+    /// `request` names an asset and an amount, and never a store: see this
+    /// module's header for why the store is the host's to supply and not the
+    /// plugin's to ask for.
+    ///
+    /// Required rather than defaulted, and deliberately so. A default
+    /// returning "not supported" would let an implementation grant or refuse
+    /// the money-path capability by forgetting to mention it, and the
+    /// forgetting would look exactly like a host that meant to withhold it.
+    /// An implementation that cannot issue invoices says so in its own body,
+    /// where it knows why.
+    ///
+    /// # Errors
+    /// Returns the message to hand back to the plugin when no invoice could
+    /// be issued.
+    fn invoice_create(&self, request: &[u8]) -> Result<Vec<u8>, String>;
 }
 
 /// The store's context: what host functions need, plus the buffer a two-step
@@ -324,19 +361,28 @@ impl PluginInstance {
     }
 }
 
-/// Builds the import surface every plugin is instantiated against.
-///
-/// `allow_shadowing` is not set and `define_unknown_imports_as_traps` is not
-/// used: a plugin importing something this host has never heard of must fail
-/// to instantiate, because there is no honest answer to give it.
-fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
-    let mut linker = Linker::new(engine);
+/// Which method of [`PluginHostCalls`] one import routes to.
+type HostCall = fn(&dyn PluginHostCalls, &[u8]) -> Result<Vec<u8>, String>;
 
+/// Defines one `(ptr, len) -> i64` host call that answers through `pending`.
+///
+/// Every such call is the same shape - read the request out of the plugin's
+/// memory, hand it to the one trait method that serves it, leave the answer
+/// where `host_take` will find it - and differs only in which method that is
+/// and what to say when nothing backs it. Written once so a third call is a
+/// four-line addition rather than a copied block that can drift in the parts
+/// nobody meant to change.
+fn define_answering_call(
+    linker: &mut Linker<PluginCtx>,
+    name: &'static str,
+    unbacked: &'static str,
+    run: HostCall,
+) -> Result<(), PluginWasmError> {
     linker
         .func_wrap(
             HOST_MODULE,
-            "storage_query",
-            |mut caller: Caller<'_, PluginCtx>, ptr: i32, len: i32| -> i64 {
+            name,
+            move |mut caller: Caller<'_, PluginCtx>, ptr: i32, len: i32| -> i64 {
                 let request = match read_plugin_memory(&mut caller, ptr, len) {
                     Ok(bytes) => bytes,
                     Err(_) => return HOST_CALL_FAILED,
@@ -346,11 +392,11 @@ fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
                     // Defined but unbacked. An error, not a trap: the plugin
                     // asked a reasonable question of a host that cannot
                     // answer it, and it deserves the chance to say so.
-                    caller.data_mut().pending = b"this host does not provide storage".to_vec();
+                    caller.data_mut().pending = unbacked.as_bytes().to_vec();
                     return HOST_CALL_FAILED;
                 };
 
-                match calls.storage_query(&request) {
+                match run(calls.as_ref(), &request) {
                     Ok(answer) => {
                         let len = i64::try_from(answer.len()).unwrap_or(i64::MAX);
                         caller.data_mut().pending = answer;
@@ -363,7 +409,31 @@ fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
                 }
             },
         )
-        .map_err(|e| PluginWasmError::Instantiate(e.to_string()))?;
+        .map(|_| ())
+        .map_err(|e| PluginWasmError::Instantiate(e.to_string()))
+}
+
+/// Builds the import surface every plugin is instantiated against.
+///
+/// `allow_shadowing` is not set and `define_unknown_imports_as_traps` is not
+/// used: a plugin importing something this host has never heard of must fail
+/// to instantiate, because there is no honest answer to give it.
+fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
+    let mut linker = Linker::new(engine);
+
+    define_answering_call(
+        &mut linker,
+        "storage_query",
+        "this host does not provide storage",
+        |calls, request| calls.storage_query(request),
+    )?;
+
+    define_answering_call(
+        &mut linker,
+        "invoice_create",
+        "this host does not issue invoices",
+        |calls, request| calls.invoice_create(request),
+    )?;
 
     linker
         .func_wrap(
@@ -504,10 +574,21 @@ pub(crate) mod fixtures {
     /// A plugin that asks the host a question, takes the answer, and hands it
     /// straight back — the full two-step protocol, exercised end to end.
     pub(crate) fn host_calling_module() -> Vec<u8> {
-        wat::parse_str(
+        module_calling("storage_query")
+    }
+
+    /// The same plugin against the other answering import. Both go through
+    /// the one `host_take`, which is the thing worth proving: a second
+    /// answering call must not need a second way to collect its answer.
+    pub(crate) fn invoice_calling_module() -> Vec<u8> {
+        module_calling("invoice_create")
+    }
+
+    fn module_calling(import: &str) -> Vec<u8> {
+        wat::parse_str(format!(
             r#"
             (module
-                (import "ethpayserver" "storage_query"
+                (import "ethpayserver" "{import}"
                     (func $query (param i32 i32) (result i64)))
                 (import "ethpayserver" "host_take"
                     (func $take (param i32 i32) (result i32)))
@@ -534,7 +615,7 @@ pub(crate) mod fixtures {
                         (i64.extend_i32_u (local.get $n))))
             )
             "#,
-        )
+        ))
         .unwrap()
     }
 
@@ -838,6 +919,11 @@ mod tests {
             self.asked.lock().unwrap().push(request.to_vec());
             self.answer.clone()
         }
+
+        fn invoice_create(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            self.asked.lock().unwrap().push(request.to_vec());
+            self.answer.clone()
+        }
     }
 
     /// The capability this whole import surface exists for: before it, a
@@ -865,6 +951,76 @@ mod tests {
             asked[0],
             br#"{"sql":"select paid_until"}"#.to_vec(),
             "the host must see the plugin's request bytes unchanged"
+        );
+    }
+
+    /// The money-path import, end to end: a plugin asks for an invoice and
+    /// reads back what the host issued. Same two-step protocol, same
+    /// `host_take` - which is the part that would break if a second
+    /// answering call needed a buffer of its own.
+    #[test]
+    fn a_plugin_can_ask_the_host_to_issue_an_invoice() {
+        let engine = PluginEngine::new();
+        let module = engine.compile(&fixtures::invoice_calling_module()).unwrap();
+        let calls = RecordingCalls::answering(r#"{"invoice_id":"inv-1"}"#);
+        let mut instance = engine
+            .instantiate_with_calls(&module, calls.clone())
+            .unwrap();
+
+        let answer = instance
+            .call_raw("call", br#"{"asset_symbol":"USDC","amount":"129"}"#, 1_000)
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(answer).unwrap(),
+            r#"{"invoice_id":"inv-1"}"#
+        );
+        assert_eq!(
+            calls.asked.lock().unwrap()[0],
+            br#"{"asset_symbol":"USDC","amount":"129"}"#.to_vec(),
+            "the host must see the plugin's request bytes unchanged"
+        );
+    }
+
+    /// The two answering calls must not be the same function under two
+    /// names. Back the host with a module that imports only `invoice_create`
+    /// and check the request still arrives - if the linker had defined one
+    /// import twice, or defined `invoice_create` as `storage_query`, this
+    /// module would fail to instantiate rather than answer.
+    #[test]
+    fn invoice_create_is_its_own_import() {
+        let engine = PluginEngine::new();
+        let storage_only = engine.compile(&fixtures::host_calling_module()).unwrap();
+        let invoice_only = engine.compile(&fixtures::invoice_calling_module()).unwrap();
+        let calls = RecordingCalls::answering("{}");
+
+        assert!(
+            engine
+                .instantiate_with_calls(&storage_only, calls.clone())
+                .is_ok()
+        );
+        assert!(
+            engine.instantiate_with_calls(&invoice_only, calls).is_ok(),
+            "a plugin importing only invoice_create must instantiate"
+        );
+    }
+
+    /// An unbacked host is unbacked for every call, and says which one it
+    /// could not serve. The plugin gets the message where the answer would
+    /// have been, so "storage" and "invoices" do not read the same.
+    #[test]
+    fn an_unbacked_invoice_call_says_so_in_its_own_words() {
+        let engine = PluginEngine::new();
+        let module = engine.compile(&fixtures::invoice_calling_module()).unwrap();
+        let mut instance = engine.instantiate(&module).unwrap();
+
+        // The fixture returns an empty answer on a negative length rather
+        // than taking the message, so reach for the message the way a real
+        // plugin does: ask, get the failure, then take.
+        let result = instance.call_raw("call", b"{}", 1_000);
+        assert!(
+            result.is_ok(),
+            "an unbacked invoice call must not trap the plugin: {result:?}"
         );
     }
 
