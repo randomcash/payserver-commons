@@ -22,9 +22,34 @@ use payserver_plugin_api::PluginId;
 
 use payserver_plugin_api::page::{PageElement, Viewer};
 
+/// Who is asking for a page, and for what.
+///
+/// A struct rather than three arguments because this is a contract two
+/// repositories implement against, and the next field it needs should not
+/// change every signature that carries it.
+///
+/// Every field here is the *host's* answer, resolved from the authenticated
+/// session. None of it is anything the request claimed or the plugin chose:
+/// a plugin that could name its own viewer could ask to be treated as an
+/// admin, and a plugin that could name its own account could read another
+/// merchant's bill.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageRequest {
+    /// The page within the plugin, with no plugin id and no leading slash.
+    pub path: String,
+    pub viewer: Viewer,
+    /// The merchant asking, as the host knows them.
+    ///
+    /// `None` only where the host has no merchant identity to give - it is
+    /// not an anonymous request, because the route is authenticated before
+    /// this is built. A plugin that needs one and is handed `None` should
+    /// answer no page rather than guessing at an account.
+    pub account_id: Option<String>,
+}
+
 /// What a plugin implements to answer a page request.
 ///
-/// Returns `None` when `path` is not one of the plugin's pages - distinct
+/// Returns `None` when the path is not one of the plugin's pages - distinct
 /// from the plugin id itself being unregistered, which [`PageHost`] handles
 /// before ever calling this, and distinct again from the plugin being unable
 /// to answer at all, which is [`PageRenderError`].
@@ -36,8 +61,7 @@ pub trait PageRenderer: Send + Sync {
     /// a page.
     async fn render_page(
         &self,
-        path: &str,
-        viewer: Viewer,
+        request: &PageRequest,
     ) -> Result<Option<PageElement>, PageRenderError>;
 }
 
@@ -97,12 +121,11 @@ impl PageHost {
     pub async fn render(
         &self,
         id: &PluginId,
-        path: &str,
-        viewer: Viewer,
+        request: &PageRequest,
     ) -> Result<PageElement, PageError> {
         let renderer = Arc::clone(self.renderers.get(id).ok_or(PageError::PluginNotFound)?);
         renderer
-            .render_page(path, viewer)
+            .render_page(request)
             .await
             .map_err(PageError::Unavailable)?
             .ok_or(PageError::PageNotFound)
@@ -119,6 +142,14 @@ mod tests {
         PluginId::new(s).unwrap()
     }
 
+    fn request(path: &str, viewer: Viewer) -> PageRequest {
+        PageRequest {
+            path: path.to_string(),
+            viewer,
+            account_id: Some("acct-7".to_string()),
+        }
+    }
+
     /// A plugin that answers differently for a merchant and an admin, and
     /// asserts it is never asked to choose - it just returns what it is told
     /// to return for the `Viewer` it is handed.
@@ -128,13 +159,12 @@ mod tests {
     impl PageRenderer for RoleAwareRenderer {
         async fn render_page(
             &self,
-            path: &str,
-            viewer: Viewer,
+            request: &PageRequest,
         ) -> Result<Option<PageElement>, PageRenderError> {
-            if path != "dashboard" {
+            if request.path != "dashboard" {
                 return Ok(None);
             }
-            let text = match viewer {
+            let text = match request.viewer {
                 Viewer::Merchant => "Your balance",
                 Viewer::Admin => "All merchant balances",
             };
@@ -157,8 +187,7 @@ mod tests {
     impl PageRenderer for BrokenRenderer {
         async fn render_page(
             &self,
-            _path: &str,
-            _viewer: Viewer,
+            _request: &PageRequest,
         ) -> Result<Option<PageElement>, PageRenderError> {
             Err(PageRenderError::new("call timed out"))
         }
@@ -180,8 +209,7 @@ mod tests {
         let err = host
             .render(
                 &plugin_id("cash.random.billing"),
-                "dashboard",
-                Viewer::Merchant,
+                &request("dashboard", Viewer::Merchant),
             )
             .await
             .unwrap_err();
@@ -199,8 +227,7 @@ mod tests {
         let err = host
             .render(
                 &plugin_id("cash.random.billing"),
-                "not-a-real-page",
-                Viewer::Merchant,
+                &request("not-a-real-page", Viewer::Merchant),
             )
             .await
             .unwrap_err();
@@ -221,16 +248,14 @@ mod tests {
         let merchant_page = host
             .render(
                 &plugin_id("cash.random.billing"),
-                "dashboard",
-                Viewer::Merchant,
+                &request("dashboard", Viewer::Merchant),
             )
             .await
             .unwrap();
         let admin_page = host
             .render(
                 &plugin_id("cash.random.billing"),
-                "dashboard",
-                Viewer::Admin,
+                &request("dashboard", Viewer::Admin),
             )
             .await
             .unwrap();
@@ -251,8 +276,7 @@ mod tests {
         let err = host
             .render(
                 &plugin_id("cash.random.billing"),
-                "subscriptions",
-                Viewer::Merchant,
+                &request("subscriptions", Viewer::Merchant),
             )
             .await
             .unwrap_err();
