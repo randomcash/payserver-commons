@@ -30,7 +30,7 @@ pub use dependency::{Dependency, InvalidDependency};
 pub use failure_mode::FailureMode;
 pub use id::{InvalidPluginId, PluginId};
 pub use kind::PluginKind;
-pub use manifest::{InvalidManifest, Manifest};
+pub use manifest::{InvalidManifest, Manifest, PageDeclaration};
 pub use page::{
     Badge, Button, ButtonVariant, Card, Direction, Form, Grid, Input, Notice, PageElement, Row,
     Section, Select, Stack, Tab, Table, Tabs, Tone, Viewer,
