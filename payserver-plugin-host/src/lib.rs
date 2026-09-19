@@ -43,7 +43,7 @@ pub use host::{FilterOutcome, PluginHost, PluginHostError, PluginStatusSnapshot}
 // plugin constructs one of these, so the types have to live in the crate a
 // plugin depends on; this crate only renders them. Re-exported so a host
 // still reaches everything it needs through one import.
-pub use pages::{PageError, PageHost, PageRenderer};
+pub use pages::{PageError, PageHost, PageRenderError, PageRenderer};
 pub use payserver_plugin_api::page;
 // Kept at this crate's root as well as under `page`: a host that renders a
 // descriptor names these two constantly, and removing them from here would
