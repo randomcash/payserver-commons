@@ -265,6 +265,12 @@ mod tests {
         round_trip(&PageElement::Button(Button {
             label: "Refresh".to_string(),
             variant: ButtonVariant::Outline,
+            href: None,
+        }));
+        round_trip(&PageElement::Button(Button {
+            label: "Pay now".to_string(),
+            variant: ButtonVariant::Primary,
+            href: Some("/checkout/9f3a".to_string()),
         }));
         round_trip(&PageElement::Table(Table {
             headers: vec!["Chain".to_string(), "Balance".to_string()],
@@ -364,6 +370,7 @@ mod tests {
             PageElement::Button(Button {
                 label: "Go".to_string(),
                 variant: ButtonVariant::Primary,
+                href: None,
             })
         );
     }
