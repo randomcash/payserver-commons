@@ -1,17 +1,23 @@
 //! Host-side page resolution for `GET /plugins/{id}/pages/{path}`.
 //!
-//! No wasmtime runtime has landed on `main` yet (the runtime and the route
-//! mounting that would back a real plugin exist only on other, unmerged
-//! branches at the time of writing), so there is no plugin code this host
-//! can actually invoke. [`PageRenderer`] is the seam a real plugin will
-//! implement once that runtime exists; production wiring starts with an
-//! empty [`PageHost`], so every request 404s until a renderer is registered.
-//! That is correct behaviour today, not a stub masking a bug - there is
-//! nothing to render.
+//! A plugin cannot ship Rust into an already-compiled client, so it ships a
+//! [`PageElement`] tree and the client draws it. This module is the host
+//! half: which plugin answers for an id, and what happens when it cannot.
+//!
+//! # Why rendering is async
+//!
+//! Because a real renderer runs wasm. A plugin's page comes from calling an
+//! export on its instance, which goes through `spawn_blocking` and is
+//! therefore a future - and a sync trait would leave a caller inside an
+//! async handler with nowhere to put it. Blocking on a runtime thread to
+//! keep the signature tidy is how an executor deadlocks, so the seam is
+//! async and the cost is an `async_trait` box per page request, which is
+//! nothing beside the wasm call it precedes.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use payserver_plugin_api::PluginId;
 
 use payserver_plugin_api::page::{PageElement, Viewer};
@@ -20,18 +26,48 @@ use payserver_plugin_api::page::{PageElement, Viewer};
 ///
 /// Returns `None` when `path` is not one of the plugin's pages - distinct
 /// from the plugin id itself being unregistered, which [`PageHost`] handles
-/// before ever calling this.
+/// before ever calling this, and distinct again from the plugin being unable
+/// to answer at all, which is [`PageRenderError`].
+#[async_trait]
 pub trait PageRenderer: Send + Sync {
-    fn render_page(&self, path: &str, viewer: Viewer) -> Option<PageElement>;
+    /// # Errors
+    /// The plugin exists and claims the page, but could not produce it -
+    /// it trapped, timed out, is disabled, or answered something that is not
+    /// a page.
+    async fn render_page(
+        &self,
+        path: &str,
+        viewer: Viewer,
+    ) -> Result<Option<PageElement>, PageRenderError>;
+}
+
+/// A renderer had the request and could not answer it. Carries the host's
+/// own message; a caller decides how much of it an end user sees.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
+pub struct PageRenderError(pub String);
+
+impl PageRenderError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
 }
 
 /// Why a page request was refused.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+///
+/// Three outcomes, not two, and the third is the one worth keeping separate:
+/// a plugin that trapped is not a page that does not exist. Collapsing
+/// `Unavailable` into `PageNotFound` would answer 404 for a billing page
+/// that is merely broken, and "there is no such page" is a much more
+/// convincing lie than "this did not work".
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PageError {
     #[error("plugin not found")]
     PluginNotFound,
     #[error("page not found")]
     PageNotFound,
+    #[error("the plugin could not render this page: {0}")]
+    Unavailable(PageRenderError),
 }
 
 /// The host's page-rendering registry, keyed by plugin id.
@@ -58,15 +94,17 @@ impl PageHost {
     /// plugin decides what to return for the [`Viewer`] it is handed, and
     /// this host never substitutes its own judgment for the plugin's - it
     /// only decides who is asking, not what they should see.
-    pub fn render(
+    pub async fn render(
         &self,
         id: &PluginId,
         path: &str,
         viewer: Viewer,
     ) -> Result<PageElement, PageError> {
-        let renderer = self.renderers.get(id).ok_or(PageError::PluginNotFound)?;
+        let renderer = Arc::clone(self.renderers.get(id).ok_or(PageError::PluginNotFound)?);
         renderer
             .render_page(path, viewer)
+            .await
+            .map_err(PageError::Unavailable)?
             .ok_or(PageError::PageNotFound)
     }
 }
@@ -86,22 +124,43 @@ mod tests {
     /// to return for the `Viewer` it is handed.
     struct RoleAwareRenderer;
 
+    #[async_trait]
     impl PageRenderer for RoleAwareRenderer {
-        fn render_page(&self, path: &str, viewer: Viewer) -> Option<PageElement> {
+        async fn render_page(
+            &self,
+            path: &str,
+            viewer: Viewer,
+        ) -> Result<Option<PageElement>, PageRenderError> {
             if path != "dashboard" {
-                return None;
+                return Ok(None);
             }
             let text = match viewer {
                 Viewer::Merchant => "Your balance",
                 Viewer::Admin => "All merchant balances",
             };
-            Some(PageElement::Card(Card {
+            Ok(Some(PageElement::Card(Card {
                 title: None,
                 children: vec![PageElement::Badge(Badge {
                     text: text.to_string(),
                     tone: Tone::Info,
                 })],
-            }))
+            })))
+        }
+    }
+
+    /// A renderer that claims every page and answers none of them, so the
+    /// difference between "no such page" and "this broke" has something to
+    /// be tested against.
+    struct BrokenRenderer;
+
+    #[async_trait]
+    impl PageRenderer for BrokenRenderer {
+        async fn render_page(
+            &self,
+            _path: &str,
+            _viewer: Viewer,
+        ) -> Result<Option<PageElement>, PageRenderError> {
+            Err(PageRenderError::new("call timed out"))
         }
     }
 
@@ -115,8 +174,8 @@ mod tests {
         &badge.text
     }
 
-    #[test]
-    fn refuses_an_unregistered_plugin() {
+    #[tokio::test]
+    async fn refuses_an_unregistered_plugin() {
         let host = PageHost::new();
         let err = host
             .render(
@@ -124,12 +183,13 @@ mod tests {
                 "dashboard",
                 Viewer::Merchant,
             )
+            .await
             .unwrap_err();
         assert_eq!(err, PageError::PluginNotFound);
     }
 
-    #[test]
-    fn refuses_a_path_the_plugin_does_not_serve() {
+    #[tokio::test]
+    async fn refuses_a_path_the_plugin_does_not_serve() {
         let mut host = PageHost::new();
         host.register(
             plugin_id("cash.random.billing"),
@@ -142,6 +202,7 @@ mod tests {
                 "not-a-real-page",
                 Viewer::Merchant,
             )
+            .await
             .unwrap_err();
         assert_eq!(err, PageError::PageNotFound);
     }
@@ -149,8 +210,8 @@ mod tests {
     /// Ticket requirement: a page requested by a merchant and by an admin
     /// can differ, and the plugin sees the role it was given rather than one
     /// it chose - `PageHost` never inspects or rewrites what comes back.
-    #[test]
-    fn the_same_plugin_and_path_can_differ_by_viewer() {
+    #[tokio::test]
+    async fn the_same_plugin_and_path_can_differ_by_viewer() {
         let mut host = PageHost::new();
         host.register(
             plugin_id("cash.random.billing"),
@@ -163,6 +224,7 @@ mod tests {
                 "dashboard",
                 Viewer::Merchant,
             )
+            .await
             .unwrap();
         let admin_page = host
             .render(
@@ -170,10 +232,39 @@ mod tests {
                 "dashboard",
                 Viewer::Admin,
             )
+            .await
             .unwrap();
 
         assert_eq!(badge_text(&merchant_page), "Your balance");
         assert_eq!(badge_text(&admin_page), "All merchant balances");
         assert_ne!(merchant_page, admin_page);
+    }
+
+    /// A plugin that cannot answer must not be reported as a page that does
+    /// not exist. Delete `PageError::Unavailable` and fold it into
+    /// `PageNotFound` and this is the test that goes red.
+    #[tokio::test]
+    async fn a_renderer_that_fails_is_not_a_missing_page() {
+        let mut host = PageHost::new();
+        host.register(plugin_id("cash.random.billing"), Arc::new(BrokenRenderer));
+
+        let err = host
+            .render(
+                &plugin_id("cash.random.billing"),
+                "subscriptions",
+                Viewer::Merchant,
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            err,
+            PageError::Unavailable(PageRenderError::new("call timed out"))
+        );
+        assert_ne!(err, PageError::PageNotFound);
+        assert!(
+            err.to_string().contains("call timed out"),
+            "the host's own reason must survive for an operator to read: {err}"
+        );
     }
 }
