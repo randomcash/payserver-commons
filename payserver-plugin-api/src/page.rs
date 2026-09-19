@@ -7,8 +7,18 @@
 //! primitives stack, row, grid and section - so there is nothing the
 //! merchant dashboard renders that a plugin page cannot.
 //!
-//! Static rendering only: no actions, no interactivity. A button in this
-//! tree renders and does nothing yet.
+//! Static rendering, with one way out. There is no action system: a plugin
+//! cannot make a button POST back into itself, and adding one means CSRF,
+//! idempotency and an action-routing design that the money path deserves
+//! more care over than a first slice can give it.
+//!
+//! What a button can do is *link*. That is enough for the case that
+//! actually blocks revenue - a plugin issues an invoice through the host's
+//! `invoice_create` import and points the merchant at the checkout the host
+//! already serves - without inventing a second way to move money. A button
+//! with no `href` still renders and still does nothing, and the client is
+//! expected to draw it disabled rather than leaving a control that looks
+//! live and is not.
 
 use serde::{Deserialize, Serialize};
 
@@ -114,6 +124,21 @@ pub struct Button {
     pub label: String,
     #[serde(default)]
     pub variant: ButtonVariant,
+    /// Where the button goes, if anywhere.
+    ///
+    /// A path on this host, not a URL: the server does not reliably know its
+    /// own external origin, and a plugin that rendered a wrong absolute URL
+    /// would send a paying merchant somewhere that is not this instance. A
+    /// client must treat a value that is not a host-relative path as no link
+    /// at all - a plugin is not a trusted source of somewhere to send a
+    /// merchant with money in hand.
+    ///
+    /// `None` is a button that does nothing, and a client must draw it
+    /// disabled. A control that looks live and is not is worse than one that
+    /// is visibly unavailable, and this vocabulary has no other way to say
+    /// "not yet".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub href: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
