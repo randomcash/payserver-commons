@@ -6,7 +6,7 @@ use std::str::FromStr;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::{Dependency, FailureMode, PluginId, PluginKind};
+use crate::{Dependency, FailureMode, PluginId, PluginKind, PluginSlug};
 
 /// A parsed and validated plugin manifest.
 ///
@@ -24,6 +24,18 @@ pub struct Manifest {
     /// it.
     pub failure_mode: Option<FailureMode>,
     pub ui_schema: Option<u32>,
+    /// The name this plugin's pages live under in a URL.
+    ///
+    /// Separate from `id`, which stays the identity: reverse-DNS, unique by
+    /// construction, and what the schema, artifact and grants are keyed on.
+    /// `cash.random.billing` is the right thing to key a database schema on
+    /// and the wrong thing to put in front of a person, so a plugin that
+    /// serves pages names itself something readable as well - `billing`.
+    ///
+    /// `None` for a plugin that serves no pages. A plugin that declares
+    /// pages and no slug has nowhere for them to live, which
+    /// [`Manifest::from_str`] refuses rather than inventing one from the id.
+    pub slug: Option<PluginSlug>,
     /// The pages this plugin serves, in the order it wants them listed.
     ///
     /// Declared rather than discovered, because the client has to build
@@ -77,6 +89,8 @@ struct RawManifest {
     #[serde(default)]
     ui_schema: Option<u32>,
     #[serde(default)]
+    slug: Option<PluginSlug>,
+    #[serde(default)]
     pages: Vec<PageDeclaration>,
 }
 
@@ -95,6 +109,18 @@ impl FromStr for Manifest {
             raw.failure_mode
         };
 
+        // Pages need somewhere to live. Deriving a slug from the id would
+        // give `cash.random.billing` a URL of `cash-random-billing`, which is
+        // the ugliness this field exists to remove, and a plugin author would
+        // not learn they had to choose until they saw it in an address bar.
+        if !raw.pages.is_empty() && raw.slug.is_none() {
+            return Err(InvalidManifest(
+                "this plugin declares pages but no `slug`; pages are served under \
+                 the slug, so one is required"
+                    .to_string(),
+            ));
+        }
+
         Ok(Manifest {
             id: raw.id,
             version: raw.version,
@@ -102,6 +128,7 @@ impl FromStr for Manifest {
             kind: raw.kind,
             failure_mode,
             ui_schema: raw.ui_schema,
+            slug: raw.slug,
             pages: raw.pages,
         })
     }
@@ -216,6 +243,7 @@ mod tests {
             version = "0.1.0"
             kind = "filter"
             ui_schema = 1
+            slug = "billing"
 
             [[pages]]
             path = "subscription"
@@ -239,5 +267,67 @@ mod tests {
             "a page that says nothing is offered to everyone"
         );
         assert!(manifest.pages[1].admin_only);
+    }
+
+    #[test]
+    fn a_plugin_with_pages_must_name_a_slug() {
+        let err = r#"
+            id = "cash.random.billing"
+            version = "0.1.0"
+            kind = "filter"
+
+            [[pages]]
+            path = "subscriptions"
+            label = "Subscriptions"
+        "#
+        .parse::<Manifest>()
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("slug"),
+            "the refusal must name what is missing: {err}"
+        );
+
+        let ok: Manifest = r#"
+            id = "cash.random.billing"
+            version = "0.1.0"
+            kind = "filter"
+            slug = "billing"
+
+            [[pages]]
+            path = "subscriptions"
+            label = "Subscriptions"
+        "#
+        .parse()
+        .unwrap();
+        assert_eq!(ok.slug.unwrap().as_str(), "billing");
+    }
+
+    /// A plugin that serves no pages needs no URL name, and requiring one
+    /// would make every action plugin invent a word it never uses.
+    #[test]
+    fn a_plugin_without_pages_needs_no_slug() {
+        let manifest: Manifest = r#"
+            id = "cash.random.quiet"
+            version = "0.1.0"
+            kind = "action"
+        "#
+        .parse()
+        .unwrap();
+        assert!(manifest.slug.is_none());
+    }
+
+    /// The slug is validated by the manifest parser, so a reserved or
+    /// malformed one is refused before the plugin is ever registered.
+    #[test]
+    fn a_reserved_slug_is_refused_at_parse_time() {
+        let err = r#"
+            id = "cash.random.sneaky"
+            version = "0.1.0"
+            kind = "action"
+            slug = "invoices"
+        "#
+        .parse::<Manifest>()
+        .unwrap_err();
+        assert!(err.to_string().contains("reserved"), "{err}");
     }
 }
