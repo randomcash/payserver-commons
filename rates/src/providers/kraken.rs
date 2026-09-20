@@ -57,6 +57,71 @@ impl KrakenRateProvider {
         }
     }
 
+    /// A rate of exactly one, for the cases that need no exchange at all.
+    fn unity(from: &str, to: &str) -> ExchangeRate {
+        ExchangeRate {
+            from: from.to_string(),
+            to: to.to_string(),
+            rate: Decimal::ONE,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// The last traded price for one Kraken pair.
+    ///
+    /// Separated from [`get_rate`](RateProvider::get_rate) so the pair can be
+    /// asked for twice with different orderings, and so an unknown pair is a
+    /// distinguishable error rather than something the caller has to parse out
+    /// of a message.
+    async fn fetch_price(&self, pair_name: &str) -> Result<Decimal, RateError> {
+        let url = format!("{}/Ticker?pair={}", self.api_url, pair_name);
+        tracing::debug!(pair = %pair_name, "Fetching rate from Kraken");
+
+        let response: KrakenTickerResponse = self.client.get(&url).send().await?.json().await?;
+
+        if !response.error.is_empty() {
+            let error_msg = response.error.join(", ");
+            if error_msg.contains("Unknown asset pair") {
+                // The pair, not the question. The caller knows which currencies
+                // it asked about and may be about to ask the other way round.
+                return Err(RateError::UnsupportedPair {
+                    from: pair_name.to_string(),
+                    to: String::new(),
+                });
+            }
+            return Err(RateError::ProviderError(error_msg));
+        }
+
+        let result = response
+            .result
+            .ok_or_else(|| RateError::InvalidResponse("Missing result in response".to_string()))?;
+
+        // Kraken answers with its own key for the pair, which is often not the
+        // one asked for - `XETHZUSD` for `ETHUSD`. One pair was requested, so
+        // the single entry is the answer whatever it is called.
+        let ticker = result
+            .values()
+            .next()
+            .ok_or_else(|| RateError::InvalidResponse("No ticker data in response".to_string()))?;
+
+        let price_str = ticker
+            .c
+            .first()
+            .ok_or_else(|| RateError::InvalidResponse("No price in ticker data".to_string()))?;
+
+        let price: Decimal = price_str
+            .parse()
+            .map_err(|e| RateError::InvalidResponse(format!("Invalid price format: {e}")))?;
+
+        if price.is_zero() {
+            return Err(RateError::InvalidResponse(
+                "Received zero price from exchange".to_string(),
+            ));
+        }
+
+        Ok(price)
+    }
+
     /// Build the Kraken pair name for a trading pair.
     ///
     /// Kraken pairs are typically CRYPTO/FIAT (e.g., ETHUSD, XBTUSD).
@@ -84,101 +149,66 @@ struct KrakenTickerData {
 #[async_trait]
 impl RateProvider for KrakenRateProvider {
     async fn get_rate(&self, from: &str, to: &str) -> Result<ExchangeRate, RateError> {
-        // Normalize symbols
         let from_upper = from.to_uppercase();
         let to_upper = to.to_uppercase();
 
-        // If same currency, rate is 1
         if from_upper == to_upper {
-            return Ok(ExchangeRate {
-                from: from.to_string(),
-                to: to.to_string(),
-                rate: Decimal::ONE,
-                timestamp: Utc::now(),
-            });
+            return Ok(Self::unity(from, to));
         }
 
-        // Check if this is a crypto-to-same-crypto conversion
         let from_normalized = Self::to_kraken_symbol(&from_upper);
         let to_normalized = Self::to_kraken_symbol(&to_upper);
         if from_normalized == to_normalized {
-            return Ok(ExchangeRate {
-                from: from.to_string(),
-                to: to.to_string(),
-                rate: Decimal::ONE,
-                timestamp: Utc::now(),
-            });
+            return Ok(Self::unity(from, to));
         }
 
-        // Determine if we need to invert the rate
-        // Kraken typically has pairs like ETHUSD, BTCUSD (crypto/fiat)
-        // If from is fiat (USD, EUR) and to is crypto, we query CRYPTO/FIAT and invert
-        let is_fiat_to_crypto = crate::is_fiat_currency(&from_upper);
-
-        let (pair_name, needs_invert) = if is_fiat_to_crypto {
-            // Query TO/FROM (e.g., ETHUSD for USD->ETH) and invert
-            (Self::build_pair_name(from, to), true)
+        // Kraken lists one canonical pair per market, as BASE+QUOTE, and
+        // prices the base in the quote: ETHUSD, ETHUSDC, ETHXBT. Which side of
+        // *our* question is the quote is not something the symbols tell us, so
+        // there are two orderings and only one of them exists.
+        //
+        // The first attempt is the ordering this provider has always used, so
+        // nothing that resolves today resolves differently. The second is the
+        // fallback that was missing, and it is not an exotic case: a plan
+        // priced in USDC asking for ETH built `USDCETH`, which Kraken does not
+        // list, and fell through to a provider that quotes crypto against fiat
+        // only and could not answer either. Every ETH payment then vanished
+        // from that merchant's settled volume.
+        let direct = format!("{from_normalized}{to_normalized}");
+        let reversed = Self::build_pair_name(from, to);
+        let attempts = if crate::is_fiat_currency(&from_upper) {
+            [(reversed, true), (direct, false)]
         } else {
-            // Query FROM/TO directly
-            (format!("{}{}", from_normalized, to_normalized), false)
+            [(direct, false), (reversed, true)]
         };
 
-        let url = format!("{}/Ticker?pair={}", self.api_url, pair_name);
-
-        tracing::debug!(
-            from = %from,
-            to = %to,
-            pair = %pair_name,
-            needs_invert = %needs_invert,
-            "Fetching rate from Kraken"
-        );
-
-        let response: KrakenTickerResponse = self.client.get(&url).send().await?.json().await?;
-
-        // Check for API errors
-        if !response.error.is_empty() {
-            let error_msg = response.error.join(", ");
-            if error_msg.contains("Unknown asset pair") {
-                return Err(RateError::UnsupportedPair {
-                    from: from.to_string(),
-                    to: to.to_string(),
-                });
+        let mut found = None;
+        for (pair_name, needs_invert) in &attempts {
+            match self.fetch_price(pair_name).await {
+                Ok(price) => {
+                    found = Some((price, *needs_invert));
+                    break;
+                }
+                // Only an unknown pair is worth trying the other way round. A
+                // transport failure or a malformed body says nothing about the
+                // ordering, and retrying it would double the load on a
+                // provider that is already struggling.
+                Err(RateError::UnsupportedPair { .. }) => continue,
+                Err(e) => return Err(e),
             }
-            return Err(RateError::ProviderError(error_msg));
         }
 
-        // Extract ticker data
-        let result = response
-            .result
-            .ok_or_else(|| RateError::InvalidResponse("Missing result in response".to_string()))?;
+        let Some((price, needs_invert)) = found else {
+            return Err(RateError::UnsupportedPair {
+                from: from.to_string(),
+                to: to.to_string(),
+            });
+        };
 
-        // Kraken returns data with a key that might differ from our query
-        // (e.g., "XETHZUSD" instead of "ETHUSD")
-        let ticker = result
-            .values()
-            .next()
-            .ok_or_else(|| RateError::InvalidResponse("No ticker data in response".to_string()))?;
-
-        // Use the last trade price
-        let price_str = ticker
-            .c
-            .first()
-            .ok_or_else(|| RateError::InvalidResponse("No price in ticker data".to_string()))?;
-
-        let price: Decimal = price_str
-            .parse()
-            .map_err(|e| RateError::InvalidResponse(format!("Invalid price format: {}", e)))?;
-
-        // Validate price is positive
-        if price.is_zero() {
-            return Err(RateError::InvalidResponse(
-                "Received zero price from exchange".to_string(),
-            ));
-        }
-
-        // Calculate final rate
+        // `1 from = rate to`. The ticker prices the base in the quote, so when
+        // the pair we found is the reverse of the question, the answer is its
+        // reciprocal.
         let rate = if needs_invert {
-            // 1 USD = 1/price ETH (if price is ETH/USD)
             Decimal::ONE / price
         } else {
             price

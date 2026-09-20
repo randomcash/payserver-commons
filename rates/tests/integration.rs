@@ -59,6 +59,121 @@ async fn test_kraken_rate_parsing() {
     assert_eq!(rate.rate, Decimal::new(245678000, 5)); // 2456.78000
 }
 
+/// Real Kraken JSON for the ETHUSDC ticker - the pair that exists.
+const KRAKEN_ETHUSDC_RESPONSE: &str = r#"{
+    "error": [],
+    "result": {
+        "ETHUSDC": {
+            "a": ["2636.78000", "1", "1.000"],
+            "b": ["2636.77000", "1", "1.000"],
+            "c": ["2636.78000", "0.10000000"],
+            "v": ["1.0", "1.0"],
+            "p": ["2636.0", "2636.0"],
+            "t": [1, 1],
+            "l": ["2600.0", "2600.0"],
+            "h": ["2700.0", "2700.0"],
+            "o": "2630.0"
+        }
+    }
+}"#;
+
+/// A plan priced in a stablecoin has to be able to price an asset.
+///
+/// This is the bug as it was found in production. `USDC` is not fiat, so the
+/// pair was built as `USDCETH` - which Kraken does not list; it lists
+/// `ETHUSDC` - and the request fell through to a provider that quotes crypto
+/// against fiat only and could not answer either. The visible symptom was
+/// every ETH payment disappearing from a merchant's settled volume, with the
+/// only trace a warning nobody was reading.
+#[tokio::test]
+async fn kraken_finds_a_crypto_pair_listed_the_other_way_round() {
+    let server = MockServer::start().await;
+
+    // The ordering the provider tries first for a non-fiat source. Kraken
+    // does not have it, and says so exactly as the real API does.
+    Mock::given(method("GET"))
+        .and(path("/Ticker"))
+        .and(query_param("pair", "USDCETH"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(KRAKEN_UNKNOWN_PAIR))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/Ticker"))
+        .and(query_param("pair", "ETHUSDC"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(KRAKEN_ETHUSDC_RESPONSE))
+        .mount(&server)
+        .await;
+
+    let provider = KrakenRateProvider::new(Some(server.uri()));
+    let rate = provider
+        .get_rate("USDC", "ETH")
+        .await
+        .expect("a pair Kraken lists the other way round must still resolve, not fall through");
+
+    // Inverted: the ticker prices ETH in USDC, and the question was how much
+    // ETH one USDC buys.
+    let expected = Decimal::ONE / Decimal::new(263678000, 5);
+    assert_eq!(rate.rate, expected);
+    assert_eq!(rate.from, "USDC");
+    assert_eq!(rate.to, "ETH");
+}
+
+/// Neither ordering exists: still an unsupported pair, not a hang or a
+/// mis-signalled provider error. The fallback provider needs this to stay a
+/// clean `UnsupportedPair` so it knows to try.
+#[tokio::test]
+async fn kraken_reports_a_pair_it_has_in_neither_ordering_as_unsupported() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/Ticker"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(KRAKEN_UNKNOWN_PAIR))
+        .mount(&server)
+        .await;
+
+    let provider = KrakenRateProvider::new(Some(server.uri()));
+    let err = provider.get_rate("NOPE", "ZILCH").await.unwrap_err();
+
+    assert!(
+        matches!(err, RateError::UnsupportedPair { .. }),
+        "a pair in neither ordering must report as unsupported, got {err:?}"
+    );
+}
+
+/// A transport or parse failure must not be retried the other way round. It
+/// says nothing about the ordering, and asking again doubles the load on a
+/// provider that is already failing.
+#[tokio::test]
+async fn kraken_does_not_retry_the_other_ordering_on_a_provider_error() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/Ticker"))
+        .and(query_param("pair", "USDCETH"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(r#"{"error":["EGeneral:Temporary lockout"],"result":null}"#),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Deliberately mounted and deliberately never expected to be hit.
+    Mock::given(method("GET"))
+        .and(path("/Ticker"))
+        .and(query_param("pair", "ETHUSDC"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(KRAKEN_ETHUSDC_RESPONSE))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let provider = KrakenRateProvider::new(Some(server.uri()));
+    let err = provider.get_rate("USDC", "ETH").await.unwrap_err();
+    assert!(matches!(err, RateError::ProviderError(_)), "got {err:?}");
+    // `expect(0)` above is verified when the server drops.
+}
+
 #[tokio::test]
 async fn test_kraken_fiat_to_crypto_inverts() {
     let server = MockServer::start().await;
