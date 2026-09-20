@@ -80,7 +80,20 @@ pub struct UpdateServerSettingsRequest {
     pub default_confirmations: i32,
     pub invoice_expiry_minutes: i32,
     pub rate_limit_rpm: i32,
-    pub enabled_chain_ids: Vec<ChainId>,
+    /// Absent leaves the stored list alone; a value replaces it.
+    ///
+    /// Optional for the same reason `billing_store_id` is, and with a sharper
+    /// consequence. A stored `enabled_chain_ids` is authoritative: once one
+    /// exists, every chain not in it is refused. And `GET` answers with
+    /// compiled-in *mainnet* defaults when no row exists, so a client that
+    /// round-trips whatever it was given writes a list nobody chose - on a
+    /// testnet deployment that list has no Sepolia in it, and the instance
+    /// stops accepting the only chain it watches.
+    ///
+    /// So a client that is not changing chains must not mention them. One
+    /// that is sends the whole list, which is still a replace.
+    #[serde(default, deserialize_with = "present_option")]
+    pub enabled_chain_ids: Option<Vec<ChainId>>,
     /// Absent leaves it alone; `null` clears it; a value sets it.
     ///
     /// A double option, and it earns its awkwardness. This endpoint replaces
@@ -139,5 +152,44 @@ mod tests {
             absent.billing_store_id, cleared.billing_store_id,
             "if these two ever compare equal, an older client wipes the billing store on save"
         );
+    }
+
+    /// The case this exists to prevent: a client saving some *other* setting
+    /// must not silently rewrite the chain list it was handed by `GET`.
+    ///
+    /// On a testnet deployment that list is the compiled-in mainnet defaults,
+    /// which contain no Sepolia - so the round trip would leave the instance
+    /// refusing the only chain it watches, from a save nobody thought was
+    /// about chains.
+    #[test]
+    fn a_save_that_does_not_mention_chains_leaves_them_alone() {
+        let without: UpdateServerSettingsRequest = serde_json::from_str(
+            r#"{"default_confirmations":3,"invoice_expiry_minutes":60,"rate_limit_rpm":100}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            without.enabled_chain_ids, None,
+            "absent must mean 'not changing this', not 'set it to nothing'"
+        );
+
+        let cleared: UpdateServerSettingsRequest = serde_json::from_str(
+            r#"{"default_confirmations":3,"invoice_expiry_minutes":60,"rate_limit_rpm":100,"enabled_chain_ids":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            cleared.enabled_chain_ids,
+            Some(Vec::new()),
+            "an explicit empty list is a deliberate choice and must survive as one"
+        );
+        assert_ne!(
+            without.enabled_chain_ids, cleared.enabled_chain_ids,
+            "if these compare equal, saving any setting rewrites the chain list"
+        );
+
+        let set: UpdateServerSettingsRequest = serde_json::from_str(
+            r#"{"default_confirmations":3,"invoice_expiry_minutes":60,"rate_limit_rpm":100,"enabled_chain_ids":["eip155:11155111"]}"#,
+        )
+        .unwrap();
+        assert_eq!(set.enabled_chain_ids, Some(vec![ChainId::evm(11155111)]));
     }
 }
