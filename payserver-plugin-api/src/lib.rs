@@ -33,8 +33,8 @@ pub use id::{InvalidPluginId, PluginId};
 pub use kind::PluginKind;
 pub use manifest::{InvalidManifest, Manifest, PageDeclaration, PagePlacement};
 pub use page::{
-    Badge, Button, ButtonVariant, Card, Direction, Form, Grid, Input, Notice, PageElement, Row,
-    Section, Select, Stack, Tab, Table, Tabs, Tone, Viewer,
+    Badge, Button, ButtonVariant, Card, Direction, Field, Fields, Form, Grid, Input, Notice,
+    PageElement, Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone, Viewer,
 };
 pub use slug::{InvalidSlug, PluginSlug, RESERVED_SLUGS};
 
