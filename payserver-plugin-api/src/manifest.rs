@@ -79,6 +79,33 @@ impl PagePlacement {
     }
 }
 
+/// The icon a plugin's page shows in navigation.
+///
+/// A fixed vocabulary, not markup and not a URL: an `<svg>` from a plugin
+/// would be a script-injection surface rendered inside the host's own
+/// interface, and a URL would let a plugin phone home on every page load and
+/// leak which merchant is looking at what. [`Plug`](Self::Plug) is also the
+/// fallback for a value this build does not recognize - a manifest written
+/// against a newer vocabulary must still parse, just with a plainer icon
+/// than its author picked.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PageIcon {
+    Card,
+    Coins,
+    Chart,
+    Users,
+    Shield,
+    Bell,
+    Key,
+    Tag,
+    /// The generic icon: the default when a manifest says nothing, and the
+    /// landing spot for a value this build does not recognize.
+    #[default]
+    #[serde(other)]
+    Plug,
+}
+
 /// One page a plugin says it serves.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PageDeclaration {
@@ -92,6 +119,12 @@ pub struct PageDeclaration {
     /// caller's own account should be.
     #[serde(default)]
     pub placement: PagePlacement,
+    /// The icon to show beside `label` in navigation.
+    ///
+    /// Defaults to [`PageIcon::Plug`], the same generic icon every page used
+    /// before this field existed.
+    #[serde(default)]
+    pub icon: PageIcon,
     /// Whether only a server admin should be offered it.
     ///
     /// Implied by [`PagePlacement::AdminSettings`], so a page placed there
@@ -353,6 +386,67 @@ mod tests {
         .parse()
         .unwrap();
         assert!(manifest.slug.is_none());
+    }
+
+    /// A manifest written before this field existed must keep parsing, with
+    /// the same icon every page already showed.
+    #[test]
+    fn a_page_with_no_icon_defaults_to_plug() {
+        let manifest: Manifest = r#"
+            id = "cash.random.billing"
+            version = "0.1.0"
+            kind = "filter"
+            slug = "billing"
+
+            [[pages]]
+            path = "subscription"
+            label = "Subscription"
+        "#
+        .parse()
+        .unwrap();
+
+        assert_eq!(manifest.pages[0].icon, PageIcon::Plug);
+    }
+
+    #[test]
+    fn a_page_can_declare_an_icon() {
+        let manifest: Manifest = r#"
+            id = "cash.random.billing"
+            version = "0.1.0"
+            kind = "filter"
+            slug = "billing"
+
+            [[pages]]
+            path = "subscription"
+            label = "Subscription"
+            icon = "card"
+        "#
+        .parse()
+        .unwrap();
+
+        assert_eq!(manifest.pages[0].icon, PageIcon::Card);
+    }
+
+    /// A newer plugin may declare an icon this build has never heard of. It
+    /// must still parse, degrading to the generic icon rather than refusing
+    /// the whole manifest over one field a person will never see fail.
+    #[test]
+    fn an_unrecognized_icon_falls_back_to_plug() {
+        let manifest: Manifest = r#"
+            id = "cash.random.billing"
+            version = "0.1.0"
+            kind = "filter"
+            slug = "billing"
+
+            [[pages]]
+            path = "subscription"
+            label = "Subscription"
+            icon = "rocket"
+        "#
+        .parse()
+        .unwrap();
+
+        assert_eq!(manifest.pages[0].icon, PageIcon::Plug);
     }
 
     /// The slug is validated by the manifest parser, so a reserved or
