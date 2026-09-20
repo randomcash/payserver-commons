@@ -53,6 +53,21 @@ pub enum Viewer {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PageElement {
     Card(Card),
+    /// Plain prose. The thing this vocabulary was missing.
+    ///
+    /// Without it every piece of text had to be a `Badge`, so field labels
+    /// and values rendered as coloured pills - which looked nothing like the
+    /// host's own screens and made a plugin page identifiable at a glance as
+    /// the odd one out.
+    Text(Text),
+    /// Label-and-value pairs, the shape most of a detail page actually is.
+    ///
+    /// A distinct element rather than a two-column `Table` because a client
+    /// should be free to draw it as a definition list, a two-column grid or
+    /// stacked rows depending on width - and because a table of two cells per
+    /// row, with headers a reader does not need, is a heavier thing than what
+    /// is being said.
+    Fields(Fields),
     Badge(Badge),
     Button(Button),
     Table(Table),
@@ -110,6 +125,42 @@ pub struct Card {
     pub title: Option<String>,
     #[serde(default)]
     pub children: Vec<PageElement>,
+}
+
+/// How prominent a piece of text is.
+///
+/// Not a font size: the host picks the sizes. This says what the text is
+/// doing, so a client can stay consistent with its own screens.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextStyle {
+    /// Ordinary prose.
+    #[default]
+    Body,
+    /// Quieter than body - a hint, a caveat, a unit.
+    Muted,
+    /// A figure worth reading first: an amount, a count.
+    Strong,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Text {
+    pub text: String,
+    #[serde(default)]
+    pub style: TextStyle,
+}
+
+/// One label and its value.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Field {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Fields {
+    #[serde(default)]
+    pub fields: Vec<Field>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -373,5 +424,40 @@ mod tests {
                 href: None,
             })
         );
+    }
+
+    /// The gap these two close. Before `Text` and `Fields`, a plugin with a
+    /// label and a value had only `Badge` to say it with, so detail pages
+    /// rendered as rows of coloured pills - instantly identifiable as not
+    /// part of the host's own interface.
+    #[test]
+    fn prose_and_label_value_pairs_do_not_have_to_be_badges() {
+        round_trip(&PageElement::Text(Text {
+            text: "Your subscription starts once the first invoice is paid.".to_string(),
+            style: TextStyle::Body,
+        }));
+        round_trip(&PageElement::Fields(Fields {
+            fields: vec![
+                Field {
+                    label: "Price".to_string(),
+                    value: "0.50 USDC every 30 days".to_string(),
+                },
+                Field {
+                    label: "Renews".to_string(),
+                    value: "18 October 2026".to_string(),
+                },
+            ],
+        }));
+    }
+
+    /// Both default, so a plugin that says only what it means gets sensible
+    /// output, and an older plugin's JSON keeps parsing.
+    #[test]
+    fn text_defaults_to_body_and_fields_to_empty() {
+        let text: Text = serde_json::from_str(r#"{"text":"hello"}"#).unwrap();
+        assert_eq!(text.style, TextStyle::Body);
+
+        let fields: Fields = serde_json::from_str("{}").unwrap();
+        assert!(fields.fields.is_empty());
     }
 }
