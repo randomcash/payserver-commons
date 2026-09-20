@@ -169,6 +169,7 @@ mod tests {
                 Viewer::Admin => "All merchant balances",
             };
             Ok(Some(PageElement::Card(Card {
+                badge: None,
                 title: None,
                 children: vec![PageElement::Badge(Badge {
                     text: text.to_string(),

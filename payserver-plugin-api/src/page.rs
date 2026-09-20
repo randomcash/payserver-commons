@@ -123,6 +123,19 @@ pub enum Direction {
 pub struct Card {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// A status to show beside the title, in the card's own header.
+    ///
+    /// Separate from [`children`](Self::children) because it is not content:
+    /// it is what this card is *about* right now, and every screen in the
+    /// host puts that on the header line opposite the title rather than as
+    /// the first thing in the body. A plugin with no way to say it had to
+    /// push a `Badge` into the body, where it reads as a stray pill above the
+    /// detail instead of a status on the thing.
+    ///
+    /// Optional and defaulted, so a card written before this existed
+    /// deserialises unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub badge: Option<Badge>,
     #[serde(default)]
     pub children: Vec<PageElement>,
 }
@@ -297,6 +310,32 @@ mod tests {
         assert_eq!(element, &back, "did not round-trip through {json}");
     }
 
+    /// A card serialised before `badge` existed still reads.
+    ///
+    /// The vocabulary grows and a host may hold descriptors a plugin sent
+    /// before the field was added - so an absent `badge` has to mean "no
+    /// badge", not "this card is unreadable". The field is also skipped on
+    /// the way out when it is `None`, so adding it changed nothing about what
+    /// an existing card serialises to.
+    #[test]
+    fn a_card_without_a_badge_still_deserialises_and_does_not_grow_one() {
+        let old = r#"{"type":"card","title":"Balances","children":[]}"#;
+        let card: PageElement = serde_json::from_str(old).expect("an older card must still read");
+        assert_eq!(
+            card,
+            PageElement::Card(Card {
+                title: Some("Balances".to_string()),
+                badge: None,
+                children: Vec::new(),
+            })
+        );
+        assert_eq!(
+            serde_json::to_string(&card).unwrap(),
+            old,
+            "a card with no badge must serialise exactly as it did before the field existed"
+        );
+    }
+
     /// Every component in the vocabulary round-trips: descriptor -> JSON ->
     /// descriptor. This is the data-level half of the ticket's round-trip
     /// requirement; the client's renderer test covers JSON -> markup.
@@ -304,9 +343,13 @@ mod tests {
     fn every_vocabulary_element_round_trips() {
         round_trip(&PageElement::Card(Card {
             title: Some("Balances".to_string()),
-            children: vec![PageElement::Badge(Badge {
+            badge: Some(Badge {
                 text: "Live".to_string(),
                 tone: Tone::Success,
+            }),
+            children: vec![PageElement::Text(Text {
+                text: "Updated a moment ago".to_string(),
+                style: TextStyle::Muted,
             })],
         }));
         round_trip(&PageElement::Badge(Badge {
