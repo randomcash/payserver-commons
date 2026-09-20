@@ -1031,6 +1031,10 @@ mod admin_toggle_tests {
             fn invoice_create(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
                 Err("this double issues no invoices".to_string())
             }
+
+            fn merchant_volume(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+                Err("this double reports no volume".to_string())
+            }
         }
 
         let calls = Arc::new(Recording(StdMutex::new(Vec::new())));
