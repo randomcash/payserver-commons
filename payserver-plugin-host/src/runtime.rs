@@ -54,6 +54,26 @@
 //! the host substitutes its own and the refusal is structural rather than a
 //! check someone could later delete. See `enforce_own_store` on the host
 //! side for the same property stated where an ordinary caller can reach it.
+//!
+//! # `merchant_volume`
+//!
+//! The third answering call, and the only one that reads anything about a
+//! merchant other than the plugin's own rows: it answers "how much did this
+//! account settle, in one currency, over the last N days" with a single
+//! number.
+//!
+//! A plugin that prices by volume cannot compute that number itself. It sees
+//! its own schema and the payments on the host's own store, and a merchant's
+//! own takings are neither. The alternative to this call is showing the
+//! plugin every payment every merchant received so it can add them up, which
+//! is exactly the disclosure the payment-observer capability refuses to make.
+//! One aggregate per account per window is the smallest thing that answers
+//! the question.
+//!
+//! It is still a disclosure, so it is worth naming what it is: a plugin with
+//! this import can learn any account's settled volume. It cannot learn what
+//! any individual payment was, who paid it, on what chain, to which address,
+//! or in what asset.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -118,6 +138,22 @@ pub trait PluginHostCalls: Send + Sync {
     /// Returns the message to hand back to the plugin when no invoice could
     /// be issued.
     fn invoice_create(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// Total volume one account settled over a window, in one currency.
+    ///
+    /// `request` names the account, the window in days and the currency to
+    /// quote in; the answer is one number. See this module's header for what
+    /// this deliberately does not disclose.
+    ///
+    /// Required rather than defaulted, for the same reason
+    /// [`invoice_create`](Self::invoice_create) is: a default would let an
+    /// implementation hand out a merchant-data capability by not mentioning
+    /// it.
+    ///
+    /// # Errors
+    /// Returns the message to hand back to the plugin when the volume could
+    /// not be read.
+    fn merchant_volume(&self, request: &[u8]) -> Result<Vec<u8>, String>;
 }
 
 /// The store's context: what host functions need, plus the buffer a two-step
@@ -435,6 +471,13 @@ fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
         |calls, request| calls.invoice_create(request),
     )?;
 
+    define_answering_call(
+        &mut linker,
+        "merchant_volume",
+        "this host does not report merchant volume",
+        |calls, request| calls.merchant_volume(request),
+    )?;
+
     linker
         .func_wrap(
             HOST_MODULE,
@@ -582,6 +625,10 @@ pub(crate) mod fixtures {
     /// answering call must not need a second way to collect its answer.
     pub(crate) fn invoice_calling_module() -> Vec<u8> {
         module_calling("invoice_create")
+    }
+
+    pub(crate) fn volume_calling_module() -> Vec<u8> {
+        module_calling("merchant_volume")
     }
 
     fn module_calling(import: &str) -> Vec<u8> {
@@ -924,6 +971,11 @@ mod tests {
             self.asked.lock().unwrap().push(request.to_vec());
             self.answer.clone()
         }
+
+        fn merchant_volume(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            self.asked.lock().unwrap().push(request.to_vec());
+            self.answer.clone()
+        }
     }
 
     /// The capability this whole import surface exists for: before it, a
@@ -1003,6 +1055,50 @@ mod tests {
             engine.instantiate_with_calls(&invoice_only, calls).is_ok(),
             "a plugin importing only invoice_create must instantiate"
         );
+    }
+
+    /// The same property for the third call. Three imports defined in one
+    /// loop-shaped helper is exactly where a copy-paste puts the wrong method
+    /// behind the right name, and the resulting plugin would still
+    /// instantiate - it would simply get an invoice back when it asked for a
+    /// volume. Checking the *answer* rather than only instantiation is what
+    /// separates those.
+    #[test]
+    fn merchant_volume_is_its_own_import_and_reaches_its_own_method() {
+        let engine = PluginEngine::new();
+        let module = engine.compile(&fixtures::volume_calling_module()).unwrap();
+        let calls = Arc::new(NamingCalls);
+        let mut instance = engine
+            .instantiate_with_calls(&module, calls)
+            .expect("a plugin importing only merchant_volume must instantiate");
+
+        let answer = instance
+            .call_raw("call", br#"{"account_id":"a-1","window_days":30}"#, 1_000)
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(answer).unwrap(),
+            "merchant_volume",
+            "the merchant_volume import must reach merchant_volume, not another method"
+        );
+    }
+
+    /// Answers with the name of whichever method was called, so a test can
+    /// tell the three answering calls apart by their result.
+    struct NamingCalls;
+
+    impl PluginHostCalls for NamingCalls {
+        fn storage_query(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"storage_query".to_vec())
+        }
+
+        fn invoice_create(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"invoice_create".to_vec())
+        }
+
+        fn merchant_volume(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"merchant_volume".to_vec())
+        }
     }
 
     /// An unbacked host is unbacked for every call, and says which one it
