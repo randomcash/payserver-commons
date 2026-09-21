@@ -74,6 +74,21 @@
 //! this import can learn any account's settled volume. It cannot learn what
 //! any individual payment was, who paid it, on what chain, to which address,
 //! or in what asset.
+//!
+//! # `account_notice`
+//!
+//! The fourth answering call, and the only one that reaches outside the
+//! host's own process: it asks the host to tell an account something,
+//! naming a subject and a body.
+//!
+//! Note what the plugin does not get to say, the same shape of restriction
+//! as `invoice_create`'s missing store: there is no address in the request,
+//! checked or otherwise. A plugin that could name a recipient could reach
+//! anyone through a channel wearing this host's name; the host resolves the
+//! account to whichever address and channel it owns instead, and a plugin
+//! that names an account it does not otherwise deal with learns nothing
+//! about whether that account exists or how to reach it - it only ever
+//! learns whether its own notice was delivered.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -154,6 +169,23 @@ pub trait PluginHostCalls: Send + Sync {
     /// Returns the message to hand back to the plugin when the volume could
     /// not be read.
     fn merchant_volume(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// Tell one account something, through a channel and an address the
+    /// plugin never names.
+    ///
+    /// `request` names an account and a subject/body; the host resolves the
+    /// address and the channel itself. See this module's header for why the
+    /// address is the host's to resolve and not the plugin's to ask for.
+    ///
+    /// Required rather than defaulted, for the same reason
+    /// [`invoice_create`](Self::invoice_create) is: a default would let an
+    /// implementation hand out or withhold a merchant-reaching capability by
+    /// forgetting to mention it.
+    ///
+    /// # Errors
+    /// Returns the message to hand back to the plugin when the account could
+    /// not be notified.
+    fn account_notice(&self, request: &[u8]) -> Result<Vec<u8>, String>;
 }
 
 /// The store's context: what host functions need, plus the buffer a two-step
@@ -478,6 +510,13 @@ fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
         |calls, request| calls.merchant_volume(request),
     )?;
 
+    define_answering_call(
+        &mut linker,
+        "account_notice",
+        "this host does not notify accounts",
+        |calls, request| calls.account_notice(request),
+    )?;
+
     linker
         .func_wrap(
             HOST_MODULE,
@@ -629,6 +668,10 @@ pub(crate) mod fixtures {
 
     pub(crate) fn volume_calling_module() -> Vec<u8> {
         module_calling("merchant_volume")
+    }
+
+    pub(crate) fn notice_calling_module() -> Vec<u8> {
+        module_calling("account_notice")
     }
 
     fn module_calling(import: &str) -> Vec<u8> {
@@ -976,6 +1019,11 @@ mod tests {
             self.asked.lock().unwrap().push(request.to_vec());
             self.answer.clone()
         }
+
+        fn account_notice(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            self.asked.lock().unwrap().push(request.to_vec());
+            self.answer.clone()
+        }
     }
 
     /// The capability this whole import surface exists for: before it, a
@@ -1083,8 +1131,37 @@ mod tests {
         );
     }
 
+    /// The same property for the fourth call. Same reasoning as
+    /// [`merchant_volume_is_its_own_import_and_reaches_its_own_method`]: a
+    /// module importing only `account_notice` must both instantiate and
+    /// reach `account_notice` specifically, not any of the other three
+    /// answering calls wired in the same loop-shaped helper.
+    #[test]
+    fn account_notice_is_its_own_import_and_reaches_its_own_method() {
+        let engine = PluginEngine::new();
+        let module = engine.compile(&fixtures::notice_calling_module()).unwrap();
+        let calls = Arc::new(NamingCalls);
+        let mut instance = engine
+            .instantiate_with_calls(&module, calls)
+            .expect("a plugin importing only account_notice must instantiate");
+
+        let answer = instance
+            .call_raw(
+                "call",
+                br#"{"account_id":"a-1","subject":"s","body":"b"}"#,
+                1_000,
+            )
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(answer).unwrap(),
+            "account_notice",
+            "the account_notice import must reach account_notice, not another method"
+        );
+    }
+
     /// Answers with the name of whichever method was called, so a test can
-    /// tell the three answering calls apart by their result.
+    /// tell the four answering calls apart by their result.
     struct NamingCalls;
 
     impl PluginHostCalls for NamingCalls {
@@ -1098,6 +1175,10 @@ mod tests {
 
         fn merchant_volume(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
             Ok(b"merchant_volume".to_vec())
+        }
+
+        fn account_notice(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"account_notice".to_vec())
         }
     }
 
