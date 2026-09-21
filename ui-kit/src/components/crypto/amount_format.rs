@@ -15,7 +15,9 @@
 //! notation:
 //!
 //! - **Trailing zeros** (`30.000000000000000000`) are noise. [`trim_amount`]
-//!   and [`format_units`] just trim them.
+//!   and [`format_units`] just trim them; a fiat amount instead rounds to its
+//!   minor unit with [`round_amount`], since digits past the cent boundary
+//!   must be rounded away, not merely trimmed.
 //! - **Leading zeros** (`0.000000000000000001`) are a wei-scale or dust
 //!   amount worth compressing for a summary display — `0.0₁₇1` — but the
 //!   compression is a *summary* device. [`CompactAmount`] renders it, and it
@@ -29,6 +31,9 @@ use leptos::prelude::*;
 /// no trimming. String arithmetic throughout, so a value with more digits
 /// than `u128` holds still converts correctly.
 pub fn units_to_decimal(smallest_units: &str, decimals: u8) -> String {
+    if let Some(magnitude) = smallest_units.strip_prefix('-') {
+        return format!("-{}", units_to_decimal(magnitude, decimals));
+    }
     let d = decimals as usize;
     if d == 0 {
         return smallest_units.to_string();
@@ -65,6 +70,68 @@ pub fn trim_amount(decimal: &str, min_decimals: usize) -> String {
             "0".repeat(min_decimals - trimmed.len())
         )
     }
+}
+
+/// Round a decimal string to exactly `scale` fractional digits, half rounding
+/// away from zero. String arithmetic throughout, so a value with more digits
+/// than `u128`/`f64` can represent exactly still rounds correctly.
+///
+/// This is the fiat-currency counterpart to [`trim_amount`]: a currency
+/// amount always shows exactly its minor-unit scale (`"$30.13"`, never
+/// `"$30.126"`), so digits past that scale must be rounded away, not merely
+/// trimmed - trimming only removes zeros and would leave `"30.126"` alone.
+pub fn round_amount(decimal: &str, scale: usize) -> String {
+    let (negative, unsigned) = match decimal.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, decimal),
+    };
+    let (int_part, frac_part) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+
+    let rounded = if frac_part.len() <= scale {
+        format!(
+            "{int_part}{frac_part}{}",
+            "0".repeat(scale - frac_part.len())
+        )
+    } else {
+        let kept = &frac_part[..scale];
+        let round_up = frac_part.as_bytes()[scale] >= b'5';
+        let combined = format!("{int_part}{kept}");
+        if round_up {
+            increment_digits(&combined)
+        } else {
+            combined
+        }
+    };
+
+    let split_at = rounded.len() - scale;
+    let (int_out, frac_out) = rounded.split_at(split_at);
+    let magnitude = if scale == 0 {
+        int_out.to_string()
+    } else {
+        format!("{int_out}.{frac_out}")
+    };
+    if negative {
+        format!("-{magnitude}")
+    } else {
+        magnitude
+    }
+}
+
+/// Add one to a string of decimal digits, growing it by a digit on overflow
+/// (`"999"` -> `"1000"`).
+fn increment_digits(digits: &str) -> String {
+    let mut bytes = digits.as_bytes().to_vec();
+    for b in bytes.iter_mut().rev() {
+        if *b == b'9' {
+            *b = b'0';
+        } else {
+            *b += 1;
+            return String::from_utf8(bytes).expect("ASCII digits stay ASCII");
+        }
+    }
+    let mut result = String::from("1");
+    result.push_str(&String::from_utf8(bytes).expect("ASCII digits stay ASCII"));
+    result
 }
 
 /// Format a smallest-unit amount as a trimmed decimal string.
@@ -206,6 +273,46 @@ mod tests {
     }
 
     #[test]
+    fn units_to_decimal_preserves_a_negative_sign() {
+        // -0.5 at 18 decimals: the sign must not end up stuck mid-string.
+        assert_eq!(
+            units_to_decimal("-500000000000000000", 18),
+            "-0.500000000000000000"
+        );
+        assert_eq!(units_to_decimal("-42", 0), "-42");
+    }
+
+    #[test]
+    fn round_amount_matches_the_screenshot_examples() {
+        assert_eq!(round_amount("30.000000000000000000", 2), "30.00");
+        assert_eq!(round_amount("0.000000000000000000", 2), "0.00");
+    }
+
+    #[test]
+    fn round_amount_rounds_rather_than_truncates_past_the_scale() {
+        // Trimming alone would leave "30.126" - a dollar amount with three
+        // decimal places - since there are no trailing zeros to strip.
+        assert_eq!(round_amount("30.126000000000000000", 2), "30.13");
+        assert_eq!(round_amount("30.124000000000000000", 2), "30.12");
+    }
+
+    #[test]
+    fn round_amount_carries_through_a_run_of_nines() {
+        assert_eq!(round_amount("9.996", 2), "10.00");
+    }
+
+    #[test]
+    fn round_amount_pads_a_short_or_missing_fraction() {
+        assert_eq!(round_amount("30", 2), "30.00");
+        assert_eq!(round_amount("1.5", 2), "1.50");
+    }
+
+    #[test]
+    fn round_amount_rounds_a_negative_amount_away_from_zero() {
+        assert_eq!(round_amount("-0.005", 2), "-0.01");
+    }
+
+    #[test]
     fn compact_amount_compresses_long_runs_of_leading_zeros() {
         // "0.0000001234" -> six leading zeros, then "1234".
         let (literal, display) = compact_amount("0.0000001234", 0);
@@ -258,6 +365,7 @@ mod tests {
         // outside the crate while every in-crate test still passes.
         let _ = crate::format_units;
         let _ = crate::trim_amount;
+        let _ = crate::round_amount;
         let _ = crate::units_to_decimal;
         let _ = crate::compact_amount;
         let _ = crate::CompactAmount;
