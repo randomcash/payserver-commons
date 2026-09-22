@@ -74,6 +74,24 @@
 //! this import can learn any account's settled volume. It cannot learn what
 //! any individual payment was, who paid it, on what chain, to which address,
 //! or in what asset.
+//!
+//! # `merchant_volumes`
+//!
+//! The fourth answering call, and the batched form of `merchant_volume`: it
+//! answers the same question for many accounts in one call rather than one
+//! call per account.
+//!
+//! A page listing every account's standing cannot call `merchant_volume`
+//! once per row and stay inside a single call's deadline - each call is a
+//! host-side store lookup, a database aggregate and at least one live rate
+//! lookup, and a table's row count is the plugin's to choose, not the
+//! host's. This exists so that choice does not multiply real I/O by however
+//! many rows a plugin decided to draw.
+//!
+//! Same disclosure as `merchant_volume`, at the scale of a list instead of
+//! one account: a plugin with this import can learn many accounts' settled
+//! volume in one call. It still cannot learn what any individual payment
+//! was.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -154,6 +172,23 @@ pub trait PluginHostCalls: Send + Sync {
     /// Returns the message to hand back to the plugin when the volume could
     /// not be read.
     fn merchant_volume(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// Total volume many accounts each settled over a window, in one call.
+    ///
+    /// `request` names the accounts, the window in days and the currency to
+    /// quote in, the same shape as [`merchant_volume`](Self::merchant_volume)
+    /// with a list of accounts in place of one. See this module's header for
+    /// why this exists as its own call rather than a loop over that one.
+    ///
+    /// Required rather than defaulted, for the same reason
+    /// [`invoice_create`](Self::invoice_create) is: a default would let an
+    /// implementation hand out a merchant-data capability by not mentioning
+    /// it.
+    ///
+    /// # Errors
+    /// Returns the message to hand back to the plugin when the batch could
+    /// not be read.
+    fn merchant_volumes(&self, request: &[u8]) -> Result<Vec<u8>, String>;
 }
 
 /// The store's context: what host functions need, plus the buffer a two-step
@@ -478,6 +513,13 @@ fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
         |calls, request| calls.merchant_volume(request),
     )?;
 
+    define_answering_call(
+        &mut linker,
+        "merchant_volumes",
+        "this host does not report merchant volume",
+        |calls, request| calls.merchant_volumes(request),
+    )?;
+
     linker
         .func_wrap(
             HOST_MODULE,
@@ -629,6 +671,10 @@ pub(crate) mod fixtures {
 
     pub(crate) fn volume_calling_module() -> Vec<u8> {
         module_calling("merchant_volume")
+    }
+
+    pub(crate) fn volumes_calling_module() -> Vec<u8> {
+        module_calling("merchant_volumes")
     }
 
     fn module_calling(import: &str) -> Vec<u8> {
@@ -976,6 +1022,11 @@ mod tests {
             self.asked.lock().unwrap().push(request.to_vec());
             self.answer.clone()
         }
+
+        fn merchant_volumes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            self.asked.lock().unwrap().push(request.to_vec());
+            self.answer.clone()
+        }
     }
 
     /// The capability this whole import surface exists for: before it, a
@@ -1083,8 +1134,37 @@ mod tests {
         );
     }
 
+    /// The same property for the fourth call. Same reasoning as
+    /// [`merchant_volume_is_its_own_import_and_reaches_its_own_method`]: a
+    /// module importing only `merchant_volumes` must both instantiate and
+    /// reach `merchant_volumes` specifically, not `merchant_volume` or either
+    /// of the other two answering calls wired in the same loop-shaped helper.
+    #[test]
+    fn merchant_volumes_is_its_own_import_and_reaches_its_own_method() {
+        let engine = PluginEngine::new();
+        let module = engine.compile(&fixtures::volumes_calling_module()).unwrap();
+        let calls = Arc::new(NamingCalls);
+        let mut instance = engine
+            .instantiate_with_calls(&module, calls)
+            .expect("a plugin importing only merchant_volumes must instantiate");
+
+        let answer = instance
+            .call_raw(
+                "call",
+                br#"{"account_ids":["a-1","a-2"],"window_days":30}"#,
+                1_000,
+            )
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(answer).unwrap(),
+            "merchant_volumes",
+            "the merchant_volumes import must reach merchant_volumes, not another method"
+        );
+    }
+
     /// Answers with the name of whichever method was called, so a test can
-    /// tell the three answering calls apart by their result.
+    /// tell the four answering calls apart by their result.
     struct NamingCalls;
 
     impl PluginHostCalls for NamingCalls {
@@ -1098,6 +1178,10 @@ mod tests {
 
         fn merchant_volume(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
             Ok(b"merchant_volume".to_vec())
+        }
+
+        fn merchant_volumes(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"merchant_volumes".to_vec())
         }
     }
 
