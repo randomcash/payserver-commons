@@ -57,6 +57,10 @@ pub fn trim_amount(decimal: &str, min_decimals: usize) -> String {
     let Some((int_part, frac_part)) = decimal.split_once('.') else {
         return decimal.to_string();
     };
+    // Every real caller comes through `units_to_decimal`, which always emits
+    // a `"0."`-prefixed string, but an int-part-elided input like `".5"`
+    // would otherwise silently drop its leading `0` below.
+    let int_part = if int_part.is_empty() { "0" } else { int_part };
     let trimmed = frac_part.trim_end_matches('0');
     if trimmed.len() >= min_decimals {
         if trimmed.is_empty() {
@@ -86,6 +90,9 @@ pub fn round_amount(decimal: &str, scale: usize) -> String {
         None => (false, decimal),
     };
     let (int_part, frac_part) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    // Same int-part-elided guard as `trim_amount`: `".5"` must round like
+    // `"0.5"`, not lose its leading digit.
+    let int_part = if int_part.is_empty() { "0" } else { int_part };
 
     let rounded = if frac_part.len() <= scale {
         format!(
@@ -267,6 +274,11 @@ mod tests {
     }
 
     #[test]
+    fn trim_amount_keeps_the_leading_zero_on_an_int_part_elided_input() {
+        assert_eq!(trim_amount(".500000", 0), "0.5");
+    }
+
+    #[test]
     fn format_units_matches_the_wei_scale_example() {
         assert_eq!(format_units("1000000000000000000", 18), "1");
         assert_eq!(format_units("1500000000000000000", 18), "1.5");
@@ -310,6 +322,11 @@ mod tests {
     #[test]
     fn round_amount_rounds_a_negative_amount_away_from_zero() {
         assert_eq!(round_amount("-0.005", 2), "-0.01");
+    }
+
+    #[test]
+    fn round_amount_keeps_the_leading_zero_on_an_int_part_elided_input() {
+        assert_eq!(round_amount(".5", 2), "0.50");
     }
 
     #[test]
