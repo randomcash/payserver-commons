@@ -3,7 +3,7 @@
 //!
 //! A plugin cannot ship Rust into an already-compiled Leptos client, so it
 //! ships data. The vocabulary mirrors ui-kit's own components - card, badge,
-//! button, table, form, input, select, notice, tabs, plus the layout
+//! figure, button, table, form, input, select, notice, tabs, plus the layout
 //! primitives stack, row, grid and section - so there is nothing the
 //! merchant dashboard renders that a plugin page cannot.
 //!
@@ -69,6 +69,17 @@ pub enum PageElement {
     /// is being said.
     Fields(Fields),
     Badge(Badge),
+    /// A labelled number with a tone - a dashboard summary tile.
+    ///
+    /// Not a `Badge`: a badge's tone marks a status *on* something else, and
+    /// reads as a stray pill when the number itself is the whole point of
+    /// the tile - four of them side by side as coloured pills above a table
+    /// read as status on nothing. `Figure` tones the number in place instead
+    /// of dressing it up as a status. Not `Text` either - `TextStyle` says
+    /// how prominent prose is, not whether the reader should be concerned by
+    /// it, and a label is a second piece of text a plugin would otherwise
+    /// have to compose around the figure by hand.
+    Figure(Figure),
     Button(Button),
     Table(Table),
     Form(Form),
@@ -161,6 +172,16 @@ pub struct Text {
     pub text: String,
     #[serde(default)]
     pub style: TextStyle,
+}
+
+/// A dashboard summary tile: a label, the number, and how urgently it
+/// matters.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Figure {
+    pub label: String,
+    pub value: String,
+    #[serde(default)]
+    pub tone: Tone,
 }
 
 /// One label and its value.
@@ -356,6 +377,11 @@ mod tests {
             text: "Beta".to_string(),
             tone: Tone::Info,
         }));
+        round_trip(&PageElement::Figure(Figure {
+            label: "Lapsed".to_string(),
+            value: "7".to_string(),
+            tone: Tone::Danger,
+        }));
         round_trip(&PageElement::Button(Button {
             label: "Refresh".to_string(),
             variant: ButtonVariant::Outline,
@@ -502,5 +528,22 @@ mod tests {
 
         let fields: Fields = serde_json::from_str("{}").unwrap();
         assert!(fields.fields.is_empty());
+    }
+
+    /// A figure with no tone is neutral, the same default every other
+    /// tone-carrying element uses - a plugin that does not judge its own
+    /// number gets a plain one rather than a required field to fill in.
+    #[test]
+    fn figure_tone_defaults_to_neutral() {
+        let json = r#"{"type": "figure", "label": "Active", "value": "210"}"#;
+        let element: PageElement = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            element,
+            PageElement::Figure(Figure {
+                label: "Active".to_string(),
+                value: "210".to_string(),
+                tone: Tone::Neutral,
+            })
+        );
     }
 }

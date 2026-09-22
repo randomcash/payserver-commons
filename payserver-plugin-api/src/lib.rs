@@ -33,8 +33,9 @@ pub use id::{InvalidPluginId, PluginId};
 pub use kind::PluginKind;
 pub use manifest::{InvalidManifest, Manifest, PageDeclaration, PageIcon, PagePlacement};
 pub use page::{
-    Badge, Button, ButtonVariant, Card, Direction, Field, Fields, Form, Grid, Input, Notice,
-    PageElement, Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone, Viewer,
+    Badge, Button, ButtonVariant, Card, Direction, Field, Fields, Figure, Form, Grid, Input,
+    Notice, PageElement, Row, Section, Select, Stack, Tab, Table, Tabs, Text, TextStyle, Tone,
+    Viewer,
 };
 pub use slug::{InvalidSlug, PluginSlug, RESERVED_SLUGS};
 
@@ -46,7 +47,7 @@ pub use semver::{Version, VersionReq};
 /// page descriptor types exactly as a consumer (a plugin crate) would.
 #[cfg(test)]
 mod reachability {
-    use crate::{Badge, PageElement, Tone, Viewer};
+    use crate::{Badge, Figure, PageElement, Tone, Viewer};
 
     #[test]
     fn page_descriptor_types_are_reachable_from_the_crate_root() {
@@ -56,5 +57,12 @@ mod reachability {
         });
         assert!(matches!(element, PageElement::Badge(_)));
         assert_eq!(Viewer::Merchant, Viewer::Merchant);
+
+        let figure = PageElement::Figure(Figure {
+            label: "Active".to_string(),
+            value: "210".to_string(),
+            tone: Tone::Success,
+        });
+        assert!(matches!(figure, PageElement::Figure(_)));
     }
 }
