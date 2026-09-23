@@ -1,7 +1,7 @@
 # payserver-commons
 
 Shared crates for the random.cash payservers: types, api-types, auth, crypto,
-rates, scrub, ui-kit.
+rates, scrub, ui-kit, payserver-plugin-api, payserver-plugin-host.
 
 ## This repository is public
 
@@ -60,7 +60,7 @@ the crate root** exactly as a consumer would.
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --lib --all-features
+cargo nextest run --workspace --lib --all-features --no-fail-fast
 ```
 
 Unlike `ethpayserver`, `--all-features` is correct here — CI uses it.

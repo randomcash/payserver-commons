@@ -2,8 +2,6 @@
 
 Cryptographic primitives for PayServer.
 
-> **Note**: This crate will be moved to `payserver-commons` repository.
-
 ## Features
 
 Implements Bitwarden-style client-side encryption where the server never sees plaintext data.
