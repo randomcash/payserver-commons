@@ -269,18 +269,19 @@ pub struct ServerSettings {
     /// chains here.
     pub enabled_chain_ids: Vec<ChainId>,
 
-    /// The store this instance bills its own subscriptions through.
+    /// The operator's own store: where this instance issues and settles its
+    /// own invoices, if it issues any to itself at all.
     ///
-    /// `None` is the ordinary case: an instance that does not sell anything
-    /// to itself has no such store, and guessing one would mean issuing
-    /// invoices on some merchant's store under that merchant's name.
+    /// `None` is the ordinary case: an instance that does not invoice itself
+    /// has no such store, and guessing one would mean issuing invoices on
+    /// some merchant's store under that merchant's name.
     ///
-    /// Read at boot, not per request. This decides both where subscription
-    /// invoices are issued and whose settled payments a billing plugin hears
-    /// about, and changing it under a running process would leave invoices
-    /// already issued settling on a store nothing is watching - paid, and
-    /// never credited.
-    pub billing_store_id: Option<StoreId>,
+    /// Read at boot, not per request. This decides both where those invoices
+    /// are issued and whose settled payments a plugin watching this store
+    /// hears about, and changing it under a running process would leave
+    /// invoices already issued settling on a store nothing is watching -
+    /// paid, and never credited.
+    pub operator_store_id: Option<StoreId>,
 }
 
 impl Default for ServerSettings {
@@ -297,10 +298,10 @@ impl Default for ServerSettings {
             .into_iter()
             .map(ChainId::evm)
             .collect(),
-            // Nothing, not a guess. An instance that bills for itself is
+            // Nothing, not a guess. An instance that invoices itself is
             // configured to; one that is not must not invoice on a store it
             // picked on its own.
-            billing_store_id: None,
+            operator_store_id: None,
         }
     }
 }

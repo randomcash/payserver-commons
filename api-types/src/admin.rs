@@ -51,18 +51,18 @@ pub struct ServerSettingsResponse {
     pub invoice_expiry_minutes: i32,
     pub rate_limit_rpm: i32,
     pub enabled_chain_ids: Vec<ChainId>,
-    /// The store this instance bills its own subscriptions through, if it
-    /// sells anything to itself.
+    /// The operator's own store: where this instance issues and settles its
+    /// own invoices, if it issues any to itself at all.
     ///
     /// Read once at boot, so a change here does not take effect until the
     /// server restarts. That is the behaviour and not a limitation waiting
-    /// to be fixed: this id decides both where subscription invoices are
-    /// issued and which store's settled payments a billing plugin is told
-    /// about, and moving it while invoices are outstanding would leave those
+    /// to be fixed: this id decides both where those invoices are issued and
+    /// which store's settled payments a plugin watching it is told about,
+    /// and moving it while invoices are outstanding would leave those
     /// invoices settling on a store nothing is watching - the merchant pays
     /// and is never credited. A client showing this must say so.
     #[serde(default)]
-    pub billing_store_id: Option<StoreId>,
+    pub operator_store_id: Option<StoreId>,
     /// Whether the value above is the one this process is actually running
     /// with.
     ///
@@ -70,7 +70,7 @@ pub struct ServerSettingsResponse {
     /// client cannot tell "set and live" from "set and pending", and would
     /// show an operator a configuration the server is not using.
     #[serde(default)]
-    pub billing_store_id_active: bool,
+    pub operator_store_id_active: bool,
 }
 
 /// Request body for updating server settings.
@@ -82,13 +82,13 @@ pub struct UpdateServerSettingsRequest {
     pub rate_limit_rpm: i32,
     /// Absent leaves the stored list alone; a value replaces it.
     ///
-    /// Optional for the same reason `billing_store_id` is, and with a sharper
-    /// consequence. A stored `enabled_chain_ids` is authoritative: once one
-    /// exists, every chain not in it is refused. And `GET` answers with
-    /// compiled-in *mainnet* defaults when no row exists, so a client that
-    /// round-trips whatever it was given writes a list nobody chose - on a
-    /// testnet deployment that list has no Sepolia in it, and the instance
-    /// stops accepting the only chain it watches.
+    /// Optional for the same reason `operator_store_id` is, and with a
+    /// sharper consequence. A stored `enabled_chain_ids` is authoritative:
+    /// once one exists, every chain not in it is refused. And `GET` answers
+    /// with compiled-in *mainnet* defaults when no row exists, so a client
+    /// that round-trips whatever it was given writes a list nobody chose -
+    /// on a testnet deployment that list has no Sepolia in it, and the
+    /// instance stops accepting the only chain it watches.
     ///
     /// So a client that is not changing chains must not mention them. One
     /// that is sends the whole list, which is still a replace.
@@ -99,11 +99,11 @@ pub struct UpdateServerSettingsRequest {
     /// A double option, and it earns its awkwardness. This endpoint replaces
     /// the whole settings object, so a plain `Option` would make an omitted
     /// field indistinguishable from an explicit null - and every older client
-    /// that PUTs the other four fields would silently switch billing off on
-    /// the next settings save. Absent has to mean "I am not talking about
-    /// this", which only a nested option can express.
+    /// that PUTs the other four fields would silently clear the operator's
+    /// own store on the next settings save. Absent has to mean "I am not
+    /// talking about this", which only a nested option can express.
     #[serde(default, deserialize_with = "present_option")]
-    pub billing_store_id: Option<Option<StoreId>>,
+    pub operator_store_id: Option<Option<StoreId>>,
 }
 
 /// Request body for role update.
@@ -125,32 +125,33 @@ mod tests {
 
     /// The three states have to stay distinguishable. Collapse absent into
     /// null and every client that saves settings without knowing about this
-    /// field switches billing off.
+    /// field clears the operator's own store.
     #[test]
-    fn an_absent_billing_store_is_not_an_explicit_null() {
+    fn an_absent_operator_store_is_not_an_explicit_null() {
         let absent: UpdateServerSettingsRequest =
             serde_json::from_str(&format!("{{{}}}", base())).unwrap();
         assert_eq!(
-            absent.billing_store_id, None,
+            absent.operator_store_id, None,
             "absent must mean 'not talking about this field'"
         );
 
         let cleared: UpdateServerSettingsRequest =
-            serde_json::from_str(&format!("{{{},\"billing_store_id\":null}}", base())).unwrap();
+            serde_json::from_str(&format!("{{{},\"operator_store_id\":null}}", base())).unwrap();
         assert_eq!(
-            cleared.billing_store_id,
+            cleared.operator_store_id,
             Some(None),
             "an explicit null must mean 'clear it', which absent does not"
         );
 
         let id = uuid::Uuid::from_u128(7);
         let set: UpdateServerSettingsRequest =
-            serde_json::from_str(&format!("{{{},\"billing_store_id\":\"{id}\"}}", base())).unwrap();
-        assert_eq!(set.billing_store_id, Some(Some(StoreId(id))));
+            serde_json::from_str(&format!("{{{},\"operator_store_id\":\"{id}\"}}", base()))
+                .unwrap();
+        assert_eq!(set.operator_store_id, Some(Some(StoreId(id))));
 
         assert_ne!(
-            absent.billing_store_id, cleared.billing_store_id,
-            "if these two ever compare equal, an older client wipes the billing store on save"
+            absent.operator_store_id, cleared.operator_store_id,
+            "if these two ever compare equal, an older client clears the operator's own store"
         );
     }
 
