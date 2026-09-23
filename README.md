@@ -11,18 +11,25 @@ PayServer Commons provides the foundational crates used across all PayServer imp
 | Crate | Description |
 |-------|-------------|
 | [types](./types/) | Core types, traits, and repository patterns |
+| [api-types](./api-types/) | The PayServer HTTP contract: request/response shapes, shared by every server and the client |
 | [auth](./auth/) | Authentication: passkeys, Ethereum wallets, BIP39 recovery |
 | [crypto](./crypto/) | Cryptographic primitives: Argon2id, AES-256, X25519, Ed25519 |
+| [rates](./rates/) | Exchange rate providers and currency utilities |
+| [scrub](./scrub/) | Secret/PII redaction for error reports, shared by every payserver and the client |
+| [payserver-plugin-api](./payserver-plugin-api/) | Plugin manifest contract: parsing, id validation, version negotiation |
+| [payserver-plugin-host](./payserver-plugin-host/) | The wasmtime plugin host: load-time gate, instantiation, bounded calls, page rendering |
+| [ui-kit](./ui-kit/) | Shared Leptos UI components for random.cash frontends |
 
 ## Installation
 
-Add to your `Cargo.toml`:
+Pin by `rev`, not by branch — see [Which version you build against](https://github.com/randomcash/ethpayserver#which-version-you-build-against)
+in ethpayserver's README for why. Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-types = { git = "https://gitlab.com/random.cash/payserver-commons.git" }
-auth = { git = "https://gitlab.com/random.cash/payserver-commons.git" }
-crypto = { git = "https://gitlab.com/random.cash/payserver-commons.git" }
+types = { git = "https://github.com/randomcash/payserver-commons.git", rev = "<commit-sha>" }
+auth = { git = "https://github.com/randomcash/payserver-commons.git", rev = "<commit-sha>" }
+crypto = { git = "https://github.com/randomcash/payserver-commons.git", rev = "<commit-sha>" }
 ```
 
 ## Crate Details
@@ -31,17 +38,18 @@ crypto = { git = "https://gitlab.com/random.cash/payserver-commons.git" }
 
 Common types and traits shared across all PayServer implementations.
 
-- **Network** - Enum of supported blockchain networks (EVM, Bitcoin, Lightning)
-- **Repository traits** - `InvoiceRepository`, `PaymentRepository`, `TokenRepository`
+- **ChainId** - CAIP-2 chain identity (`eip155:1`, `tron:728126428`, ...), open
+  by construction so a new chain never requires editing this crate
+- **Repository traits** - around twenty, including `InvoiceRepository`, `PaymentRepository`, `TokenRepository`
 - **Data types** - `InvoiceData`, `PaymentData`, `TokenData`, `Store`
 - **Multi-tenant** - `Store`, `StoreId`, `UserId` for multi-merchant support
 
 ```rust
-use types::{Network, InvoiceStatus, Store, UserId};
+use types::{ChainId, InvoiceStatus, Store, UserId};
 
-// Supported networks
-let network = Network::Ethereum;
-let network = Network::Bitcoin;
+// Chain identity
+let ethereum = ChainId::evm(1);                        // eip155:1
+let tron_mainnet = ChainId::parse("tron:728126428")?;
 
 // Multi-tenant stores
 let store = Store::new("My Shop", UserId::new());
@@ -61,9 +69,10 @@ Secure, passwordless authentication with multiple methods.
 - **Zero-Knowledge** - Server stores only encrypted data it cannot decrypt
 
 ```rust
-use auth::{AuthService, api};
+use auth::{WebAuthnAuthService, api};
+use std::sync::Arc;
 
-let service = AuthService::new(data_service);
+let service = Arc::new(WebAuthnAuthService::new(Arc::new(data_service)));
 let router = api::router(api::AuthState::new(service));
 // Mount at /auth
 ```
@@ -98,22 +107,20 @@ let encrypted = symmetric::encrypt(b"secret", &stretched)?;
 let decrypted = symmetric::decrypt(&encrypted, &stretched)?;
 ```
 
-## Supported Networks
+## Supported Chain Families
 
-### EVM Networks
-- Ethereum, Polygon, Arbitrum, Optimism, Base
-- Avalanche, BNB Smart Chain, zkSync Era, Linea, Scroll, Fantom, Gnosis
-
-### Bitcoin
-- Bitcoin Mainnet, Bitcoin Testnet
-
-### Lightning
-- Lightning Network
+`ChainId` (see [types](./types/)) is a [CAIP-2](https://standards.chainagnostic.org/CAIPs/caip-2)
+string rather than a closed list, so a payserver — or a plugin — can support a
+new chain without a change here. Five namespaces are modeled today: `eip155`
+(Ethereum and other EVM chains), `tron`, `solana`, `monero`, `bip122`
+(Bitcoin). Which chains any given payserver actually implements is a separate
+question — see that payserver's own README.
 
 ## Used By
 
-- [ethpayserver](https://gitlab.com/random.cash/ethpayserver) - EVM payment processor
-- btcpayserver (planned) - Bitcoin payment processor
+- [ethpayserver](https://github.com/randomcash/ethpayserver) - EVM (`eip155`) payment processor. Its
+  frontend, [payserver-client](https://github.com/randomcash/payserver-client), is built to serve any
+  payserver on any of the chain families above, not only this one.
 
 ## Development
 
@@ -138,19 +145,21 @@ cargo fmt
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Payment Server                      │
-│         (ethpayserver, btcpayserver)            │
-├─────────────────────────────────────────────────┤
-│                                                  │
-│  ┌─────────┐   ┌─────────┐   ┌─────────┐       │
-│  │  auth   │   │  types  │   │ crypto  │       │
-│  └─────────┘   └─────────┘   └─────────┘       │
-│       │             │             │             │
-│       └─────────────┼─────────────┘             │
-│                     │                           │
-│              payserver-commons                  │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                          Payment Server                          │
+│                (ethpayserver, and any future payserver)          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌────────┐ ┌───────────┐ ┌──────┐ ┌───────┐ ┌───────┐ ┌──────┐│
+│  │  auth  │ │ api-types │ │ types│ │ crypto│ │ rates │ │ scrub││
+│  └────────┘ └───────────┘ └──────┘ └───────┘ └───────┘ └──────┘│
+│       │           │           │         │         │        │   │
+│       └───────────┴───────────┴─────────┴─────────┴────────┘   │
+│                                 │                                │
+│                          payserver-commons                       │
+│         (also: payserver-plugin-api, payserver-plugin-host,      │
+│          ui-kit — see Crates above for the full list)            │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## License

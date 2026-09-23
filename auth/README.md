@@ -2,8 +2,6 @@
 
 User authentication, roles, permissions, and device management for PayServer.
 
-> **Note**: This crate will be moved to `payserver-commons` repository.
-
 ## Features
 
 - **Passkeys** - Phishing-resistant, passwordless authentication (WebAuthn)
@@ -35,10 +33,10 @@ Wallet Signature ─────────────────────
 Mount the axum routes at `/auth`:
 
 ```rust
-use auth::{api, AuthService};
+use auth::{api, WebAuthnAuthService};
 use std::sync::Arc;
 
-let service = Arc::new(AuthService::new(repo));
+let service = Arc::new(WebAuthnAuthService::new(Arc::new(repo)));
 let state = api::AuthState::new(service);
 
 let app = Router::new()
