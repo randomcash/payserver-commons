@@ -1036,6 +1036,10 @@ mod admin_toggle_tests {
                 Err("this double reports no volume".to_string())
             }
 
+            fn merchant_volumes(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+                Err("this double reports no volume".to_string())
+            }
+
             fn account_notice(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
                 Err("this double notifies no accounts".to_string())
             }

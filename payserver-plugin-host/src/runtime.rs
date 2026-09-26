@@ -75,9 +75,27 @@
 //! any individual payment was, who paid it, on what chain, to which address,
 //! or in what asset.
 //!
+//! # `merchant_volumes`
+//!
+//! The fourth answering call, and the batched form of `merchant_volume`: it
+//! answers the same question for many accounts in one call rather than one
+//! call per account.
+//!
+//! A page listing every account's standing cannot call `merchant_volume`
+//! once per row and stay inside a single call's deadline - each call is a
+//! host-side store lookup, a database aggregate and at least one live rate
+//! lookup, and a table's row count is the plugin's to choose, not the
+//! host's. This exists so that choice does not multiply real I/O by however
+//! many rows a plugin decided to draw.
+//!
+//! Same disclosure as `merchant_volume`, at the scale of a list instead of
+//! one account: a plugin with this import can learn many accounts' settled
+//! volume in one call. It still cannot learn what any individual payment
+//! was.
+//!
 //! # `account_notice`
 //!
-//! The fourth answering call, and the only one that reaches outside the
+//! The fifth answering call, and the only one that reaches outside the
 //! host's own process: it asks the host to tell an account something,
 //! naming a subject and a body.
 //!
@@ -127,6 +145,17 @@ pub const HOST_MODULE: &str = "ethpayserver";
 /// set, and the plugin looks stuck for a reason that is not the plugin's. Any
 /// implementation that can block must impose its own timeout and return an
 /// error when it elapses.
+///
+/// # Where the real implementation lives
+///
+/// This crate defines the interface and proves the wasm wiring reaches it -
+/// nothing here talks to a database or a merchant. The body that actually
+/// issues an invoice, reads settled volume, or sends a notice belongs to
+/// whichever binary embeds this host (`ethpayserver`'s own
+/// `impl PluginHostCalls`), pinned to this crate by revision. A change here
+/// makes a capability callable; it does not, by itself, make anything call
+/// it - that caller, and the production body behind it, are additions on the
+/// pinning side once the pin moves.
 pub trait PluginHostCalls: Send + Sync {
     /// Read from the plugin's own storage. `request` and the answer are the
     /// plugin's own JSON; this layer does not interpret either.
@@ -169,6 +198,23 @@ pub trait PluginHostCalls: Send + Sync {
     /// Returns the message to hand back to the plugin when the volume could
     /// not be read.
     fn merchant_volume(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// Total volume many accounts each settled over a window, in one call.
+    ///
+    /// `request` names the accounts, the window in days and the currency to
+    /// quote in, the same shape as [`merchant_volume`](Self::merchant_volume)
+    /// with a list of accounts in place of one. See this module's header for
+    /// why this exists as its own call rather than a loop over that one.
+    ///
+    /// Required rather than defaulted, for the same reason
+    /// [`invoice_create`](Self::invoice_create) is: a default would let an
+    /// implementation hand out a merchant-data capability by not mentioning
+    /// it.
+    ///
+    /// # Errors
+    /// Returns the message to hand back to the plugin when the batch could
+    /// not be read.
+    fn merchant_volumes(&self, request: &[u8]) -> Result<Vec<u8>, String>;
 
     /// Tell one account something, through a channel and an address the
     /// plugin never names.
@@ -512,6 +558,13 @@ fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
 
     define_answering_call(
         &mut linker,
+        "merchant_volumes",
+        "this host does not report merchant volume",
+        |calls, request| calls.merchant_volumes(request),
+    )?;
+
+    define_answering_call(
+        &mut linker,
         "account_notice",
         "this host does not notify accounts",
         |calls, request| calls.account_notice(request),
@@ -668,6 +721,10 @@ pub(crate) mod fixtures {
 
     pub(crate) fn volume_calling_module() -> Vec<u8> {
         module_calling("merchant_volume")
+    }
+
+    pub(crate) fn volumes_calling_module() -> Vec<u8> {
+        module_calling("merchant_volumes")
     }
 
     pub(crate) fn notice_calling_module() -> Vec<u8> {
@@ -1020,6 +1077,11 @@ mod tests {
             self.answer.clone()
         }
 
+        fn merchant_volumes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            self.asked.lock().unwrap().push(request.to_vec());
+            self.answer.clone()
+        }
+
         fn account_notice(&self, request: &[u8]) -> Result<Vec<u8>, String> {
             self.asked.lock().unwrap().push(request.to_vec());
             self.answer.clone()
@@ -1133,8 +1195,37 @@ mod tests {
 
     /// The same property for the fourth call. Same reasoning as
     /// [`merchant_volume_is_its_own_import_and_reaches_its_own_method`]: a
+    /// module importing only `merchant_volumes` must both instantiate and
+    /// reach `merchant_volumes` specifically, not `merchant_volume` or either
+    /// of the other two answering calls wired in the same loop-shaped helper.
+    #[test]
+    fn merchant_volumes_is_its_own_import_and_reaches_its_own_method() {
+        let engine = PluginEngine::new();
+        let module = engine.compile(&fixtures::volumes_calling_module()).unwrap();
+        let calls = Arc::new(NamingCalls);
+        let mut instance = engine
+            .instantiate_with_calls(&module, calls)
+            .expect("a plugin importing only merchant_volumes must instantiate");
+
+        let answer = instance
+            .call_raw(
+                "call",
+                br#"{"account_ids":["a-1","a-2"],"window_days":30}"#,
+                1_000,
+            )
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(answer).unwrap(),
+            "merchant_volumes",
+            "the merchant_volumes import must reach merchant_volumes, not another method"
+        );
+    }
+
+    /// The same property for the fifth call. Same reasoning as
+    /// [`merchant_volume_is_its_own_import_and_reaches_its_own_method`]: a
     /// module importing only `account_notice` must both instantiate and
-    /// reach `account_notice` specifically, not any of the other three
+    /// reach `account_notice` specifically, not any of the other four
     /// answering calls wired in the same loop-shaped helper.
     #[test]
     fn account_notice_is_its_own_import_and_reaches_its_own_method() {
@@ -1175,6 +1266,10 @@ mod tests {
 
         fn merchant_volume(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
             Ok(b"merchant_volume".to_vec())
+        }
+
+        fn merchant_volumes(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"merchant_volumes".to_vec())
         }
 
         fn account_notice(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
