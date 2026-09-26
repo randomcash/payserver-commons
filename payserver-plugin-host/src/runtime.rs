@@ -107,6 +107,25 @@
 //! that names an account it does not otherwise deal with learns nothing
 //! about whether that account exists or how to reach it - it only ever
 //! learns whether its own notice was delivered.
+//!
+//! The production body on the pinned side already exists and is merged: it
+//! resolves an account id to its registered email and delivers through the
+//! same sender that already sends receipts, refusing rather than pretending
+//! to succeed when an account has no address on file. It is not wired into
+//! this trait yet for a mechanical reason, not a missing one - the pinned
+//! side's `impl PluginHostCalls` cannot implement a method this trait does
+//! not declare, and this crate is what has to merge and get pinned first.
+//!
+//! The piece that decides *when* to call this - reading a plan's own warning
+//! schedule and firing once an account crosses a bracket - belongs to the
+//! billing plugin, and it cannot be written before this capability is
+//! reachable either: a plugin that imports a call its host does not
+//! register fails to *instantiate*, not to run, so adding that import ahead
+//! of the pin moving would take the plugin down rather than leave today's
+//! behaviour in place. The order is fixed - this capability merges, then the
+//! pin moves and the host-side body gets wired to it, then and only then can
+//! the billing plugin add the caller - and it cannot be collapsed into one
+//! PR without either skipping a step or breaking one.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
