@@ -125,7 +125,7 @@ mod tests {
 
     /// The three states have to stay distinguishable. Collapse absent into
     /// null and every client that saves settings without knowing about this
-    /// field switches billing off.
+    /// field clears the operator's own store.
     #[test]
     fn an_absent_billing_store_is_not_an_explicit_null() {
         let absent: UpdateServerSettingsRequest =
