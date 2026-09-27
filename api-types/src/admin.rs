@@ -51,16 +51,16 @@ pub struct ServerSettingsResponse {
     pub invoice_expiry_minutes: i32,
     pub rate_limit_rpm: i32,
     pub enabled_chain_ids: Vec<ChainId>,
-    /// The store this instance bills its own subscriptions through, if it
-    /// sells anything to itself.
+    /// The operator's own store, if this instance issues any invoices to
+    /// itself at all.
     ///
     /// Read once at boot, so a change here does not take effect until the
     /// server restarts. That is the behaviour and not a limitation waiting
-    /// to be fixed: this id decides both where subscription invoices are
-    /// issued and which store's settled payments a billing plugin is told
-    /// about, and moving it while invoices are outstanding would leave those
-    /// invoices settling on a store nothing is watching - the merchant pays
-    /// and is never credited. A client showing this must say so.
+    /// to be fixed: this id decides both where those invoices are issued and
+    /// which store's settled payments a plugin is told about, and moving it
+    /// while invoices are outstanding would leave those invoices settling on
+    /// a store nothing is watching - the merchant pays and is never
+    /// credited. A client showing this must say so.
     #[serde(default)]
     pub billing_store_id: Option<StoreId>,
     /// Whether the value above is the one this process is actually running
