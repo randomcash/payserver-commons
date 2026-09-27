@@ -61,12 +61,6 @@ pub struct ServerSettingsResponse {
     /// while invoices are outstanding would leave those invoices settling on
     /// a store nothing is watching - the merchant pays and is never
     /// credited. A client showing this must say so.
-    ///
-    /// The field keeps its old name deliberately: it has no
-    /// `#[serde(rename)]`, so it is also the wire name and the published
-    /// OpenAPI schema name, and renaming it breaks every client that reads
-    /// or writes it. That is a decision on a public API surface, still
-    /// pending.
     #[serde(default)]
     pub billing_store_id: Option<StoreId>,
     /// Whether the value above is the one this process is actually running

@@ -281,12 +281,6 @@ pub struct ServerSettings {
     /// changing it under a running process would leave invoices already
     /// issued settling on a store nothing is watching - paid, and never
     /// credited.
-    ///
-    /// The identifier keeps its old name deliberately, not by oversight: it
-    /// is serialized with no `#[serde(rename)]`, so it is also the wire name
-    /// and the published OpenAPI schema name, and renaming it is a breaking
-    /// change for every client rather than a doc fix. Whether to make that
-    /// change is a decision on a public API surface, still pending.
     pub billing_store_id: Option<StoreId>,
 }
 
