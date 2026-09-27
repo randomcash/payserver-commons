@@ -61,6 +61,12 @@ pub struct ServerSettingsResponse {
     /// while invoices are outstanding would leave those invoices settling on
     /// a store nothing is watching - the merchant pays and is never
     /// credited. A client showing this must say so.
+    ///
+    /// The field keeps its old name deliberately: it has no
+    /// `#[serde(rename)]`, so it is also the wire name and the published
+    /// OpenAPI schema name, and renaming it breaks every client that reads
+    /// or writes it. That is a decision on a public API surface, still
+    /// pending.
     #[serde(default)]
     pub billing_store_id: Option<StoreId>,
     /// Whether the value above is the one this process is actually running
@@ -99,9 +105,9 @@ pub struct UpdateServerSettingsRequest {
     /// A double option, and it earns its awkwardness. This endpoint replaces
     /// the whole settings object, so a plain `Option` would make an omitted
     /// field indistinguishable from an explicit null - and every older client
-    /// that PUTs the other four fields would silently switch billing off on
-    /// the next settings save. Absent has to mean "I am not talking about
-    /// this", which only a nested option can express.
+    /// that PUTs the other four fields would silently clear this on the next
+    /// settings save. Absent has to mean "I am not talking about this",
+    /// which only a nested option can express.
     #[serde(default, deserialize_with = "present_option")]
     pub billing_store_id: Option<Option<StoreId>>,
 }
