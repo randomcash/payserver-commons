@@ -28,6 +28,10 @@ pub struct ApiKeyInfoResponse {
     /// Surfacing this lets the client render the exact expiry without
     /// hardcoding the grace duration.
     pub deprecation_expires_at: Option<DateTime<Utc>>,
+    /// Policy strings scoping the key, or `["unrestricted"]` for the owner's
+    /// full role. Null means the key predates this field and inherits the
+    /// owner's role in full, same as `["unrestricted"]`.
+    pub permissions: Option<Vec<String>>,
 }
 
 /// Response for listing API keys.
@@ -45,6 +49,12 @@ pub struct CreateApiKeyPayload {
     pub name: String,
     /// Optional expiration time.
     pub expires_at: Option<DateTime<Utc>>,
+    /// Policy strings to scope the key to, or `["unrestricted"]` for the
+    /// owner's full role. Omitted or empty means the key can authenticate
+    /// but do nothing else, so a new key must be deliberately widened rather
+    /// than silently inheriting everything its owner can do.
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 /// Response after creating an API key (includes plaintext key).
@@ -85,4 +95,42 @@ pub struct RotateApiKeyResponsePayload {
 pub struct UpdateApiKeyPayload {
     /// Per-key rate limit in requests per minute. Null = use server default.
     pub rate_limit_rpm: Option<i32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A create request that omits `permissions` entirely must deserialize
+    /// to an empty scope, not to `["unrestricted"]` or any other default
+    /// that would grant more than the caller asked for.
+    #[test]
+    fn omitted_permissions_on_create_defaults_to_empty() {
+        let payload: CreateApiKeyPayload =
+            serde_json::from_str(r#"{"name": "test key", "expires_at": null}"#).unwrap();
+        assert_eq!(payload.permissions, Vec::<String>::new());
+    }
+
+    /// A stored key response with no `permissions` column value must
+    /// round-trip as `None`, distinct from `Some(vec![])`: the former means
+    /// "inherits the owner's role in full" and the latter means "can do
+    /// nothing".
+    #[test]
+    fn missing_permissions_on_response_is_none_not_empty() {
+        let json = r#"{
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "test key",
+            "key_prefix": "pk_test",
+            "is_active": true,
+            "created_at": "2026-01-01T00:00:00Z",
+            "last_used_at": null,
+            "expires_at": null,
+            "rate_limit_rpm": null,
+            "deprecated_at": null,
+            "deprecation_expires_at": null,
+            "permissions": null
+        }"#;
+        let response: ApiKeyInfoResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.permissions, None);
+    }
 }
