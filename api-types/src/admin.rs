@@ -51,16 +51,16 @@ pub struct ServerSettingsResponse {
     pub invoice_expiry_minutes: i32,
     pub rate_limit_rpm: i32,
     pub enabled_chain_ids: Vec<ChainId>,
-    /// The operator's own store, if this instance issues any invoices to
-    /// itself at all.
+    /// The store this instance bills its own subscriptions through, if it
+    /// sells anything to itself.
     ///
     /// Read once at boot, so a change here does not take effect until the
     /// server restarts. That is the behaviour and not a limitation waiting
-    /// to be fixed: this id decides both where those invoices are issued and
-    /// which store's settled payments a plugin is told about, and moving it
-    /// while invoices are outstanding would leave those invoices settling on
-    /// a store nothing is watching - the merchant pays and is never
-    /// credited. A client showing this must say so.
+    /// to be fixed: this id decides both where subscription invoices are
+    /// issued and which store's settled payments a billing plugin is told
+    /// about, and moving it while invoices are outstanding would leave those
+    /// invoices settling on a store nothing is watching - the merchant pays
+    /// and is never credited. A client showing this must say so.
     #[serde(default)]
     pub billing_store_id: Option<StoreId>,
     /// Whether the value above is the one this process is actually running
@@ -99,9 +99,9 @@ pub struct UpdateServerSettingsRequest {
     /// A double option, and it earns its awkwardness. This endpoint replaces
     /// the whole settings object, so a plain `Option` would make an omitted
     /// field indistinguishable from an explicit null - and every older client
-    /// that PUTs the other four fields would silently clear this on the next
-    /// settings save. Absent has to mean "I am not talking about this",
-    /// which only a nested option can express.
+    /// that PUTs the other four fields would silently switch billing off on
+    /// the next settings save. Absent has to mean "I am not talking about
+    /// this", which only a nested option can express.
     #[serde(default, deserialize_with = "present_option")]
     pub billing_store_id: Option<Option<StoreId>>,
 }
@@ -125,7 +125,7 @@ mod tests {
 
     /// The three states have to stay distinguishable. Collapse absent into
     /// null and every client that saves settings without knowing about this
-    /// field clears the operator's own store.
+    /// field switches billing off.
     #[test]
     fn an_absent_billing_store_is_not_an_explicit_null() {
         let absent: UpdateServerSettingsRequest =
