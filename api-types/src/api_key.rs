@@ -28,6 +28,10 @@ pub struct ApiKeyInfoResponse {
     /// Surfacing this lets the client render the exact expiry without
     /// hardcoding the grace duration.
     pub deprecation_expires_at: Option<DateTime<Utc>>,
+    /// Policy strings scoping the key, or `["unrestricted"]` for the owner's
+    /// full role. Null means the key predates this field and inherits the
+    /// owner's role in full, same as `["unrestricted"]`.
+    pub permissions: Option<Vec<String>>,
 }
 
 /// Response for listing API keys.
@@ -45,6 +49,12 @@ pub struct CreateApiKeyPayload {
     pub name: String,
     /// Optional expiration time.
     pub expires_at: Option<DateTime<Utc>>,
+    /// Policy strings to scope the key to, or `["unrestricted"]` for the
+    /// owner's full role. Omitted or empty means the key can authenticate
+    /// but do nothing else, so a new key must be deliberately widened rather
+    /// than silently inheriting everything its owner can do.
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 /// Response after creating an API key (includes plaintext key).
