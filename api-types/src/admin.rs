@@ -144,7 +144,8 @@ mod tests {
 
         let id = uuid::Uuid::from_u128(7);
         let set: UpdateServerSettingsRequest =
-            serde_json::from_str(&format!("{{{},\"operator_store_id\":\"{id}\"}}", base())).unwrap();
+            serde_json::from_str(&format!("{{{},\"operator_store_id\":\"{id}\"}}", base()))
+                .unwrap();
         assert_eq!(set.operator_store_id, Some(Some(StoreId(id))));
 
         assert_ne!(
