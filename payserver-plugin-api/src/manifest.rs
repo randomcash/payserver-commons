@@ -45,7 +45,7 @@ pub struct Manifest {
     ///
     /// It also keeps a plugin's own vocabulary out of the client. The client
     /// renders whatever is declared here; it never knows that one of these
-    /// happens to be billing.
+    /// happens to be commercial.
     pub pages: Vec<PageDeclaration>,
 }
 
