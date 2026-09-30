@@ -45,8 +45,7 @@
 //! # `invoice_create`
 //!
 //! The second answering call, and the one that moves money: it asks the
-//! host to issue an invoice *on the host's own store*, which is how an
-//! instance sells a subscription to itself.
+//! host to issue an invoice *on the host's own store*.
 //!
 //! Note what the plugin does not get to say. There is no store in the
 //! request — not a checked one, none at all. A plugin that could name a

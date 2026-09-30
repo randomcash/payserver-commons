@@ -297,9 +297,9 @@ impl Default for ServerSettings {
             .into_iter()
             .map(ChainId::evm)
             .collect(),
-            // Nothing, not a guess. An instance that bills for itself is
-            // configured to; one that is not must not invoice on a store it
-            // picked on its own.
+            // Nothing, not a guess. A store is only used for the
+            // instance's own invoices when an operator configured it; it must
+            // never be picked on the instance's own.
             operator_store_id: None,
         }
     }
