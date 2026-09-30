@@ -8,7 +8,7 @@
 //! detail leaking into the product.
 //!
 //! A slug is the other half: short, lowercase, and chosen to read well.
-//! `/billing/subscriptions`.
+//! `/reports/monthly`.
 //!
 //! # What makes a slug safe
 //!
