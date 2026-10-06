@@ -45,8 +45,7 @@
 //! # `invoice_create`
 //!
 //! The second answering call, and the one that moves money: it asks the
-//! host to issue an invoice *on the host's own store*, which is how an
-//! instance sells a subscription to itself.
+//! host to issue an invoice *on the host's own store*.
 //!
 //! Note what the plugin does not get to say. There is no store in the
 //! request — not a checked one, none at all. A plugin that could name a
@@ -74,6 +73,41 @@
 //! this import can learn any account's settled volume. It cannot learn what
 //! any individual payment was, who paid it, on what chain, to which address,
 //! or in what asset.
+//!
+//! # `merchant_volumes`
+//!
+//! The fourth answering call, and the batched form of `merchant_volume`: it
+//! answers the same question for many accounts in one call rather than one
+//! call per account.
+//!
+//! A page listing every account's standing cannot call `merchant_volume`
+//! once per row and stay inside a single call's deadline - each call is a
+//! host-side store lookup, a database aggregate and at least one live rate
+//! lookup, and a table's row count is the plugin's to choose, not the
+//! host's. This exists so that choice does not multiply real I/O by however
+//! many rows a plugin decided to draw.
+//!
+//! Same disclosure as `merchant_volume`, at the scale of a list instead of
+//! one account: a plugin with this import can learn many accounts' settled
+//! volume in one call. It still cannot learn what any individual payment
+//! was.
+//!
+//! # `account_standing`
+//!
+//! The fifth answering call, and the only one that reads a decision someone
+//! else made: it answers "what standing did the host last receive for this
+//! account" with the stored standing, or nothing when none was ever received.
+//!
+//! It is read-only by construction, and the property is structural rather
+//! than a check. The import takes an account and returns a value; there is no
+//! second import that stores one, and `storage_query` runs in the plugin's
+//! own schema, which does not contain the table the host keeps the standing
+//! in. A plugin that gates on a standing therefore cannot grant itself a good
+//! one, whatever bug or compromise it carries.
+//!
+//! One account per call, no listing: a plugin with this import learns the
+//! standing of an account it already has an id for, and cannot enumerate the
+//! accounts that have one.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -154,6 +188,40 @@ pub trait PluginHostCalls: Send + Sync {
     /// Returns the message to hand back to the plugin when the volume could
     /// not be read.
     fn merchant_volume(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// Total volume many accounts each settled over a window, in one call.
+    ///
+    /// `request` names the accounts, the window in days and the currency to
+    /// quote in, the same shape as [`merchant_volume`](Self::merchant_volume)
+    /// with a list of accounts in place of one. See this module's header for
+    /// why this exists as its own call rather than a loop over that one.
+    ///
+    /// Required rather than defaulted, for the same reason
+    /// [`invoice_create`](Self::invoice_create) is: a default would let an
+    /// implementation hand out a merchant-data capability by not mentioning
+    /// it.
+    ///
+    /// # Errors
+    /// Returns the message to hand back to the plugin when the batch could
+    /// not be read.
+    fn merchant_volumes(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// The standing the host last received for one account.
+    ///
+    /// `request` names the account; the answer is the stored standing, or an
+    /// explicit absence. Read-only: see this module's header for why the
+    /// plugin has no way to write one.
+    ///
+    /// Required rather than defaulted, for the same reason
+    /// [`invoice_create`](Self::invoice_create) is: a default would let an
+    /// implementation hand out an entitlement capability by not mentioning
+    /// it.
+    ///
+    /// # Errors
+    /// Returns the message to hand back to the plugin when the standing could
+    /// not be read. An unreadable standing is an error, never an absence: a
+    /// plugin reads "none" as "nothing was ever received".
+    fn account_standing(&self, request: &[u8]) -> Result<Vec<u8>, String>;
 }
 
 /// The store's context: what host functions need, plus the buffer a two-step
@@ -478,6 +546,20 @@ fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
         |calls, request| calls.merchant_volume(request),
     )?;
 
+    define_answering_call(
+        &mut linker,
+        "merchant_volumes",
+        "this host does not report merchant volume",
+        |calls, request| calls.merchant_volumes(request),
+    )?;
+
+    define_answering_call(
+        &mut linker,
+        "account_standing",
+        "this host does not report account standing",
+        |calls, request| calls.account_standing(request),
+    )?;
+
     linker
         .func_wrap(
             HOST_MODULE,
@@ -629,6 +711,14 @@ pub(crate) mod fixtures {
 
     pub(crate) fn volume_calling_module() -> Vec<u8> {
         module_calling("merchant_volume")
+    }
+
+    pub(crate) fn volumes_calling_module() -> Vec<u8> {
+        module_calling("merchant_volumes")
+    }
+
+    pub(crate) fn standing_calling_module() -> Vec<u8> {
+        module_calling("account_standing")
     }
 
     fn module_calling(import: &str) -> Vec<u8> {
@@ -976,6 +1066,16 @@ mod tests {
             self.asked.lock().unwrap().push(request.to_vec());
             self.answer.clone()
         }
+
+        fn merchant_volumes(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            self.asked.lock().unwrap().push(request.to_vec());
+            self.answer.clone()
+        }
+
+        fn account_standing(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            self.asked.lock().unwrap().push(request.to_vec());
+            self.answer.clone()
+        }
     }
 
     /// The capability this whole import surface exists for: before it, a
@@ -1083,8 +1183,109 @@ mod tests {
         );
     }
 
+    /// The same property for the fourth call. Same reasoning as
+    /// [`merchant_volume_is_its_own_import_and_reaches_its_own_method`]: a
+    /// module importing only `merchant_volumes` must both instantiate and
+    /// reach `merchant_volumes` specifically, not `merchant_volume` or either
+    /// of the other two answering calls wired in the same loop-shaped helper.
+    #[test]
+    fn merchant_volumes_is_its_own_import_and_reaches_its_own_method() {
+        let engine = PluginEngine::new();
+        let module = engine.compile(&fixtures::volumes_calling_module()).unwrap();
+        let calls = Arc::new(NamingCalls);
+        let mut instance = engine
+            .instantiate_with_calls(&module, calls)
+            .expect("a plugin importing only merchant_volumes must instantiate");
+
+        let answer = instance
+            .call_raw(
+                "call",
+                br#"{"account_ids":["a-1","a-2"],"window_days":30}"#,
+                1_000,
+            )
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(answer).unwrap(),
+            "merchant_volumes",
+            "the merchant_volumes import must reach merchant_volumes, not another method"
+        );
+    }
+
+    /// A module importing only `account_standing` must both instantiate and
+    /// reach `account_standing` specifically. This is the property deploy
+    /// order rests on: a plugin importing a function the host lacks fails to
+    /// instantiate.
+    #[test]
+    fn account_standing_is_its_own_import_and_reaches_its_own_method() {
+        let engine = PluginEngine::new();
+        let module = engine
+            .compile(&fixtures::standing_calling_module())
+            .unwrap();
+        let mut instance = engine
+            .instantiate_with_calls(&module, Arc::new(NamingCalls))
+            .expect("a plugin importing only account_standing must instantiate");
+
+        let answer = instance
+            .call_raw("call", br#"{"account_id":"a-1"}"#, 1_000)
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(answer).unwrap(),
+            "account_standing",
+            "the account_standing import must reach account_standing, not another method"
+        );
+    }
+
+    /// Unbacked, the import still exists: the plugin loads and is told the
+    /// host cannot answer, rather than failing to instantiate.
+    #[test]
+    fn an_unbacked_account_standing_import_still_instantiates() {
+        let engine = PluginEngine::new();
+        let module = engine
+            .compile(&fixtures::standing_calling_module())
+            .unwrap();
+        let mut instance = engine.instantiate(&module).unwrap();
+
+        assert!(instance.call_raw("call", b"{}", 1_000).is_ok());
+    }
+
+    /// There is no import by which a plugin could store a standing. Naming
+    /// the obvious candidates must fail to instantiate, so a write capability
+    /// cannot appear by someone defining one without this test going red.
+    #[test]
+    fn no_import_exists_to_write_a_standing() {
+        let engine = PluginEngine::new();
+        for name in [
+            "set_account_standing",
+            "account_standing_set",
+            "apply_account_standing",
+        ] {
+            let wasm = wat::parse_str(format!(
+                r#"
+                (module
+                    (import "ethpayserver" "{name}"
+                        (func $w (param i32 i32) (result i64)))
+                    (memory (export "memory") 1)
+                    (func (export "alloc") (param i32) (result i32) (i32.const 0))
+                    (func (export "call") (param i32) (param i32) (result i64) (i64.const 0))
+                )
+                "#
+            ))
+            .unwrap();
+            let module = engine.compile(&wasm).unwrap();
+            assert!(
+                matches!(
+                    engine.instantiate(&module),
+                    Err(PluginWasmError::Instantiate(_))
+                ),
+                "{name} must not be an import"
+            );
+        }
+    }
+
     /// Answers with the name of whichever method was called, so a test can
-    /// tell the three answering calls apart by their result.
+    /// tell the five answering calls apart by their result.
     struct NamingCalls;
 
     impl PluginHostCalls for NamingCalls {
@@ -1098,6 +1299,14 @@ mod tests {
 
         fn merchant_volume(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
             Ok(b"merchant_volume".to_vec())
+        }
+
+        fn merchant_volumes(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"merchant_volumes".to_vec())
+        }
+
+        fn account_standing(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"account_standing".to_vec())
         }
     }
 

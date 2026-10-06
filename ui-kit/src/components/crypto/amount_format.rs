@@ -2,9 +2,9 @@
 //!
 //! This existed four times across the two repositories — a currency
 //! formatter that never trimmed, two crypto formatters that duplicated the
-//! same base-units division, and a fourth in `payserver-billing` — and only
-//! one of the four actually trimmed trailing zeros. The rest glued a symbol
-//! onto whatever `NUMERIC(38,18)` sent over the wire, zeros and all.
+//! same base-units division, and a fourth in a private downstream service —
+//! and only one of the four actually trimmed trailing zeros. The rest glued a
+//! symbol onto whatever `NUMERIC(38,18)` sent over the wire, zeros and all.
 //!
 //! Everything here works on strings, never `f64`: a `NUMERIC(38,18)` amount
 //! can carry more precision than a float represents exactly, so parsing one

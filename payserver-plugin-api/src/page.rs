@@ -502,7 +502,7 @@ mod tests {
     #[test]
     fn prose_and_label_value_pairs_do_not_have_to_be_badges() {
         round_trip(&PageElement::Text(Text {
-            text: "Your subscription starts once the first invoice is paid.".to_string(),
+            text: "Your plan starts once the first invoice is paid.".to_string(),
             style: TextStyle::Body,
         }));
         round_trip(&PageElement::Fields(Fields {
