@@ -1043,6 +1043,10 @@ mod admin_toggle_tests {
             fn account_notice(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
                 Err("this double notifies no accounts".to_string())
             }
+
+            fn account_standing(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+                Err("this double reports no standing".to_string())
+            }
         }
 
         let calls = Arc::new(Recording(StdMutex::new(Vec::new())));

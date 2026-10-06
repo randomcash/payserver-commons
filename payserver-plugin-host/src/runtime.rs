@@ -45,8 +45,7 @@
 //! # `invoice_create`
 //!
 //! The second answering call, and the one that moves money: it asks the
-//! host to issue an invoice *on the host's own store*, which is how an
-//! instance sells a subscription to itself.
+//! host to issue an invoice *on the host's own store*.
 //!
 //! Note what the plugin does not get to say. There is no store in the
 //! request — not a checked one, none at all. A plugin that could name a
@@ -93,9 +92,26 @@
 //! volume in one call. It still cannot learn what any individual payment
 //! was.
 //!
+//! # `account_standing`
+//!
+//! The fifth answering call, and the only one that reads a decision someone
+//! else made: it answers "what standing did the host last receive for this
+//! account" with the stored standing, or nothing when none was ever received.
+//!
+//! It is read-only by construction, and the property is structural rather
+//! than a check. The import takes an account and returns a value; there is no
+//! second import that stores one, and `storage_query` runs in the plugin's
+//! own schema, which does not contain the table the host keeps the standing
+//! in. A plugin that gates on a standing therefore cannot grant itself a good
+//! one, whatever bug or compromise it carries.
+//!
+//! One account per call, no listing: a plugin with this import learns the
+//! standing of an account it already has an id for, and cannot enumerate the
+//! accounts that have one.
+//!
 //! # `account_notice`
 //!
-//! The fifth answering call, and the only one that reaches outside the
+//! The sixth answering call, and the only one that reaches outside the
 //! host's own process: it asks the host to tell an account something,
 //! naming a subject and a body.
 //!
@@ -234,6 +250,23 @@ pub trait PluginHostCalls: Send + Sync {
     /// Returns the message to hand back to the plugin when the batch could
     /// not be read.
     fn merchant_volumes(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+
+    /// The standing the host last received for one account.
+    ///
+    /// `request` names the account; the answer is the stored standing, or an
+    /// explicit absence. Read-only: see this module's header for why the
+    /// plugin has no way to write one.
+    ///
+    /// Required rather than defaulted, for the same reason
+    /// [`invoice_create`](Self::invoice_create) is: a default would let an
+    /// implementation hand out an entitlement capability by not mentioning
+    /// it.
+    ///
+    /// # Errors
+    /// Returns the message to hand back to the plugin when the standing could
+    /// not be read. An unreadable standing is an error, never an absence: a
+    /// plugin reads "none" as "nothing was ever received".
+    fn account_standing(&self, request: &[u8]) -> Result<Vec<u8>, String>;
 
     /// Tell one account something, through a channel and an address the
     /// plugin never names.
@@ -584,6 +617,13 @@ fn host_linker(engine: &Engine) -> Result<Linker<PluginCtx>, PluginWasmError> {
 
     define_answering_call(
         &mut linker,
+        "account_standing",
+        "this host does not report account standing",
+        |calls, request| calls.account_standing(request),
+    )?;
+
+    define_answering_call(
+        &mut linker,
         "account_notice",
         "this host does not notify accounts",
         |calls, request| calls.account_notice(request),
@@ -744,6 +784,10 @@ pub(crate) mod fixtures {
 
     pub(crate) fn volumes_calling_module() -> Vec<u8> {
         module_calling("merchant_volumes")
+    }
+
+    pub(crate) fn standing_calling_module() -> Vec<u8> {
+        module_calling("account_standing")
     }
 
     pub(crate) fn notice_calling_module() -> Vec<u8> {
@@ -1101,6 +1145,11 @@ mod tests {
             self.answer.clone()
         }
 
+        fn account_standing(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            self.asked.lock().unwrap().push(request.to_vec());
+            self.answer.clone()
+        }
+
         fn account_notice(&self, request: &[u8]) -> Result<Vec<u8>, String> {
             self.asked.lock().unwrap().push(request.to_vec());
             self.answer.clone()
@@ -1241,10 +1290,82 @@ mod tests {
         );
     }
 
-    /// The same property for the fifth call. Same reasoning as
+    /// A module importing only `account_standing` must both instantiate and
+    /// reach `account_standing` specifically. This is the property deploy
+    /// order rests on: a plugin importing a function the host lacks fails to
+    /// instantiate.
+    #[test]
+    fn account_standing_is_its_own_import_and_reaches_its_own_method() {
+        let engine = PluginEngine::new();
+        let module = engine
+            .compile(&fixtures::standing_calling_module())
+            .unwrap();
+        let mut instance = engine
+            .instantiate_with_calls(&module, Arc::new(NamingCalls))
+            .expect("a plugin importing only account_standing must instantiate");
+
+        let answer = instance
+            .call_raw("call", br#"{"account_id":"a-1"}"#, 1_000)
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(answer).unwrap(),
+            "account_standing",
+            "the account_standing import must reach account_standing, not another method"
+        );
+    }
+
+    /// Unbacked, the import still exists: the plugin loads and is told the
+    /// host cannot answer, rather than failing to instantiate.
+    #[test]
+    fn an_unbacked_account_standing_import_still_instantiates() {
+        let engine = PluginEngine::new();
+        let module = engine
+            .compile(&fixtures::standing_calling_module())
+            .unwrap();
+        let mut instance = engine.instantiate(&module).unwrap();
+
+        assert!(instance.call_raw("call", b"{}", 1_000).is_ok());
+    }
+
+    /// There is no import by which a plugin could store a standing. Naming
+    /// the obvious candidates must fail to instantiate, so a write capability
+    /// cannot appear by someone defining one without this test going red.
+    #[test]
+    fn no_import_exists_to_write_a_standing() {
+        let engine = PluginEngine::new();
+        for name in [
+            "set_account_standing",
+            "account_standing_set",
+            "apply_account_standing",
+        ] {
+            let wasm = wat::parse_str(format!(
+                r#"
+                (module
+                    (import "ethpayserver" "{name}"
+                        (func $w (param i32 i32) (result i64)))
+                    (memory (export "memory") 1)
+                    (func (export "alloc") (param i32) (result i32) (i32.const 0))
+                    (func (export "call") (param i32) (param i32) (result i64) (i64.const 0))
+                )
+                "#
+            ))
+            .unwrap();
+            let module = engine.compile(&wasm).unwrap();
+            assert!(
+                matches!(
+                    engine.instantiate(&module),
+                    Err(PluginWasmError::Instantiate(_))
+                ),
+                "{name} must not be an import"
+            );
+        }
+    }
+
+    /// The same property for the sixth call. Same reasoning as
     /// [`merchant_volume_is_its_own_import_and_reaches_its_own_method`]: a
     /// module importing only `account_notice` must both instantiate and
-    /// reach `account_notice` specifically, not any of the other four
+    /// reach `account_notice` specifically, not any of the other five
     /// answering calls wired in the same loop-shaped helper.
     #[test]
     fn account_notice_is_its_own_import_and_reaches_its_own_method() {
@@ -1271,7 +1392,7 @@ mod tests {
     }
 
     /// Answers with the name of whichever method was called, so a test can
-    /// tell the four answering calls apart by their result.
+    /// tell the six answering calls apart by their result.
     struct NamingCalls;
 
     impl PluginHostCalls for NamingCalls {
@@ -1289,6 +1410,10 @@ mod tests {
 
         fn merchant_volumes(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
             Ok(b"merchant_volumes".to_vec())
+        }
+
+        fn account_standing(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            Ok(b"account_standing".to_vec())
         }
 
         fn account_notice(&self, _request: &[u8]) -> Result<Vec<u8>, String> {

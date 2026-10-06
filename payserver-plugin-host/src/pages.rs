@@ -81,7 +81,7 @@ impl PageRenderError {
 ///
 /// Three outcomes, not two, and the third is the one worth keeping separate:
 /// a plugin that trapped is not a page that does not exist. Collapsing
-/// `Unavailable` into `PageNotFound` would answer 404 for a billing page
+/// `Unavailable` into `PageNotFound` would answer 404 for a page
 /// that is merely broken, and "there is no such page" is a much more
 /// convincing lie than "this did not work".
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

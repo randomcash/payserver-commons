@@ -44,8 +44,8 @@ pub struct Manifest {
     /// a sidebar.
     ///
     /// It also keeps a plugin's own vocabulary out of the client. The client
-    /// renders whatever is declared here; it never knows that one of these
-    /// happens to be billing.
+    /// renders whatever is declared here; it never knows which plugin
+    /// a declaration came from.
     pub pages: Vec<PageDeclaration>,
 }
 
