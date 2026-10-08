@@ -26,6 +26,7 @@ mod kind;
 mod manifest;
 pub mod page;
 mod slug;
+mod standing_basis;
 
 pub use dependency::{Dependency, InvalidDependency};
 pub use failure_mode::FailureMode;
@@ -38,6 +39,7 @@ pub use page::{
     Viewer,
 };
 pub use slug::{InvalidSlug, PluginSlug, RESERVED_SLUGS};
+pub use standing_basis::StandingBasis;
 
 pub use semver::{Version, VersionReq};
 
