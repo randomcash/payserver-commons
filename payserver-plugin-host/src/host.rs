@@ -35,8 +35,8 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, PoisonError, RwLock};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, PoisonError, RwLock, TryLockError};
+use std::time::{Duration, Instant};
 
 use payserver_plugin_api::{FailureMode, Manifest, PluginId, PluginKind, Version};
 use serde::Serialize;
@@ -45,7 +45,7 @@ use serde::de::DeserializeOwned;
 use super::PluginLoadError;
 use super::registry::PluginRegistry;
 use super::runtime::PluginHostCalls;
-use super::runtime::{PluginEngine, PluginInstance, PluginWasmError};
+use super::runtime::{PluginCallError, PluginEngine, PluginInstance, PluginWasmError};
 
 /// A plugin failed either the load-time gate or wasm compilation /
 /// instantiation.
@@ -348,6 +348,14 @@ impl PluginHost {
         entries.get(id).map(|entry| entry.snapshot(id.clone()))
     }
 
+    #[cfg(test)]
+    fn instance_is_free(&self, id: &PluginId) -> bool {
+        let entries = self.entries.read().unwrap_or_else(PoisonError::into_inner);
+        entries
+            .get(id)
+            .is_some_and(|entry| entry.instance.try_lock().is_ok())
+    }
+
     fn enabled_entry(&self, id: &PluginId) -> Option<Arc<PluginEntry>> {
         let entries = self.entries.read().unwrap_or_else(PoisonError::into_inner);
         let entry = entries.get(id)?;
@@ -372,7 +380,8 @@ impl PluginHost {
             }
         };
         let export = export.to_string();
-        let ticks = self.engine.ticks_for(self.call_deadline);
+        let deadline = self.call_deadline;
+        let wall_bound = self.wall_bound();
         // Held for the lifetime of the spawned task, not just this method —
         // see the struct doc on `PluginHost::engine` for why a detached call
         // needs its own claim on the engine that enforces its deadline.
@@ -385,21 +394,22 @@ impl PluginHost {
         let call_entry = Arc::clone(&entry);
 
         tokio::spawn(async move {
-            let outcome = tokio::task::spawn_blocking(move || {
-                let mut instance = entry_instance_lock(&call_entry);
-                let result = instance.call_raw(&export, &arg, ticks);
-                drop(instance);
-                drop(engine);
+            let blocking_engine = Arc::clone(&engine);
+            let outcome = bounded_call(wall_bound, move || {
+                let result = locked_call(&blocking_engine, &call_entry, &export, &arg, deadline);
+                drop(blocking_engine);
                 result
             })
             .await;
+            drop(engine);
 
             match outcome {
-                Ok(Ok(_)) => entry.record_success(),
-                Ok(Err(err)) => entry.record_failure(err.to_string()),
-                Err(join_err) => {
+                CallEnd::Done(Ok(_)) => entry.record_success(),
+                CallEnd::Done(Err(err)) => entry.record_failure(err.to_string()),
+                CallEnd::Panicked(join_err) => {
                     entry.record_failure(format!("plugin call task panicked: {join_err}"));
                 }
+                CallEnd::WallClock => entry.record_failure(wall_clock_reason(deadline)),
             }
         });
     }
@@ -463,22 +473,20 @@ impl PluginHost {
             }
         };
         let export = export.to_string();
-        let ticks = self.engine.ticks_for(self.call_deadline);
+        let deadline = self.call_deadline;
         // See the matching comment in `run_action`: cloned, not moved, so
         // `entry` is still here to record against even if the blocking task
         // itself panics rather than returning a caught call error.
         let call_entry = Arc::clone(&entry);
+        let engine = Arc::clone(&self.engine);
 
-        let outcome = tokio::task::spawn_blocking(move || {
-            let mut instance = entry_instance_lock(&call_entry);
-            let result = instance.call_raw(&export, &arg, ticks);
-            drop(instance);
-            result
+        let outcome = bounded_call(self.wall_bound(), move || {
+            locked_call(&engine, &call_entry, &export, &arg, deadline)
         })
         .await;
 
         match outcome {
-            Ok(Ok(bytes)) => match serde_json::from_slice::<Resp>(&bytes) {
+            CallEnd::Done(Ok(bytes)) => match serde_json::from_slice::<Resp>(&bytes) {
                 Ok(resp) => {
                     entry.record_success();
                     Ok(resp)
@@ -489,17 +497,30 @@ impl PluginHost {
                     Err(reason)
                 }
             },
-            Ok(Err(call_err)) => {
+            CallEnd::Done(Err(call_err)) => {
                 let reason = call_err.to_string();
                 entry.record_failure(reason.clone());
                 Err(reason)
             }
-            Err(join_err) => {
+            CallEnd::Panicked(join_err) => {
                 let reason = format!("plugin call task panicked: {join_err}");
                 entry.record_failure(reason.clone());
                 Err(reason)
             }
+            CallEnd::WallClock => {
+                let reason = wall_clock_reason(deadline);
+                entry.record_failure(reason.clone());
+                Err(reason)
+            }
         }
+    }
+
+    /// How long a caller waits, in wall-clock time, before it stops waiting
+    /// for a call: the deadline plus a little slack so that a plugin which
+    /// is merely slow *in wasm* is still stopped by its epoch trap, with the
+    /// more specific error, rather than by this.
+    fn wall_bound(&self) -> Duration {
+        self.call_deadline + self.engine.tick() * 4
     }
 
     /// What `id`'s manifest declared it is, or `None` if nothing is
@@ -530,11 +551,76 @@ impl PluginHost {
     }
 }
 
-fn entry_instance_lock(entry: &PluginEntry) -> std::sync::MutexGuard<'_, PluginInstance> {
-    entry
-        .instance
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+/// How a bounded call ended.
+enum CallEnd<T> {
+    Done(Result<T, PluginCallError>),
+    Panicked(tokio::task::JoinError),
+    /// The wall-clock bound elapsed first.
+    WallClock,
+}
+
+fn wall_clock_reason(deadline: Duration) -> String {
+    format!(
+        "plugin call exceeded its {deadline:?} wall-clock deadline (waiting for the instance \
+         or inside a host call, where the wasm tick count does not run)"
+    )
+}
+
+/// Runs `call` on a blocking thread and stops waiting for it after `bound`
+/// of wall-clock time.
+///
+/// The epoch deadline only counts time spent executing wasm. Time queueing
+/// for the instance lock, or inside a host call such as a storage query,
+/// passes unmeasured, so a plugin slow in either place held its caller for as
+/// long as it liked while its deadline reported itself satisfied. This is the
+/// bound on what the caller waits.
+///
+/// It does **not** cancel the blocking thread: a thread inside a host call
+/// cannot be interrupted from outside. What happens to it is bounded
+/// separately. It cannot start late (see [`locked_call`]: waiting for the
+/// lock gives up at the deadline) and when its host call finally returns the
+/// epoch has long since passed the call's deadline, so the first wasm
+/// instruction after it traps and the instance lock is released. Until the
+/// host call returns the lock stays held, which is why host-call
+/// implementations must bound their own time (see
+/// [`PluginHostCalls`](super::runtime::PluginHostCalls)); the failure
+/// recorded here is what makes that contention visible.
+async fn bounded_call<T, F>(bound: Duration, call: F) -> CallEnd<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, PluginCallError> + Send + 'static,
+{
+    match tokio::time::timeout(bound, tokio::task::spawn_blocking(call)).await {
+        Ok(Ok(result)) => CallEnd::Done(result),
+        Ok(Err(join_err)) => CallEnd::Panicked(join_err),
+        Err(_elapsed) => CallEnd::WallClock,
+    }
+}
+
+/// Takes the instance lock, waiting no longer than `deadline`, then runs the
+/// call with whatever part of the deadline is left.
+fn locked_call(
+    engine: &PluginEngine,
+    entry: &PluginEntry,
+    export: &str,
+    arg: &[u8],
+    deadline: Duration,
+) -> Result<Vec<u8>, PluginCallError> {
+    let started = Instant::now();
+    let mut instance = loop {
+        match entry.instance.try_lock() {
+            Ok(guard) => break guard,
+            Err(TryLockError::Poisoned(poisoned)) => break poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                if started.elapsed() >= deadline {
+                    return Err(PluginCallError::InstanceBusy);
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+    };
+    let remaining = deadline.saturating_sub(started.elapsed());
+    instance.call_raw(export, arg, engine.ticks_for(remaining))
 }
 
 #[cfg(test)]
@@ -1074,6 +1160,102 @@ mod admin_toggle_tests {
             calls.0.lock().unwrap_or_else(PoisonError::into_inner).len(),
             1,
             "the host import was never reached"
+        );
+    }
+
+    /// A host-call double whose storage query sleeps: the plugin is not
+    /// executing wasm while it does, so no epoch tick counts the time.
+    struct SlowStorage(Duration);
+    impl PluginHostCalls for SlowStorage {
+        fn storage_query(&self, _request: &[u8]) -> Result<Vec<u8>, String> {
+            std::thread::sleep(self.0);
+            Ok(br#"{"ok":true}"#.to_vec())
+        }
+        fn invoice_create(&self, _: &[u8]) -> Result<Vec<u8>, String> {
+            Err("unused".to_string())
+        }
+        fn merchant_volume(&self, _: &[u8]) -> Result<Vec<u8>, String> {
+            Err("unused".to_string())
+        }
+        fn merchant_volumes(&self, _: &[u8]) -> Result<Vec<u8>, String> {
+            Err("unused".to_string())
+        }
+        fn account_notice(&self, _: &[u8]) -> Result<Vec<u8>, String> {
+            Err("unused".to_string())
+        }
+        fn account_standing(&self, _: &[u8]) -> Result<Vec<u8>, String> {
+            Err("unused".to_string())
+        }
+    }
+
+    fn host_with_slow_storage(block: Duration) -> (Arc<PluginHost>, PluginId) {
+        let host = Arc::new(PluginHost::with_tick(
+            host_version(),
+            100,
+            Duration::from_millis(50),
+            Duration::from_millis(5),
+        ));
+        host.register_with_calls(
+            manifest_for("cash.random.slowstore"),
+            &crate::runtime::fixtures::host_calling_module(),
+            Some(Arc::new(SlowStorage(block))),
+        )
+        .unwrap();
+        (host, PluginId::new("cash.random.slowstore").unwrap())
+    }
+
+    /// A plugin blocked inside a host call, not computing, must fail the
+    /// deadline. Compute-bound plugins are already stopped by the epoch, so
+    /// only a blocking host call proves the wall-clock bound.
+    #[tokio::test]
+    async fn a_plugin_blocked_in_a_host_call_fails_the_deadline() {
+        let (host, id) = host_with_slow_storage(Duration::from_millis(800));
+
+        let started = Instant::now();
+        let result = host
+            .run_query::<_, serde_json::Value>(&id, "call", &serde_json::json!({}))
+            .await;
+
+        assert!(
+            started.elapsed() < Duration::from_millis(400),
+            "the caller waited {:?} on a 50ms deadline",
+            started.elapsed()
+        );
+        assert!(result.unwrap_err().contains("wall-clock"));
+        assert_eq!(host.status(&id).unwrap().consecutive_failures, 1);
+    }
+
+    /// The blocked thread is abandoned, not cancelled: it still holds the
+    /// instance until the host call returns, a caller queued behind it gives
+    /// up at the deadline rather than waiting out the holder, and once the
+    /// host call returns the epoch trap releases the instance so the plugin
+    /// is usable again.
+    #[tokio::test]
+    async fn lock_wait_is_bounded_and_the_instance_recovers_after_the_blocked_call() {
+        let (host, id) = host_with_slow_storage(Duration::from_millis(300));
+
+        let holder = {
+            let (host, id) = (host.clone(), id.clone());
+            tokio::spawn(async move {
+                host.run_query::<_, serde_json::Value>(&id, "call", &serde_json::json!({}))
+                    .await
+            })
+        };
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        let started = Instant::now();
+        let queued = host
+            .run_query::<_, serde_json::Value>(&id, "call", &serde_json::json!({}))
+            .await;
+        assert!(started.elapsed() < Duration::from_millis(200));
+        assert!(queued.is_err());
+        assert!(holder.await.unwrap().is_err());
+
+        // Let the abandoned host call return and its trap release the lock.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert!(
+            host.instance_is_free(&id),
+            "the abandoned call still holds the instance"
         );
     }
 
