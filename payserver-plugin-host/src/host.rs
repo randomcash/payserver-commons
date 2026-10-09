@@ -1218,7 +1218,11 @@ mod admin_toggle_tests {
             host_version(),
             100,
             Duration::from_millis(50),
-            Duration::from_millis(5),
+            // A coarse tick widens the slack between the lock-wait give-up
+            // (the deadline) and the outer wall bound (deadline + 4 ticks),
+            // so a delayed thread start under load cannot turn the queued
+            // caller's `InstanceBusy` into the outer bound firing first.
+            Duration::from_millis(25),
         ));
         host.register_with_calls(
             manifest_for("cash.random.slowstore"),
@@ -1253,8 +1257,8 @@ mod admin_toggle_tests {
     /// The blocked thread is abandoned, not cancelled: it still holds the
     /// instance until the host call returns, a caller queued behind it gives
     /// up at the deadline rather than waiting out the holder, and once the
-    /// host call returns the epoch trap releases the instance so the plugin
-    /// is usable again.
+    /// host call returns the instance is released so the plugin is usable
+    /// again.
     #[tokio::test]
     async fn lock_wait_is_bounded_and_the_instance_recovers_after_the_blocked_call() {
         let (host, id) = host_with_slow_storage(Duration::from_millis(300));
@@ -1273,13 +1277,17 @@ mod admin_toggle_tests {
             .run_query::<_, serde_json::Value>(&id, "call", &serde_json::json!({}))
             .await;
         assert!(started.elapsed() < Duration::from_millis(200));
-        assert!(queued.is_err());
-        assert!(holder.await.unwrap().is_err());
+        let queued_reason = queued.unwrap_err();
+        assert!(
+            queued_reason.contains("waiting for the plugin's instance"),
+            "the queued caller should give up as busy, not on the outer bound: {queued_reason}"
+        );
+        assert!(holder.await.unwrap().unwrap_err().contains("wall-clock"));
         // Only the call that held the instance counts against the plugin;
         // queueing behind it must not push a healthy plugin to disablement.
         assert_eq!(host.status(&id).unwrap().consecutive_failures, 1);
 
-        // Let the abandoned host call return and its trap release the lock.
+        // Let the abandoned host call return and release the lock.
         tokio::time::sleep(Duration::from_millis(400)).await;
         assert!(
             host.instance_is_free(&id),
