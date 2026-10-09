@@ -1295,6 +1295,24 @@ mod admin_toggle_tests {
         );
     }
 
+    /// The fire-and-forget path has its own copy of the wall-clock arm: a
+    /// detached action blocked in a host call must still be recorded as a
+    /// failure at the bound, well before the host call itself returns.
+    #[tokio::test]
+    async fn a_detached_action_blocked_in_a_host_call_is_recorded_as_a_failure() {
+        let (host, id) = host_with_slow_storage(Duration::from_millis(800));
+
+        host.run_action(&id, "call", &serde_json::json!({}));
+        // Past the outer bound (deadline + 4 ticks = 150ms), well short of 800ms.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+
+        assert_eq!(host.status(&id).unwrap().consecutive_failures, 1);
+        assert!(
+            !host.instance_is_free(&id),
+            "the abandoned host call should still hold the instance"
+        );
+    }
+
     /// The same module registered *without* calls must not trap - the import
     /// is defined and unbacked, which is an error the plugin can report.
     #[tokio::test]
