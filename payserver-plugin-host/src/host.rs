@@ -132,6 +132,17 @@ impl PluginEntry {
         self.failures.store(0, Ordering::SeqCst);
     }
 
+    /// A call that never started because the instance stayed busy with
+    /// another call. The call holding it is what failed, and records that
+    /// itself; counting every caller queued behind it as well would disable
+    /// a healthy plugin because one call was slow.
+    fn record_busy(&self) {
+        tracing::warn!(
+            plugin_id = %self.id,
+            "plugin call gave up waiting for the instance: another call holds it past the deadline"
+        );
+    }
+
     /// Records a failed call. Once `max_failures` consecutive failures have
     /// been seen, disables the plugin and remembers why — the reason an
     /// admin needs to see to fix it, not just "disabled".
@@ -405,6 +416,7 @@ impl PluginHost {
 
             match outcome {
                 CallEnd::Done(Ok(_)) => entry.record_success(),
+                CallEnd::Done(Err(PluginCallError::InstanceBusy)) => entry.record_busy(),
                 CallEnd::Done(Err(err)) => entry.record_failure(err.to_string()),
                 CallEnd::Panicked(join_err) => {
                     entry.record_failure(format!("plugin call task panicked: {join_err}"));
@@ -499,7 +511,11 @@ impl PluginHost {
             },
             CallEnd::Done(Err(call_err)) => {
                 let reason = call_err.to_string();
-                entry.record_failure(reason.clone());
+                if matches!(call_err, PluginCallError::InstanceBusy) {
+                    entry.record_busy();
+                } else {
+                    entry.record_failure(reason.clone());
+                }
                 Err(reason)
             }
             CallEnd::Panicked(join_err) => {
@@ -579,12 +595,16 @@ fn wall_clock_reason(deadline: Duration) -> String {
 /// cannot be interrupted from outside. What happens to it is bounded
 /// separately. It cannot start late (see [`locked_call`]: waiting for the
 /// lock gives up at the deadline) and when its host call finally returns the
-/// epoch has long since passed the call's deadline, so the first wasm
-/// instruction after it traps and the instance lock is released. Until the
-/// host call returns the lock stays held, which is why host-call
-/// implementations must bound their own time (see
-/// [`PluginHostCalls`](super::runtime::PluginHostCalls)); the failure
-/// recorded here is what makes that contention visible.
+/// epoch has long since passed the call's deadline, so the next epoch check
+/// (function entry or loop back-edge, not every instruction) traps; a plugin
+/// that returns straight after the host call simply completes. Either way
+/// the instance lock is released. Until the host call returns the lock stays
+/// held, which is why host-call implementations must bound their own time
+/// (see [`PluginHostCalls`](super::runtime::PluginHostCalls)) - a sync call
+/// cannot be cancelled from here - and why the host call's effect may still
+/// land after the caller was told the deadline passed: a timeout is not
+/// proof the effect did not happen. The warning logged for the call is what
+/// makes that contention visible.
 async fn bounded_call<T, F>(bound: Duration, call: F) -> CallEnd<T>
 where
     T: Send + 'static,
@@ -619,7 +639,12 @@ fn locked_call(
             }
         }
     };
+    // Won the lock with nothing left of the deadline: the caller has all but
+    // stopped waiting, so starting the call would run it for nobody.
     let remaining = deadline.saturating_sub(started.elapsed());
+    if remaining.is_zero() {
+        return Err(PluginCallError::InstanceBusy);
+    }
     instance.call_raw(export, arg, engine.ticks_for(remaining))
 }
 
@@ -1250,6 +1275,9 @@ mod admin_toggle_tests {
         assert!(started.elapsed() < Duration::from_millis(200));
         assert!(queued.is_err());
         assert!(holder.await.unwrap().is_err());
+        // Only the call that held the instance counts against the plugin;
+        // queueing behind it must not push a healthy plugin to disablement.
+        assert_eq!(host.status(&id).unwrap().consecutive_failures, 1);
 
         // Let the abandoned host call return and its trap release the lock.
         tokio::time::sleep(Duration::from_millis(400)).await;
